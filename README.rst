@@ -11,8 +11,8 @@ Installation
 sfft has the following three backends to perform the image subtraction.
 
 - NumPy backend: sfft will totally run on the CPU devices. 
-- PyCUDA backend: The core functions of sfft are written in `PyCUDA<https://github.com/inducer/pycuda>` and `Scikit-Cuda<https://github.com/lebedov/scikit-cuda>`.
-- CuPy backend: The core functions of sfft are written in `CuPy<https://github.com/cupy/cupy>`.
+- PyCUDA backend: The core functions of sfft are written in `PyCUDA <https://github.com/inducer/pycuda>` and `Scikit-Cuda <https://github.com/lebedov/scikit-cuda>`.
+- CuPy backend: The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`.
 
 The latter two backends require GPU device(s) with double-precision support.
 
