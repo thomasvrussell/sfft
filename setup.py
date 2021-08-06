@@ -13,43 +13,13 @@ DOWNLOAD_URL = 'https://github.com/thomasvrussell/sfft'
 LICENSE = 'MIT Licence'
 VERSION = '1.0.dev0'
 
-if "--CUDA_VERSION" not in sys.argv:
-    sys.exit("ERROR: Please specify --CUDA_VERSION {'NONE', '10.1', '11.2'}) !")
-
-index = sys.argv.index('--CUDA_VERSION')
-sys.argv.pop(index)                     # Removes the '--CUDA_VERSION'
-CUDA_VERSION = sys.argv.pop(index)      # Returns the element after the '--CUDA_VERSION'
-assert CUDA_VERSION in ['NONE', '10.1', '11.2']   # NOTE: find your CUDA version by terminal command 'nvidia-smi'
-
 install_reqs = ['scipy>=1.5.2',
                 'astropy>=3.2.3',
                 'scikit-image>=0.16.2',
                 'fastremap>=1.7.0',
-                'sep>=1.0.3']
-
-install_reqs += ['numba==0.53.1',
-                 'pyfftw==0.12.0']
-
-print('\n********************************************** sfft **************************************************\n')
-if CUDA_VERSION == 'NONE':
-    print('*** IMPORTANT NOTICE: A pure CPU version of sfft will be installed !')
-    pass
-
-if CUDA_VERSION == '10.1':
-    print('*** WARNING: Please make sure you have installed cudatoolkit=10.1 (e.g., via conda) !')
-    print('*** IMPORTANT NOTICE: CPU & GPU (pycuda) & GPU (cupy) versions of sfft will be installed !')
-    
-    install_reqs += ['pycuda==2020.1',
-                     'scikit-cuda==0.5.3',
-                     'cupy-cuda101>=8.5.0']
-
-if CUDA_VERSION == '11.2':
-    print('*** WARNING: Please make sure you have installed cudatoolkit=11.2 (e.g., via conda) !')
-    print('*** WARNING: GPU (pycuda) version is currently not available for CUDA 11 !')
-    print('*** IMPORTANT NOTICE: CPU & GPU (cupy) versions of sfft will be installed !')
-
-    install_reqs += ['cupy-cuda112>=9.0.0']
-print('\n********************************************** sfft **************************************************\n')
+                'sep>=1.0.3',
+                'numba>=0.53.1',
+                'pyfftw>=0.12.0']
 
 setup(name = NAME,
       version = VERSION,
