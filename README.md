@@ -1,2 +1,2 @@
-# SFFT
+# sfft
 Image Subtraction in Fourier Space 
