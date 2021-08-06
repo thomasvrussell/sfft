@@ -1,8 +1,9 @@
 # sfft
 Image Subtraction in Fourier Space 
 
-## Prerequisites
+## backends
 sfft has three different backends to perform the subtraction, which are Numpy-based, Pycuda-based and Cupy-based, respectively. 
 
-Using Numpy backend sfft will totally run on the CPU devices. 
-While the later two backends require GPU device(s) and the core functions are written by CUDA (though already wrapped in Python).
+a) Numpy backend: sfft will totally run on the CPU devices. 
+b) Pycuda backend: GPU device(s) with double-precision support are required. The core functions of sfft are written in CUDA, Pycuda and Scikit-Cuda.
+c) Cupy backend: GPU device(s) with double-precision support are required. The core functions of sfft are written in CUDA and Cupy.
