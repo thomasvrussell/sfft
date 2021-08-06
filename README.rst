@@ -18,6 +18,7 @@ Note the latter two backends require GPU device(s) with double-precision support
 
 For example, for CUDA 10.1 you may try to enable the GPU backends via
 
+- conda install -c conda-forge cudatoolkit=10.1
 - pip install pycuda==2020.1 scikit-cuda==0.5.3 cupy-cuda101
 
 Development
