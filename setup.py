@@ -18,8 +18,8 @@ install_reqs = ['scipy>=1.5.2',
                 'scikit-image>=0.16.2',
                 'fastremap>=1.7.0',
                 'sep>=1.0.3',
-                'numba>=0.53.1',
-                'pyfftw>=0.12.0']
+                'numba==0.53.1',
+                'pyfftw==0.12.0']
 
 setup(name = NAME,
       version = VERSION,
