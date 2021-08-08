@@ -3,7 +3,7 @@ import sys
 from setuptools import setup, find_packages
 
 DESCRIPTION = "Image Subtraction in Fourier Space"
-LONG_DESCRIPTION = open('README.md').read()
+LONG_DESCRIPTION = open('README.rst').read()
 NAME = "sfft"
 AUTHOR = "Lei Hu"
 AUTHOR_EMAIL = "hulei@pmo.ac.cn"
