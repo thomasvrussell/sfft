@@ -5,6 +5,9 @@ from astropy.io import fits
 from scipy.stats import iqr
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 
+__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__version__ = "v1.0"
+
 class SEx_SkySubtract:
     @staticmethod
     def SSS(FITS_obj, FITS_skysub=None, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \

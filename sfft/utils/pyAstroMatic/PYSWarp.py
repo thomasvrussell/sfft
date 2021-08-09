@@ -8,6 +8,9 @@ from astropy.wcs import WCS
 from tempfile import mkdtemp
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
 
+__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__version__ = "v1.0"
+
 """
 # MeLOn Notes
 # @ Python Version of SWarp

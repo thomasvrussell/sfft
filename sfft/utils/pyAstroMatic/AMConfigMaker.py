@@ -2,6 +2,9 @@ import re
 import os
 from tempfile import mkdtemp
 
+__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__version__ = "v1.0"
+
 class AMConfig_Maker:
     @staticmethod
     def AMCM(MDIR, AstroMatic_KEY, ConfigDict=None, tag='pyastromatic'):

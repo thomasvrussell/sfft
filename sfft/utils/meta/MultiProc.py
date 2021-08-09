@@ -3,6 +3,9 @@ import math
 import threading
 import multiprocessing
 
+__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__version__ = "v1.0"
+
 class Multi_Proc:
     @staticmethod
     def MP(taskid_lst=None, func=None, nproc=8, mode='mp'):

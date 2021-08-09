@@ -4,6 +4,9 @@ from scipy.spatial import cKDTree
 from astropy.coordinates import SkyCoord
 from astropy.coordinates import match_coordinates_sky
 
+__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__version__ = "v1.0"
+
 # MeLon Notes
 # @ Simple Symmetric Match Algorithm
 #   a) POA, POB are two collections of points for matching with shape (Num_A, 2) and (Num_B, 2)

@@ -6,6 +6,9 @@ import sys
 import time
 import errno
 
+__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__version__ = "v1.0"
+
 class FileLock(object):
     # REF: https://github.com/ilastik/lazyflow/blob/master/lazyflow/utility/fileLock.py
     """ A file locking mechanism that has context-manager support so
