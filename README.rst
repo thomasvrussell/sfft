@@ -8,6 +8,7 @@ Package documentation is available at: TBD
 
 Installation
 -----------
+sfft can be simply installed in your Python enviornment by
 
 - python setup.py install
 
