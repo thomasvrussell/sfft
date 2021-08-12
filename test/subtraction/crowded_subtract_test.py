@@ -2,7 +2,7 @@ import os
 import os.path as pa
 from sfft.EasyCrowdedPacket import Easy_CrowdedPacket
 
-backend = 'Numpy'    # FIXME {'Pycuda', 'Cupy', 'Numpy'}
+backend = 'Pycuda'    # FIXME {'Pycuda', 'Cupy', 'Numpy'}
 CUDA_DEVICE = '0'     # FIXME ONLY work for backend Pycuda / Cupy
 NUM_CPU_THREADS = 8   # FIXME ONLY work for backend Numpy   
 
