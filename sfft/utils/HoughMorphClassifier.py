@@ -1,6 +1,5 @@
 import sys
 import numpy as np
-from astropy.io import fits
 from tempfile import mkdtemp
 from astropy.stats import sigma_clipped_stats 
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx

@@ -71,11 +71,17 @@ class Auto_SparsePrep:
         # ********************* Determine ActiveMask ********************* #
 
         PixA_REF = fits.getdata(self.FITS_REF, ext=0).T
+        if np.issubdtype(PixA_REF.dtype, np.integer):
+            PixA_REF = PixA_REF.astype(np.float64)
+        
         PixA_SCI = fits.getdata(self.FITS_SCI, ext=0).T
+        if np.issubdtype(PixA_SCI.dtype, np.integer):
+            PixA_SCI = PixA_SCI.astype(np.float64)
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            SatMask_REF =  PixA_REF >= SATLEVEL_REF
-            SatMask_SCI =  PixA_SCI >= SATLEVEL_SCI
+            SatMask_REF = PixA_REF >= SATLEVEL_REF
+            SatMask_SCI = PixA_SCI >= SATLEVEL_SCI
 
         # * Relabel SS-islands & Flip labels of NotSS-islands        
         SEGL_SSr = np.array(AstSEx_SS['SEGLABEL_REF']).astype(int)
@@ -118,7 +124,7 @@ class Auto_SparsePrep:
 
         PixA_mREF = PixA_REF.copy()
         PixA_mSCI = PixA_SCI.copy()
-        PixA_mREF[~ActiveMask] = 0.0     # NOTE REF has been sky-subtracted
+        PixA_mREF[~ActiveMask] = 0.0      # NOTE REF has been sky-subtracted
         PixA_mSCI[~ActiveMask] = 0.0      # NOTE SCI has been sky-subtracted
 
         # * Create sfft-prep master dictionary
@@ -230,9 +236,9 @@ class Auto_SparsePrep:
             fastremap.remap(SFFTLmap, _mappings, preserve_missing_labels=True, in_place=True)   # NOTE UPDATE
             _mask = SFFTLmap == -64
             
-            ActiveMask[_mask] = False    #  NOTE UPDATE, always be SFFTLmap > 0
-            PixA_mREF[_mask] = 0.0      #  NOTE UPDATE
-            PixA_mSCI[_mask] = 0.0       #  NOTE UPDATE
+            ActiveMask[_mask] = False      #  NOTE UPDATE, always be SFFTLmap > 0
+            PixA_mREF[_mask] = 0.0         #  NOTE UPDATE
+            PixA_mSCI[_mask] = 0.0         #  NOTE UPDATE
             AstSEx_SS.add_column(Column(SurvMask, name='SurvMask'))
             print('MeLOn CheckPoint: Total SubSource Rejections [%d / %d] !' \
                     %(np.sum(~SurvMask), len(AstSEx_SS)))

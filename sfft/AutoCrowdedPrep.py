@@ -23,10 +23,18 @@ class Auto_CrowdedPrep:
         # * Generate Super-Background for REF & SCI
         PixA_REF = fits.getdata(self.FITS_REF, ext=0).T
         PixA_SCI = fits.getdata(self.FITS_SCI, ext=0).T
-        _tmp = PixA_REF.copy().byteswap(inplace=True).newbyteorder()
-        PixA_SBG_REF = sep.Background(_tmp, bw=BACKSIZE_SUPER, bh=BACKSIZE_SUPER, fw=3, fh=3).back()
-        _tmp = PixA_SCI.copy().byteswap(inplace=True).newbyteorder()
-        PixA_SBG_SCI = sep.Background(_tmp, bw=BACKSIZE_SUPER, bh=BACKSIZE_SUPER, fw=3, fh=3).back()
+
+        if not PixA_REF.flags['C_CONTIGUOUS']:
+            PixA_REF = np.ascontiguousarray(PixA_REF, np.float64)
+        else: PixA_REF = PixA_REF.astype(np.float64)
+
+        if not PixA_SCI.flags['C_CONTIGUOUS']:
+            PixA_SCI = np.ascontiguousarray(PixA_SCI, np.float64)
+        else: PixA_SCI = PixA_SCI.astype(np.float64)
+
+        # NOTE: sep requires input_array.flags['C_CONTIGUOUS'] is True & input_array.dtype.byteorder is '='
+        PixA_SBG_REF = sep.Background(PixA_REF, bw=BACKSIZE_SUPER, bh=BACKSIZE_SUPER, fw=3, fh=3).back()        
+        PixA_SBG_SCI = sep.Background(PixA_SCI, bw=BACKSIZE_SUPER, bh=BACKSIZE_SUPER, fw=3, fh=3).back()
 
         # * Generate Saturation-Mask for REF & SCI
         def GenSatMask(FITS_obj):
@@ -82,7 +90,7 @@ class Auto_CrowdedPrep:
         ActiveMask = ~ProZone
         PixA_mREF = PixA_REF.copy()
         PixA_mSCI = PixA_SCI.copy()
-        PixA_mREF[ProZone] = PixA_SBG_REF[ProZone]    # NOTE REF is not sky-subtracted yet
+        PixA_mREF[ProZone] = PixA_SBG_REF[ProZone]      # NOTE REF is not sky-subtracted yet
         PixA_mSCI[ProZone] = PixA_SBG_SCI[ProZone]      # NOTE SCI is not sky-subtracted yet
 
         # NOTE: The preparation can guarantee that mREF & mSCI are NaN-Free !
