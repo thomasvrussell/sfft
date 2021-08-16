@@ -45,6 +45,11 @@ information:
 - CUDA, PyCUDA and CuPy version.
 - Version or git revision of sfft.
 
+TODO-list
+-----------
+
+- add decorrelation module
+
 Citing
 ------
 TBD
