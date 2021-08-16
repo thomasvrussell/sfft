@@ -48,7 +48,8 @@ information:
 TODO-list
 -----------
 
-- add decorrelation module
+- add decorrelation module.
+- allow users to define image mask for subtraction.
 
 Citing
 ------
