@@ -63,11 +63,11 @@ class Auto_CrowdedPrep:
             Lmap = ndimage.measurements.label(SatMask)[0]
             SATL = Lmap[((XY_SAT[:, 0] - 0.5).astype(int), (XY_SAT[:, 1] - 0.5).astype(int))]
             SATL = list(set(SATL).difference({0}))          # 0 is background
-            SatMask = np.in1d(Lmap.flatten(), SATL).reshape(Lmap.shape)                  # NOTE UPDATE
+            SatMask = np.in1d(Lmap.flatten(), SATL).reshape(Lmap.shape)            # NOTE UPDATE
 
             struct0 = ndimage.generate_binary_structure(2, 1)
             struct = ndimage.iterate_structure(struct0, StarExt_iter)
-            SatMask = ndimage.grey_dilation(SatMask, footprint=struct)                       # NOTE UPDATE
+            SatMask = ndimage.grey_dilation(SatMask, footprint=struct)             # NOTE UPDATE
             SatPROP = np.sum(SatMask) / (SatMask.shape[0] * SatMask.shape[1])      # proportion of saturation
             print('MeLOn CheckPoint: FILE %s | NSAT [%d] & SAT-Proportion [%s]' \
                 %(pa.basename(FITS_obj), len(AstSEx_SAT),  '{:.2%}'.format(SatPROP)))

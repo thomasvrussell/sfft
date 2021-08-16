@@ -49,7 +49,7 @@ TODO-list
 -----------
 
 - add decorrelation module.
-- allow users to define image mask for subtraction (may not necessary, as we can do it by mask them by NaN).
+- allow users to define image mask for subtraction.
 
 Citing
 ------
