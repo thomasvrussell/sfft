@@ -49,7 +49,7 @@ TODO-list
 -----------
 
 - add decorrelation module.
-- allow users to define image mask for subtraction.
+- allow users to define image mask for crowded flavour.
 
 Citing
 ------
