@@ -1,5 +1,4 @@
 import sep
-import fastremap
 import numpy as np
 from astropy.io import fits
 from scipy.stats import iqr
@@ -23,10 +22,10 @@ class SEx_SkySubtract:
         # * Extract SExtractor SKY-MAP from the Unmasked Image
         #   NOTE: here we use faster sep package other than SExtractor. 
         PixA_obj = fits.getdata(FITS_obj, ext=0).T
-        _PixA = PixA_obj.copy()
+        _PixA = PixA_obj.astype(np.float64, copy=True)    # default copy=True, just to emphasize
         _PixA[Mask_DET] = np.nan
-        _data = fastremap.ascontiguousarray(_PixA.byteswap(False).newbyteorder())
-        PixA_sky = sep.Background(_data, bw=BACK_SIZE, bh=BACK_SIZE, \
+        if not _PixA.flags['C_CONTIGUOUS']: _PixA = np.ascontiguousarray(_PixA)
+        PixA_sky = sep.Background(_PixA, bw=BACK_SIZE, bh=BACK_SIZE, \
             fw=BACK_FILTERSIZE, fh=BACK_FILTERSIZE).back()
         PixA_skysub = PixA_obj - PixA_sky
 
