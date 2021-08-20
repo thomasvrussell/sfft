@@ -168,7 +168,7 @@ class PY_SWarp:
 
         for key in ConfigDict:
             value = ConfigDict[key]
-            pack = ' : '.join(['Swarp Parameters', key, value])
+            pack = ' : '.join(['SWarp Parameters', key, value])
             hdr_op.add_history(pack)
 
         # * Fill the missing data in resampled image [SWarp default 0]
