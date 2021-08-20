@@ -50,6 +50,7 @@ TODO-list
 
 - add decorrelation module.
 - allow users to define image mask for crowded flavour.
+- update test directory to cover all examples in the paper (also include small image to avoid cpu memory overflow).
 
 Citing
 ------
