@@ -129,30 +129,30 @@ class Easy_CrowdedPacket:
         if FITS_DIFF is not None:
             _hdl = fits.open(FITS_SCI)
             _hdl[0].data[:, :] = PixA_DIFF.T
-            _hdl[0].header['NAME_REF'] = (pa.basename(FITS_REF), 'MeLOn: CuSFFT')
-            _hdl[0].header['NAME_SCI'] = (pa.basename(FITS_SCI), 'MeLOn: CuSFFT')
-            _hdl[0].header['FWHM_REF'] = (FWHM_REF, 'MeLOn: CuSFFT')
-            _hdl[0].header['FWHM_SCI'] = (FWHM_SCI, 'MeLOn: CuSFFT')
-            _hdl[0].header['KERORDER'] = (KerPolyOrder, 'MeLOn: CuSFFT')
-            _hdl[0].header['BGORDER'] = (BGPolyOrder, 'MeLOn: CuSFFT')
-            _hdl[0].header['CPHOTR'] = (str(ConstPhotRatio), 'MeLOn: CuSFFT')
-            _hdl[0].header['KERHW'] = (KerHW, 'MeLOn: CuSFFT')
-            _hdl[0].header['CONVD'] = (ConvdSide  , 'MeLOn: CuSFFT')
+            _hdl[0].header['NAME_REF'] = (pa.basename(FITS_REF), 'MeLOn: SFFT')
+            _hdl[0].header['NAME_SCI'] = (pa.basename(FITS_SCI), 'MeLOn: SFFT')
+            _hdl[0].header['FWHM_REF'] = (FWHM_REF, 'MeLOn: SFFT')
+            _hdl[0].header['FWHM_SCI'] = (FWHM_SCI, 'MeLOn: SFFT')
+            _hdl[0].header['KERORDER'] = (KerPolyOrder, 'MeLOn: SFFT')
+            _hdl[0].header['BGORDER'] = (BGPolyOrder, 'MeLOn: SFFT')
+            _hdl[0].header['CPHOTR'] = (str(ConstPhotRatio), 'MeLOn: SFFT')
+            _hdl[0].header['KERHW'] = (KerHW, 'MeLOn: SFFT')
+            _hdl[0].header['CONVD'] = (ConvdSide  , 'MeLOn: SFFT')
             _hdl.writeto(FITS_DIFF, overwrite=True)
             _hdl.close()
         
         # * Save solution array
         if FITS_Solution is not None:
             phdu = fits.PrimaryHDU()
-            phdu.header['DK'] = (SFFTConfig[0]['DK'], 'MeLOn: CuSFFT')
-            phdu.header['DB'] = (SFFTConfig[0]['DB'], 'MeLOn: CuSFFT')
-            phdu.header['L0'] = (SFFTConfig[0]['L0'], 'MeLOn: CuSFFT')
-            phdu.header['L1'] = (SFFTConfig[0]['L1'], 'MeLOn: CuSFFT')
+            phdu.header['DK'] = (SFFTConfig[0]['DK'], 'MeLOn: SFFT')
+            phdu.header['DB'] = (SFFTConfig[0]['DB'], 'MeLOn: SFFT')
+            phdu.header['L0'] = (SFFTConfig[0]['L0'], 'MeLOn: SFFT')
+            phdu.header['L1'] = (SFFTConfig[0]['L1'], 'MeLOn: SFFT')
             
-            phdu.header['FIJ'] = (SFFTConfig[0]['Fij'], 'MeLOn: CuSFFT')
-            phdu.header['FAB'] = (SFFTConfig[0]['Fab'], 'MeLOn: CuSFFT')
-            phdu.header['FPQ'] = (SFFTConfig[0]['Fpq'], 'MeLOn: CuSFFT')
-            phdu.header['FIJAB'] = (SFFTConfig[0]['Fijab'], 'MeLOn: CuSFFT')
+            phdu.header['FIJ'] = (SFFTConfig[0]['Fij'], 'MeLOn: SFFT')
+            phdu.header['FAB'] = (SFFTConfig[0]['Fab'], 'MeLOn: SFFT')
+            phdu.header['FPQ'] = (SFFTConfig[0]['Fpq'], 'MeLOn: SFFT')
+            phdu.header['FIJAB'] = (SFFTConfig[0]['Fijab'], 'MeLOn: SFFT')
 
             PixA_Solution = Solution.reshape((-1, 1))
             phdu.data = PixA_Solution.T

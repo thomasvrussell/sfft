@@ -163,8 +163,8 @@ class PY_SWarp:
         hdr_wcs = fits.getheader(FITS_ref, ext=0)
         hdr_op = combine_header(hdr_base, hdr_wcs)
 
-        hdr_op['SWARP_O'] = (pa.basename(FITS_obj), 'MeLOn: PYSwarp')
-        hdr_op['SWARP_R'] = (pa.basename(FITS_ref), 'MeLOn: PYSwarp')
+        hdr_op['SWARP_O'] = (pa.basename(FITS_obj), 'MeLOn: PYSWarp')
+        hdr_op['SWARP_R'] = (pa.basename(FITS_ref), 'MeLOn: PYSWarp')
 
         for key in ConfigDict:
             value = ConfigDict[key]
