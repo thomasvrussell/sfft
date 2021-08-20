@@ -14,7 +14,7 @@ class AMConfig_Maker:
         if AstroMatic_KEY == 'psfex':
             print('MeLOn : psfex employed : psfex -dd')
         if AstroMatic_KEY == 'swarp':
-            print('MeLOn : Swarp employed : swarp -dd')
+            print('MeLOn : SWarp employed : swarp -dd')
         if AstroMatic_KEY == 'scamp':
             print('MeLOn : Scamp employed : scamp -dd')
         if AstroMatic_KEY == 'sky':
