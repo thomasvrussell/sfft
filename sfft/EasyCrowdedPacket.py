@@ -95,7 +95,7 @@ class Easy_CrowdedPacket:
                 Solution, PixA_DIFF, ContamMask_CI = _tmp
                 if MaskSatContam:
                     ContamMask_DIFF = np.logical_or(ContamMask_CI, ContamMask_J)
-                print('MeLOn Report: Ultimate Subtraction Takes [%.2f s]' %(time.time() - Tsub_start))
+                print('MeLOn Report: Ultimate Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
                 
                 # * Modifications on difference image
                 #   a) when REF is convolved, DIFF = SCI - Conv(REF)
