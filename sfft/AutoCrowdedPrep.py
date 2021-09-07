@@ -17,8 +17,8 @@ class Auto_CrowdedPrep:
         self.FITS_REF = FITS_REF
         self.FITS_SCI = FITS_SCI
     
-    def MaskSat(self, BACKSIZE_SUPER=128, GAIN_KEY='GAIN', \
-        SATUR_KEY='SATURATE', DETECT_THRESH=5.0, StarExt_iter=2):
+    def AutoMask(self, BACKSIZE_SUPER=128, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
+        DETECT_THRESH=5.0, StarExt_iter=2, PriorBanMask=None):
 
         # * Generate Super-Background for REF & SCI
         PixA_REF = fits.getdata(self.FITS_REF, ext=0).T
@@ -79,7 +79,10 @@ class Auto_CrowdedPrep:
 
         # * Define ProhibitedZone
         NaNmask_U = None
-        ProZone = np.logical_or(SatMask_REF, SatMask_SCI)
+        if PriorBanMask is None:
+            ProZone = np.logical_or(SatMask_REF, SatMask_SCI)
+        else: ProZone = np.logical_or.reduce((PriorBanMask, SatMask_REF, SatMask_SCI))
+        
         NaNmask_REF = np.isnan(PixA_REF)
         NaNmask_SCI = np.isnan(PixA_SCI)
         if NaNmask_REF.any() or NaNmask_SCI.any():

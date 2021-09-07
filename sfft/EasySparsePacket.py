@@ -13,15 +13,17 @@ __version__ = "v1.0"
 
 class Easy_SparsePacket:
     @staticmethod
-    def ESP(FITS_REF, FITS_SCI, FITS_DIFF=None, FITS_Solution=None, ForceConv=None, GKerHW=None, KerHWRatio=2.0, \
-        KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8, \
+    def ESP(FITS_REF, FITS_SCI, FITS_DIFF=None, FITS_Solution=None, ForceConv=None, \
+        GKerHW=None, KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
+        ConstPhotRatio=True, backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8, \
         MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', DETECT_THRESH=2.0, BoundarySIZE=30, \
-        MAGD_THRESH=0.12, StarExt_iter=4, trSubtract=False, RATIO_THRESH=3.0, XY_PriorBan=None, GLockFile=None):
+        BeltHW=0.2, MAGD_THRESH=0.12, StarExt_iter=4, trSubtract=False, RATIO_THRESH=3.0, \
+        XY_PriorBan=None, GLockFile=None):
         
         # * Perform Sparse-Prep [Hough]
         SFFTPrepDict = Auto_SparsePrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI).Hough(GAIN_KEY=GAIN_KEY, \
             SATUR_KEY=SATUR_KEY, DETECT_THRESH=DETECT_THRESH, BoundarySIZE=BoundarySIZE, \
-            MAGD_THRESH=MAGD_THRESH, StarExt_iter=StarExt_iter)
+            BeltHW=BeltHW, MAGD_THRESH=MAGD_THRESH, StarExt_iter=StarExt_iter)
 
         # * Determine ConvdSide & KerHW
         FWHM_REF = SFFTPrepDict['FWHM_REF']
@@ -34,7 +36,7 @@ class Easy_SparsePacket:
 
         if GKerHW is None:
             FWHM_La = np.max([FWHM_REF, FWHM_SCI])
-            KerHW = int(np.clip(KerHWRatio * FWHM_La, 2.0, 15.0))
+            KerHW = int(np.clip(KerHWRatio * FWHM_La, KerHWLimit[0], KerHWLimit[1]))
         else: KerHW = GKerHW
         
         if GLockFile is None:
@@ -168,4 +170,3 @@ class Easy_SparsePacket:
             fits.HDUList([phdu]).writeto(FITS_Solution, overwrite=True)
 
         return SFFTPrepDict, Solution, PixA_DIFF
-

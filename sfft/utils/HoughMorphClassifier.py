@@ -39,11 +39,11 @@ __version__ = "v1.0"
 #         
 #           >> {subgroup} Point Sources:
 #                  + Restricted into FR-M Region   |||   Should be located around the Hough-Line
-#                  + Basically Circular-Shape      |||   PsfEx-ELLIPTICITY = (A-B) / (A+B) < ELLIP_thres
+#                  + Basically Circular-Shape      |||   PsfEx-ELLIPTICITY = (A-B) / (A+B) < PS_ELLIPThresh
 #                    NOTE At cross region, this identification criteria mis-include some extended source
 #                         On the flip side, some REAL PointSource samples are missing in the tail.
 #                    NOTE Point Sources are usually employed as FWHM Estimator.
-#                    NOTE We may lossen ELLIP_thres if psf itself is significantly asymmetric (e.g. tracking problem).
+#                    NOTE We may lossen PS_ELLIPThresh if psf itself is significantly asymmetric (e.g. tracking problem).
 #
 #                  >>> {sub-subgroup} High-SNR Point Sources
 #                          + SNR_WIN > HPS_SNRThresh, then reject the bright end [typically, 15% (HPS_Reject)] point-sources.
@@ -92,8 +92,8 @@ class Hough_MorphClassifier:
         
         return PYSEX_OP
     
-    def Classifier(AstSEx, Hough_res=0.05, Hough_count_thres=1, Hough_peakclip=0.7, \
-        PS_Theta_thres=0.2, PSLine_Dist_thres=0.2, ELLIP_thres=0.3, Return_HPS=False, \
+    def Classifier(AstSEx, Hough_res=0.05, Hough_count_thresh=1, Hough_peakclip=0.7, \
+        LineTheta_thresh=0.2, BeltHW=0.2, PS_ELLIPThresh=0.3, Return_HPS=False, \
         HPS_SNRThresh=100.0, HPS_Reject=0.15, HPS_NumLowerLimit=30):
 
         # * Trigger Hough Dectection 
@@ -115,16 +115,16 @@ class Hough_MorphClassifier:
         MA_mid = np.nanmedian(MA)
         Hmask = np.logical_and.reduce((FR > 0.1, FR < 10.0, MA > MA_mid-7.0, MA < MA_mid+7.0))  # FIXME USER-DEFINED
         HDOP = Hough_Detection.HD(XY_obj=MA_FR, Hmask=Hmask, res=Hough_res, \
-            count_thres=Hough_count_thres, peakclip=Hough_peakclip)
+            count_thresh=Hough_count_thresh, peakclip=Hough_peakclip)
 
         CheckMaxP = 5
         ThetaPeaks, RhoPeaks, ScaLineDIS = HDOP[1][:CheckMaxP], HDOP[2][:CheckMaxP], HDOP[4][:, 0:CheckMaxP]
-        Avmask = np.abs(ThetaPeaks) < PS_Theta_thres
+        Avmask = np.abs(ThetaPeaks) < LineTheta_thresh
         if np.sum(Avmask) > 0:
             Horindex = np.where(Avmask)[0][0]
         else: 
             ThetaPeaks, RhoPeaks, ScaLineDIS = HDOP[1], HDOP[2], HDOP[4]
-            Avmask = np.abs(ThetaPeaks) < PS_Theta_thres
+            Avmask = np.abs(ThetaPeaks) < LineTheta_thresh
             if np.sum(Avmask) > 0:
                 Horindex = np.where(Avmask)[0][0]
                 print('MeLOn WARNING: Point-Source-Line detected from numerous peaks !')
@@ -138,14 +138,14 @@ class Hough_MorphClassifier:
             ScaHorLineDIS = ScaLineDIS[:, Horindex]
             print('MeLOn CheckPoint: The Hough-Detected Point-Source-Line is characterized by (%s, %s)' \
                 %(HorThetaPeak, HorRhoPeak))
-            MASK_FRM = ScaHorLineDIS < PSLine_Dist_thres
+            MASK_FRM = ScaHorLineDIS < BeltHW
             MASK_FRL = MA_FR[:, 0] * np.sin(HorThetaPeak) + MA_FR[:, 1] * np.cos(HorThetaPeak) > HorRhoPeak
             MASK_FRL = np.logical_and(MASK_FRL, ~MASK_FRM)
         else:
             BPmask = AstSEx['MAGERR_AUTO'] < 0.2  # emperical cut, reject samples with low significance.
             Rmid = sigma_clipped_stats(MA_FR[BPmask, 1], sigma=3.0, maxiters=5)[1]
-            MASK_FRM = np.abs(MA_FR[:, 1]  - Rmid) < PSLine_Dist_thres
-            MASK_FRL = MA_FR[:, 1]  - Rmid >  PSLine_Dist_thres
+            MASK_FRM = np.abs(MA_FR[:, 1]  - Rmid) < BeltHW
+            MASK_FRL = MA_FR[:, 1]  - Rmid >  BeltHW
             print('MeLOn CheckPoint: Alternative scenario is activated to determine the MIDDLE region !')
 
         MASK_FRS = ~np.logical_or(MASK_FRM, MASK_FRL)
@@ -163,7 +163,7 @@ class Hough_MorphClassifier:
         A_IMAGE = np.array(AstSEx['A_IMAGE'])
         B_IMAGE = np.array(AstSEx['B_IMAGE'])
         ELLIP = (A_IMAGE - B_IMAGE)/(A_IMAGE + B_IMAGE)
-        MASK_PS = np.logical_and(MASK_FRM, ELLIP < ELLIP_thres)
+        MASK_PS = np.logical_and(MASK_FRM, ELLIP < PS_ELLIPThresh)
         
         assert np.sum(MASK_PS) > 0
         FWHM = round(np.median(AstSEx[MASK_PS]['FWHM_IMAGE']), 6)
@@ -231,4 +231,3 @@ class Hough_MorphClassifier:
         """
 
         return FWHM, LABEL_FR, MASK_GS, MASK_PS, MASK_HPS
-

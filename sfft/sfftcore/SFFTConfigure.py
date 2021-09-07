@@ -2183,7 +2183,8 @@ class SingleSFFTConfigure_Numpy:
 
 class SingleSFFTConfigure:
     @staticmethod
-    def SSC(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
+    def SSC(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
+        backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
 
         """
         # Arguments:
@@ -2217,14 +2218,11 @@ class SingleSFFTConfigure:
 
 class BatchSFFTConfigure:
     @staticmethod
-    def BSCP(NX, NY, KerHW_CLst='default', KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
-
-        if KerHW_CLst == 'default': 
-            RealCLst = np.arange(2, 16).astype(int)  # FIXME Customizable
-        else: RealCLst = np.array(KerHW_CLst).astype(int)
-
+    def BSCP(NX, NY, KerHW_CLst, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
+        backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
+    
         SFFTConfig_Dict = {}
-        for KerHW in RealCLst:            
+        for KerHW in KerHW_CLst:            
             SFFTConfig = SingleSFFTConfigure.SSC(NX=NX, NY=NY, KerHW=KerHW, \
                 KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
                 backend=backend, CUDA_DEVICE=CUDA_DEVICE)

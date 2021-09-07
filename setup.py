@@ -16,6 +16,7 @@ VERSION = '1.0.dev0'
 install_reqs = ['scipy>=1.5.2',
                 'astropy>=3.2.3',
                 'scikit-image>=0.16.2',
+                'sympy>=1.4',
                 'fastremap>=1.7.0',
                 'sep>=1.0.3',
                 'numba==0.53.1',

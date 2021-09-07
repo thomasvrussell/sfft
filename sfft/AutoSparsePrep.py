@@ -20,7 +20,7 @@ class Auto_SparsePrep:
         self.FITS_SCI = FITS_SCI
     
     def Hough(self, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', DETECT_THRESH=2.0, \
-        BoundarySIZE=30, MAGD_THRESH=0.12, StarExt_iter=4):
+        BoundarySIZE=30, BeltHW=0.2, MAGD_THRESH=0.12, StarExt_iter=4):
         
         # ********************* Determine SubSources ********************* #
 
@@ -32,8 +32,8 @@ class Auto_SparsePrep:
                 SATUR_KEY=SATUR_KEY, BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, \
                 BACK_FILTERSIZE=3, DETECT_THRESH=DETECT_THRESH, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
                 BACKPHOTO_TYPE='LOCAL', CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, \
-                BoundarySIZE=BoundarySIZE, AddSNR=False)    # FIXME SEx-Configuration is Customizable
-            Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], Return_HPS=False)
+                BoundarySIZE=BoundarySIZE, AddSNR=False)   # FIXME SEx-Configuration is Customizable
+            Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], BeltHW=BeltHW, Return_HPS=False)
             
             AstSEx_GS = Hmc[0][Hc[2]]
             SATLEVEL = fits.getheader(FITS_obj, ext=0)[SATUR_KEY]
@@ -46,7 +46,7 @@ class Auto_SparsePrep:
         XY_GSs = np.array([AstSEx_GSs['X_IMAGE'], AstSEx_GSs['Y_IMAGE']]).T
 
         # * Determine Matched-GoodSources [MGS]
-        tol = np.sqrt((FWHM_REF/3.0)**2 + (FWHM_SCI/3.0)**2)    # FIXME Customizable
+        tol = np.sqrt((FWHM_REF/3.0)**2 + (FWHM_SCI/3.0)**2)   # FIXME Customizable
         Symm = Symmetric_Match.SM(POA=XY_GSr, POB=XY_GSs, tol=tol)
         AstSEx_MGSr = AstSEx_GSr[Symm[:, 0]]
         AstSEx_MGSs = AstSEx_GSs[Symm[:, 1]]

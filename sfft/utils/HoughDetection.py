@@ -44,7 +44,7 @@ __version__ = "v1.0"
 
 class Hough_Detection:
     @staticmethod
-    def HD(PixA_obj=None, XY_obj=None, Hmask=None, res=None, count_thres=None, cannysig=None, peakclip=0.7):
+    def HD(PixA_obj=None, XY_obj=None, Hmask=None, res=None, count_thresh=None, cannysig=None, peakclip=0.7):
         
         # * Convert non-masked Scatter points to be 2D-image
         if XY_obj is not None:
@@ -66,8 +66,8 @@ class Hough_Detection:
                 PixA_obj[r, c] += 1
         
         # * Make Mask from 2D-image with Count-Threshold or canny egde detection
-        if count_thres is not None:
-            Mask = PixA_obj >= count_thres
+        if count_thresh is not None:
+            Mask = PixA_obj >= count_thresh
         if cannysig is not None:
             Mask = feature.canny(PixA_obj, sigma=cannysig)
         
@@ -108,4 +108,3 @@ class Hough_Detection:
             ScaLineDIS = np.array(ScaLineDIS).T
 
         return Hspace, ThetaPeaks, RhoPeaks, DLMask, ScaLineDIS
-
