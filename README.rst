@@ -27,7 +27,7 @@ If so, please manually install llvmlite by
 
 Finally, you need further to install additional astronomical softwares for sfft.
 
-- `SExtractor <https://github.com/astromatic/sextractor>`_: Our subtraction needs to call SExtractor which enables sfft to determine a proper pixel mask over the input image-pair for a more reasonable parameter-solving. Note that we have wrapped SExtractor into a Python module (sfft.utils.pyAstroMatic.PYSEx). You can also use this module to trigger SExtractor in a Pythonic way rather than from command line.
+- `SExtractor <https://github.com/astromatic/sextractor>`_: SExtractor is required for sfft subtraction, as it enables sfft to determine a proper pixel mask over the input image-pair before the image subtraction (this is critical for a more reasonable parameter-solving). Note that we have wrapped SExtractor into a Python module (sfft.utils.pyAstroMatic.PYSEx), so you also get an alternative way to trigger SExtractor.
 - `SWarp <https://github.com/astromatic/swarp>`_ (optional): This is not required for sfft subtraction itself. However, it is normally necessary to align the input image-pair before image subtraction. We have additionally wrapped SWarp into a Python module (sfft.utils.pyAstroMatic.PYSWarp) so that you can align images in a Pythonic way.
 
 Quick Tests
