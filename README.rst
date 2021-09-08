@@ -19,11 +19,16 @@ For example, you may enable the GPU backends (i.e., PyCUDA backend and CuPy back
 - conda install -c conda-forge cudatoolkit=10.1
 - pip install pycuda==2020.1 scikit-cuda==0.5.3 cupy-cuda101
 
-Tips: If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. 
+If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. 
 The setup.py in sfft cannot properly update llvmlite to the desired version, then you may get errors related to Numba or llvmlite. 
 If so, please manually install llvmlite by 
 
 - pip install llvmlite==0.36.0 —ignore-installed
+
+Finally, you need further to install additional astronomical softwares for sfft.
+
+- `SExtractor <https://github.com/astromatic/sextractor>`_: Our subtraction needs to call SExtractor which enables sfft to determine a proper pixel mask over the input image-pair for a more reasonable parameter-solving. Note that we have wrapped SExtractor into a Python module (sfft.utils.pyAstroMatic.PYSEx). You can also use this module to trigger SExtractor in a Pythonic way rather than from command line.
+- `SWarp <https://github.com/astromatic/swarp>`_ (optional): This is not required for sfft subtraction itself. However, it is normally necessary to align the input image-pair before image subtraction. We have additionally wrapped SWarp into a Python module (sfft.utils.pyAstroMatic.PYSWarp) so that you can align images in a Pythonic way.
 
 Quick Tests
 -----------

@@ -15,9 +15,12 @@ CDIR = pa.dirname(pa.abspath(__file__))
 #      Centred at (RA=10.801538, DEC=41.385839) with cutout size 1024*1024 pix
 #
 # NOTE You can find the raw ZTF observations (full 3K*3K) by
-#      Download Full REF: 'https://irsa.ipac.caltech.edu/ibe/data/ztf/products/ref/001/field001735/zg/ccd01/q2/ztf_001735_zg_c01_q2_refimg.fits'
-#      Download Full SCI: 'https://irsa.ipac.caltech.edu/ibe/data/ztf/products/sci/2018/0705/481609/ztf_20180705481609_001735_zg_c01_o_q2_sciimg.fits'
-#      Download Full ZOGY-DIFF: https://irsa.ipac.caltech.edu/ibe/data/ztf/products/sci/2018/0705/481609/ztf_20180705481609_001735_zg_c01_o_q2_scimrefdiffimg.fits.fz
+#      Download Full REF: 'https://irsa.ipac.caltech.edu/ibe/data/ztf/products/ref/001/
+#                          field001735/zg/ccd01/q2/ztf_001735_zg_c01_q2_refimg.fits'
+#      Download Full SCI: 'https://irsa.ipac.caltech.edu/ibe/data/ztf/products/sci/2018/
+#                          0705/481609/ztf_20180705481609_001735_zg_c01_o_q2_sciimg.fits'
+#      Download Full ZOGY-DIFF: https://irsa.ipac.caltech.edu/ibe/data/ztf/products/sci/2018/
+#                               0705/481609/ztf_20180705481609_001735_zg_c01_o_q2_scimrefdiffimg.fits.fz
 #      Use SWarp to align REF to SCI, then you are able to apply this script on the full version.
 #      These files are not provided here to minimize the size of the package.
 
