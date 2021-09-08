@@ -2,10 +2,6 @@ Package Description
 -------------------
 sfft is a Python package to perform image subtraction in Fourier space.
 
-Documentation
--------------
-Package documentation is available at: TBD
-
 Installation
 -----------
 sfft can be simply installed in your Python environment by
@@ -23,13 +19,16 @@ For example, you may enable the GPU backends (i.e., PyCUDA backend and CuPy back
 - conda install -c conda-forge cudatoolkit=10.1
 - pip install pycuda==2020.1 scikit-cuda==0.5.3 cupy-cuda101
 
-Tips
------------
-If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. 
+Tips: If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. 
 The setup.py in sfft cannot properly update llvmlite to the desired version, then you may get errors related to Numba or llvmlite. 
 If so, please manually install llvmlite by 
 
 - pip install llvmlite==0.36.0 —ignore-installed
+
+Quick Tutorial
+-----------
+TBD
+
 
 Development
 -----------
@@ -43,11 +42,8 @@ information:
 - OS platform.
 - Python version.
 - CUDA, PyCUDA and CuPy version.
-- Version or git revision of sfft.
-
-TODO-list
------------
+- Version of sfft.
 
 Citing
 ------
-TBD
+Lei Hu, et al., 2021 (in prep.)
