@@ -27,7 +27,7 @@ If so, please manually install llvmlite by
 
 Quick Tests
 -----------
-You may find three examples in the test directory.
+There are three examples in the test directory, and you may use the Python scripts in the subdirectory to conduct the tests.
 
 - subtract_test_crowded_flavor: subtraction test for the crowded flavor of sfft (with ZTF M31 observations)
 - subtract_test_sparse_flavor: subtraction test for the sparse flavor of sfft (with DECam observations)
