@@ -29,8 +29,8 @@ Quick Tests
 -----------
 You may find three examples in the test directory.
 
-- subtract_test_crowded_flavor: subtraction test with crowded flavor of sfft (with ZTF M31 observations)
-- subtract_test_sparse_flavor: subtraction test with sparse flavor of sfft (with DECam observations)
+- subtract_test_crowded_flavor: subtraction test for the crowded flavor of sfft (with ZTF M31 observations)
+- subtract_test_sparse_flavor: subtraction test for the sparse flavor of sfft (with DECam observations)
 - difference_noise_decorrelation: noise decorrelation test for a generic case, where the difference image is generated from subtraction between stacked reference image and stacked science image (10 DECam individual observations are involved).
 
 Development
