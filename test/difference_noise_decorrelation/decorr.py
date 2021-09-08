@@ -5,7 +5,6 @@ from astropy.io import fits
 from astropy.convolution import convolve
 from sfft.utils.SkyLevelEstimator import SkyLevel_Estimator
 from sfft.utils.DeCorrelationCalculator import DeCorrelation_Calculator
-from sfft.utils.SpatialVariation import ReadSFFTSolution, SVKRealization
 CDIR = pa.dirname(pa.abspath(__file__))
 
 # ** Science Group
