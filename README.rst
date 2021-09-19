@@ -40,8 +40,8 @@ There are three examples in the test directory, and you may use the Python scrip
 
 Software options
 -----------
-- detailed parameters for crowded flavor of sfft: help(sfft.EasyCrowdedPacket).
-- detailed parameters for sparse flavor of sfft: help(sfft.EasySparsePacket).
+- detailed parameters for crowded flavor of sfft: help(``sfft.EasyCrowdedPacket``).
+- detailed parameters for sparse flavor of sfft: help(``sfft.EasySparsePacket``).
 
 Development
 -----------
@@ -59,4 +59,4 @@ information:
 
 Citing
 ------
-Lei Hu, et al., 2021
+Lei Hu, Lifan Wang, Xingzhuo Chen, 2021
