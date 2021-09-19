@@ -19,6 +19,96 @@ class Easy_CrowdedPacket:
         MaskSatContam=False, BACKSIZE_SUPER=128, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
         DETECT_THRESH=5.0, StarExt_iter=2, PriorBanMask=None, GLockFile=None):
 
+        """
+        * Parameters for Crowded-Flavor SFFT
+        # ----------------------------- Computing Enviornment --------------------------------- #
+
+        -backend  ['Pycuda']  # can be 'Pycuda', 'Cupy' and 'Numpy'. 
+                              # Pycuda backend and Cupy backend require GPU device(s), 
+                              # while 'Numpy' is a pure CPU-based backend.
+                              # Cupy backend is even faster than Pycuda, however, it consume more GPU memory.
+
+        -CUDA_DEVICE ['0']    # it specifies certain GPU device to conduct the subtraction task.
+                              # the GPU devices are usually numbered 0 to N-1 (you may use command nvidia-smi to check).
+                              # this argument becomes trivial for Numpy backend
+
+        -NUM_CPU_THREADS [8]  # it specifies the number of CPU threads used for Numpy backend.
+                              # SFFT of Numpy backend has been implemented with pyfftw and numba, 
+                              # that allow parallel computing on CPUs. However, Numpy backend is 
+                              # generally much slower than GPU backends.
+
+        -GLockFile [None]     # File path for file locking to avoid GPU to deal with multiple tasks at the same time.
+                              # -GLockFile = None means SFFT will automatically create a temporary file.
+
+        # ----------------------------- Preliminary Image-Masking with Saturation Rejection --------------------------------- #
+
+        -GAIN_KEY ['GAIN']      # keyword of GAIN in FITS header (of reference & science), for SExtractor configuration
+                                # NOTE: we need to use SExtractor check image SEGMENTATION to mask Saturated sources.
+
+        -GAIN_KEY ['SATURATE']  # keyword of saturation in FITS header (of reference & science), for SExtractor configuration
+                                # Remarks: note that Crowded-Flavor SFFT does not require sky-subtracted images as inputs,
+                                #          so the default keyword is the common name for saturation level.
+
+        -DETECT_THRESH [5.0]    # Detect threshold for SExtractor configuration.
+
+        -StarExt_iter [2]       # make a further dilation for the masked region initially determined by SExtractor SEGMENTATION.
+                                # -StarExt_iter means the iteration times of the dilation process. 
+        
+        -PriorBanMask [None]    # a Numpy boolean array, with shape consistent with reference (science).
+                                # one can deliver a customized saturation mask to SFFT.
+                                # you may also include known variables (transients) in the user-defined mask.
+
+        # ----------------------------- SFFT Subtraction --------------------------------- #
+
+        -ForceConv [None]       # it determines which image will be convolved, can be 'REF', 'SCI' and None.
+                                # -ForceConv = None means SFFT will determine the convolution direction according to 
+                                # FWHM_SCI and FWHM_REF: the image with better seeing will be convolved to avoid deconvolution.
+
+        -GKerHW [None]          # The given kernel half-width, None means the kernel size will be 
+                                # automatically determined by -KerHWRatio (to be seeing-related). 
+
+        -KerHWRatio [2.0]       # The ratio between FWHM and the kernel half-width
+                                # KerHW = int(KerHWRatio * Max(FWHM_REF, FWHM_SCI))
+
+        -KerHWLimit [(2, 20)]   # The lower & upper bounds for kernel half-width 
+                                # KerHW is updated as np.clip(KerHW, KerHWLimit[0], KerHWLimit[1]) 
+                                # Remarks: this is useful for a survey since it can constrain the peak GPU memory usage.
+
+        -KerPolyOrder [2]       # Polynomial degree of kernel spatial variation.
+
+        -BGPolyOrder [2]        # Polynomial degree of background spatial variation.
+                                # This argument is trivial for Sparse-Flavor SFFT as input images have been sky subtracted.
+
+        -ConstPhotRatio [True]  # Constant photometric ratio between images ? can be True or False
+                                # ConstPhotRatio = True: the sum of convolution kernel is restricted to be a 
+                                #                constant across the field. 
+                                # ConstPhotRatio = False: the flux scaling between images is modeled by a 
+                                #                polynomial with degree -KerPolyOrder.
+
+        # ----------------------------- Input & Output --------------------------------- #
+
+        -FITS_REF []            # File path of input reference image
+
+        -FITS_SCI []            # File path of input reference image
+
+        -FITS_DIFF [None]       # File path of output difference image
+
+        -FITS_Solution [None]   # File path of the solution of the linear system 
+                                # it is an array of (..., a_ijab, ... b_pq, ...)
+
+        # Important Notice:
+        # a): if reference is convolved in SFFT, then DIFF = SCI - Convolved_REF.
+        #     [difference image is expected to have PSF & flux zero-point consistent with science image]
+        #     e.g., -ForceConv='REF' or -ForceConv=None and reference has better seeing.
+        # b): if science is convolved in SFFT, then DIFF = Convolved_SCI - REF
+        #     [difference image is expected to have PSF & flux zero-point consistent with reference image]
+        #     e.g., -ForceConv='SCI' or -ForceConv=None and science has better seeing.
+        #
+        # Remarks: this convention is to guarantee that transients emerge on science image always 
+        #          show a positive signal on difference images.
+
+        """
+
         # * Perform Crowded-Prep [MaskSat]
         SFFTPrepDict = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI).\
             AutoMask(BACKSIZE_SUPER=BACKSIZE_SUPER, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
