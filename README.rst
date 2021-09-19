@@ -1,6 +1,6 @@
 Package Description
 -------------------
-sfft is a Python package to perform image subtraction in Fourier space.
+Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in Fourier space.
 
 Installation
 -----------
@@ -54,4 +54,4 @@ information:
 
 Citing
 ------
-Lei Hu, et al., 2021 (in prep.)
+Lei Hu, et al., 2021
