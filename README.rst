@@ -1,3 +1,5 @@
+..  image:: https://raw.githubusercontent.com/thomasvrussell/sfft/master/docs/sfft_log.png
+
 Package Description
 -------------------
 Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in Fourier space.
