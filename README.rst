@@ -61,4 +61,4 @@ information:
 
 Citing
 ------
-Lei Hu, Lifan Wang, Xingzhuo Chen, 2021
+Hu, L., Wang, L., & Chen, X. 2021, Image Subtraction in Fourier Space. https://arxiv.org/abs/2109.09334
