@@ -42,7 +42,7 @@ We have prepared several examples in the test directory so that you can familar 
 
 Note that sfft subtraction is implemented as a two-step process. First of all, we need to mask the regions which can be be well-modeled by image subtraction (e.g., saturated stars, variables, cosmic rays, bad pixels, etc.). We designed two flavors of sfft (crowded & sparse), which actually follow the same subtraction algorithm but differ only in ways of the preliminary image-masking. The masked images are used to solve the parameters of image matching, and the solution will be ultimately applied on the raw un-masked images to get the final difference image. You may want to create customized masked images with more elaborate pixel masking to replace the built-in masking process in sfft. 
 
-- **customized sfft subtraction**: the example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure version* of sfft is conducted by the module ``sfft.CustomizedPacket`` . More detailed explanations of the module: help(``sfft.CustomizedPacket``).
+- **customized sfft subtraction**: the example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket`` . More detailed explanations of the module: help(``sfft.CustomizedPacket``).
 
 Common issues
 -----------
