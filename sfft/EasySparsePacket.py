@@ -24,7 +24,7 @@ class Easy_SparsePacket:
         * Parameters for Sparse-Flavor SFFT
         # ----------------------------- Computing Enviornment --------------------------------- #
 
-        -backend  ['Pycuda']  # can be 'Pycuda', 'Cupy' and 'Numpy'. 
+        -backend ['Pycuda']   # can be 'Pycuda', 'Cupy' and 'Numpy'. 
                               # Pycuda backend and Cupy backend require GPU device(s), 
                               # while 'Numpy' is a pure CPU-based backend.
                               # Cupy backend is even faster than Pycuda, however, it consume more GPU memory.
@@ -125,7 +125,7 @@ class Easy_SparsePacket:
 
         -FITS_REF []            # File path of input reference image
 
-        -FITS_SCI []            # File path of input reference image
+        -FITS_SCI []            # File path of input science image
 
         -FITS_DIFF [None]       # File path of output difference image
 
@@ -233,9 +233,9 @@ class Easy_SparsePacket:
 
                 # * Modifications on difference image
                 #   a) when REF is convolved, DIFF = SCI - Conv(REF)
-                #       PSF_DIFF is coincident with SCI, transients on SCI are positive signal in DIFF.
+                #      PSF(DIFF) is coincident with PSF(SCI), transients on SCI are positive signal in DIFF.
                 #   b) when SCI is convolved, DIFF = Conv(SCI) - REF
-                #       PSF_DIFF is coincident with REF, transients on SCI are still positive signal in DIFF.
+                #      PSF(DIFF) is coincident with PSF(REF), transients on SCI are still positive signal in DIFF.
 
                 if NaNmask_U is not None:
                     # ** Mask Union-NaN region

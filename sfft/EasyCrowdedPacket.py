@@ -23,7 +23,7 @@ class Easy_CrowdedPacket:
         * Parameters for Crowded-Flavor SFFT
         # ----------------------------- Computing Enviornment --------------------------------- #
 
-        -backend  ['Pycuda']  # can be 'Pycuda', 'Cupy' and 'Numpy'. 
+        -backend ['Pycuda']   # can be 'Pycuda', 'Cupy' and 'Numpy'. 
                               # Pycuda backend and Cupy backend require GPU device(s), 
                               # while 'Numpy' is a pure CPU-based backend.
                               # Cupy backend is even faster than Pycuda, however, it consume more GPU memory.
@@ -55,8 +55,10 @@ class Easy_CrowdedPacket:
                                 # -StarExt_iter means the iteration times of the dilation process. 
         
         -PriorBanMask [None]    # a Numpy boolean array, with shape consistent with reference (science).
-                                # one can deliver a customized saturation mask to SFFT.
-                                # you may also include known variables (transients) in the user-defined mask.
+                                # one can deliver a customized mask that covers known 
+                                # variables/transients/bad-pixels by this argument.
+                                # SFFT will then merge (Union operation) the user-defined mask and 
+                                # the SExtractor-determined saturation mask as the final mask.
 
         # ----------------------------- SFFT Subtraction --------------------------------- #
 
@@ -89,7 +91,7 @@ class Easy_CrowdedPacket:
 
         -FITS_REF []            # File path of input reference image
 
-        -FITS_SCI []            # File path of input reference image
+        -FITS_SCI []            # File path of input science image
 
         -FITS_DIFF [None]       # File path of output difference image
 
@@ -190,9 +192,9 @@ class Easy_CrowdedPacket:
                 
                 # * Modifications on difference image
                 #   a) when REF is convolved, DIFF = SCI - Conv(REF)
-                #       PSF_DIFF is coincident with SCI, transients on SCI are positive signal in DIFF.
+                #      PSF(DIFF) is coincident with PSF(SCI), transients on SCI are positive signal in DIFF.
                 #   b) when SCI is convolved, DIFF = Conv(SCI) - REF
-                #       PSF_DIFF is coincident with REF, transients on SCI are still positive signal in DIFF.
+                #      PSF(DIFF) is coincident with PSF(REF), transients on SCI are still positive signal in DIFF.
 
                 if NaNmask_U is not None:
                     # ** Mask Union-NaN region
