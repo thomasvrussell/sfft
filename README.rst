@@ -25,7 +25,7 @@ Or alternatively, install the desired version of sfft from Github `<https://gith
 
 sfft has the following three backends to perform the image subtraction.
 
-- ``NumPy backend``: sfft will totally run on the CPU devices. No other dependencies are required for this backend.
+- ``NumPy backend``: sfft will totally run on the CPU devices. No other dependencies are required for this backend.::
 - ``PyCUDA backend``: The core functions of sfft are written in `PyCUDA <https://github.com/inducer/pycuda>`_ and `Scikit-Cuda <https://github.com/lebedov/scikit-cuda>`_. Users need to install PyCUDA and Scikit-Cuda according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 - ``CuPy backend``: The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 
@@ -50,7 +50,7 @@ Quick start guide
 We have prepared several examples in the test directory so that you can familar with the usage of the main functions in our software.
 
 - **sfft subtraction for crowded field**: the example in subdirectory named subtract_test_crowded_flavor. We use crowded-flavor-sfft (module ``sfft.EasyCrowdedPacket``) to perform image subtraction for ZTF M31 observations. More detailed explanations of the module: help(``sfft.EasyCrowdedPacket``).
-&nbsp;
+
 - **sfft subtraction for sparse field**: the example in subdirectory named subtract_test_sparse_flavor. We use sparse-flavor-sfft (module ``sfft.EasySparsePacket``) to perform image subtraction for CTIO-4m DECam observations. More detailed explanations of the module: help(``sfft.EasySparsePacket``).
 
 - **difference noise decorrelation**: the example in subdirectory named difference_noise_decorrelation. We use noise-decorrelation toolkit (module ``sfft.utils.DeCorrelationCalculator``) to whiten the background noise on difference image. In this test, the difference image is generated from image subtraction (by sfft) between a coadded reference image and a coadded science image, each stacked from 5 DECam individual observations with PSF homogenization (by sfft). The toolkit can be also applied to whiten a coadded image as long as convolution is involved in the stacking process.
