@@ -38,7 +38,7 @@ setup(name = NAME,
       packages = find_packages(),
       include_package_data = True,
       classifiers = [
-        'Development Status :: Beta',
+        'Development Status :: 4 - Beta',
         'Environment :: Console',
         'Intended Audience :: Science/Research',
         'Natural Language :: English',
