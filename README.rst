@@ -15,8 +15,12 @@ Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in 
 
 Installation
 -----------
-sfft can be simply installed in your Python environment by: ::
+One can install latest version of sfft from pip: ::
     
+    pip install sfft
+
+Or alternatively, install it from our Github release `<https://github.com/thomasvrussell/sfft>`_. ::
+
     python setup.py install
 
 sfft has the following three backends to perform the image subtraction.
@@ -25,16 +29,16 @@ sfft has the following three backends to perform the image subtraction.
 - ``PyCUDA backend``: The core functions of sfft are written in `PyCUDA <https://github.com/inducer/pycuda>`_ and `Scikit-Cuda <https://github.com/lebedov/scikit-cuda>`_. Users need to install PyCUDA and Scikit-Cuda according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 - ``CuPy backend``: The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 
-For example, you may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via
+For example, you may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via: ::
 
-- conda install -c conda-forge cudatoolkit=10.1
-- pip install pycuda==2020.1 scikit-cuda==0.5.3 cupy-cuda101
+    conda install -c conda-forge cudatoolkit=10.1
+    pip install pycuda==2020.1 scikit-cuda==0.5.3 cupy-cuda101
 
 If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. 
 The setup.py in sfft cannot properly update llvmlite to the desired version, then you may get errors related to Numba or llvmlite. 
-If so, please manually install llvmlite by 
+If so, please manually install llvmlite by: ::
 
-- pip install llvmlite==0.36.0 —ignore-installed
+    pip install llvmlite==0.36.0 —ignore-installed
 
 Finally, you need further to install additional astronomical softwares for sfft.
 
