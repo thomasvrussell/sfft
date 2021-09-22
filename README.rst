@@ -4,15 +4,6 @@ Package Description
 -------------------
 Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in Fourier space.
 
-.. image:: https://zenodo.org/badge/doi/10.5281/zenodo.5521266.svg
-    :target: https://doi.org/10.5281/zenodo.5521266
-    :alt: 1.0
-.. image:: https://img.shields.io/pypi/v/sfft.svg
-    :target: https://pypi.python.org/pypi/sfft
-    :alt: Latest Version
-.. image:: https://img.shields.io/badge/License-MIT-yellow.svg
-    :target: https://opensource.org/licenses/MIT
-
 Installation
 -----------
 One can install the latest version of sfft from pip: ::
@@ -25,8 +16,10 @@ Or alternatively, install the desired version of sfft from Github `<https://gith
 
 sfft has the following three backends to perform the image subtraction.
 
-- ``NumPy backend``: sfft will totally run on the CPU devices. No other dependencies are required for this backend. ::
+- ``NumPy backend``: sfft will totally run on the CPU devices. No other dependencies are required for this backend.
+
 - ``PyCUDA backend``: The core functions of sfft are written in `PyCUDA <https://github.com/inducer/pycuda>`_ and `Scikit-Cuda <https://github.com/lebedov/scikit-cuda>`_. Users need to install PyCUDA and Scikit-Cuda according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
+
 - ``CuPy backend``: The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 
 For example, you may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via: ::
@@ -43,6 +36,7 @@ If so, please manually install llvmlite by: ::
 Finally, you need further to install additional astronomical softwares for sfft.
 
 - `SExtractor <https://github.com/astromatic/sextractor>`_: SExtractor is required for sfft subtraction, as it enables sfft to determine a proper pixel mask over the input image-pair before the image subtraction (this is critical for a more reasonable parameter-solving). Note that we have wrapped SExtractor into a Python module ``sfft.utils.pyAstroMatic.PYSEx``, so you also get an alternative way to trigger SExtractor.
+
 - `SWarp <https://github.com/astromatic/swarp>`_ (optional): This is not required for sfft subtraction itself. However, it is normally necessary to align the input image-pair before image subtraction. We have additionally wrapped SWarp into a Python module ``sfft.utils.pyAstroMatic.PYSWarp`` so that you can align images in a more Pythonic way.
 
 Quick start guide
