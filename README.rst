@@ -19,8 +19,8 @@ One can install the latest version of sfft from pip: ::
     
     pip install sfft
 
-Or alternatively, install it from our Github release `<https://github.com/thomasvrussell/sfft>`_: ::
-    
+Or alternatively, install the desired version of sfft from Github `<https://github.com/thomasvrussell/sfft>`_: ::
+
     python setup.py install
 
 sfft has the following three backends to perform the image subtraction.
