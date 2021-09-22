@@ -20,7 +20,8 @@ sfft can be simply installed in your Python environment by
 - python setup.py install
 
 ```console
-python setup.py install
+foo@bar:~$ whoami
+foo
 ```
 
 sfft has the following three backends to perform the image subtraction.
