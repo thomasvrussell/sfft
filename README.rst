@@ -19,7 +19,7 @@ sfft can be simply installed in your Python environment by
 
 - python setup.py install
 
-```console
+```bash
 foo@bar:~$ whoami
 foo
 ```
