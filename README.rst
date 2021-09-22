@@ -4,6 +4,18 @@ Package Description
 -------------------
 Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in Fourier space.
 
+.. image:: https://zenodo.org/badge/doi/10.5281/zenodo.5521266.svg
+    :target: https://doi.org/10.5281/zenodo.5521266
+    :alt: 1.0
+.. image:: https://img.shields.io/pypi/v/sfft.svg
+    :target: https://pypi.python.org/pypi/sfft
+    :alt: Latest Version
+.. image:: https://img.shields.io/pypi/dm/sfft.svg
+    :target: https://pypi.python.org/pypi/sfft
+    :alt: Downloads
+.. image:: https://img.shields.io/badge/License-MIT-yellow.svg
+    :target: https://opensource.org/licenses/MIT
+
 Installation
 -----------
 sfft can be simply installed in your Python environment by
