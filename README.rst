@@ -7,6 +7,8 @@ Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in 
 .. image:: https://zenodo.org/badge/doi/10.5281/zenodo.5521040.svg
     :target: https://doi.org/10.5281/zenodo.5521040
     :alt: 1.0
+.. image:: https://img.shields.io/badge/License-MIT-yellow.svg
+    :target: https://opensource.org/licenses/MIT
 
 Installation
 -----------
