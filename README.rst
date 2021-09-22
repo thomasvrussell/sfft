@@ -19,10 +19,6 @@ sfft can be simply installed in your Python environment by
 
 - python setup.py install
 
-or 
-
-- pip install sfft
-
 sfft has the following three backends to perform the image subtraction.
 
 - ``NumPy backend``: sfft will totally run on the CPU devices. No other dependencies are required for this backend.
