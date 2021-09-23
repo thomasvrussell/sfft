@@ -37,12 +37,6 @@ For example, you may enable the GPU backends (i.e., PyCUDA backend and CuPy back
     conda install -c conda-forge cudatoolkit=10.1
     pip install pycuda==2020.1 scikit-cuda==0.5.3 cupy-cuda101
 
-If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. 
-The setup.py in sfft cannot properly update llvmlite to the desired version, then you may get errors related to Numba or llvmlite. 
-If so, please manually install llvmlite by: ::
-
-    pip install llvmlite==0.36.0 —ignore-installed
-
 Finally, you need further to install additional astronomical softwares for sfft.
 
 - `SExtractor <https://github.com/astromatic/sextractor>`_: SExtractor is required for sfft subtraction, as it enables sfft to determine a proper pixel mask over the input image-pair before the image subtraction (this is critical for a more reasonable parameter-solving). Note that we have wrapped SExtractor into a Python module ``sfft.utils.pyAstroMatic.PYSEx``, so you also get an alternative way to trigger SExtractor.
@@ -65,6 +59,13 @@ Note that sfft subtraction is implemented as a two-step process. First of all, w
 
 Common issues
 -----------
+
+- If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. 
+The setup.py in sfft cannot properly update llvmlite to the desired version, then you may get errors related to Numba or llvmlite. 
+If so, please manually install llvmlite by: ::
+
+    pip install llvmlite==0.36.0 —ignore-installed
+
 - If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of image subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find the problem if you wrap any sfft subtraction task in a loop (e.g., try this in the customized sfft subtraction test). This problem can be solved by running a trivial subtraction (e.g., simply using empty images) in advance and making the pipe waiting for the subsequent observations.
 
 Development
