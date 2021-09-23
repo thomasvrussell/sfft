@@ -60,9 +60,7 @@ Note that sfft subtraction is implemented as a two-step process. First of all, w
 Common issues
 -----------
 
-- If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. 
-The setup.py in sfft cannot properly update llvmlite to the desired version, then you may get errors related to Numba or llvmlite. 
-If so, please manually install llvmlite by: ::
+- If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. The setup.py in sfft cannot properly update llvmlite to the desired version, then you may get errors related to Numba or llvmlite. If so, please manually install llvmlite by: ::
 
     pip install llvmlite==0.36.0 —ignore-installed
 
