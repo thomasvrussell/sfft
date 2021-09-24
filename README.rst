@@ -18,11 +18,11 @@ Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in 
 
 Installation
 -----------
-One can install the latest version of sfft from pip: ::
+One can install the latest stable version of sfft from pip (recommended): ::
     
     pip install sfft
 
-Or alternatively, install the desired version of sfft from Github `<https://github.com/thomasvrussell/sfft>`_: ::
+Or alternatively, install any desired version of sfft from Github `<https://github.com/thomasvrussell/sfft>`_: ::
 
     python setup.py install
 
