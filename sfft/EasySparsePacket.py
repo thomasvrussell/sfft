@@ -146,6 +146,7 @@ class Easy_SparsePacket:
         """
 
         # * Perform Sparse-Prep [Hough]
+        print('MeLOn WARNING: Input images for sparse-flavor sfft should be SKY-SUBTRACTED !!!')
         SFFTPrepDict = Auto_SparsePrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI).Hough(GAIN_KEY=GAIN_KEY, \
             SATUR_KEY=SATUR_KEY, DETECT_THRESH=DETECT_THRESH, BoundarySIZE=BoundarySIZE, \
             BeltHW=BeltHW, MAGD_THRESH=MAGD_THRESH, StarExt_iter=StarExt_iter)
