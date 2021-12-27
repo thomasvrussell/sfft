@@ -1,4 +1,5 @@
 import sys
+import warnings
 import numpy as np
 from tempfile import mkdtemp
 from astropy.stats import sigma_clipped_stats 
@@ -125,13 +126,13 @@ class Hough_MorphClassifier:
         AvIDX = np.where(Avmask)[0]
         if len(AvIDX) == 0: 
             Horindex = None
-            print('MeLOn WARNING: NO nearly-horizon peak as Point-Source-Line!')
+            warnings.warn('MeLOn WARNING: NO nearly-horizon peak as Point-Source-Line!')
         if len(AvIDX) == 1:
             Horindex = AvIDX[0]
             print('MeLOn CheckPoint: the UNIQUE nearly-horizon peak as Point-Source-Line!')
         if len(AvIDX) > 1:
             Horindex = np.min(AvIDX)
-            print('MeLOn WARNING: there are MULTIPLE nearly-horizon peaks and use the STRONGEST as Point-Source-Line!')
+            warnings.warn('MeLOn WARNING: there are MULTIPLE nearly-horizon peaks and use the STRONGEST as Point-Source-Line!')
         
         if Horindex is not None:
             HorThetaPeak = ThetaPeaks[Horindex]
@@ -156,7 +157,7 @@ class Hough_MorphClassifier:
             Rmid = sigma_clipped_stats(MA_FR[BPmask, 1], sigma=3.0, maxiters=5)[1]
             MASK_FRM = np.abs(MA_FR[:, 1]  - Rmid) < BeltHW
             MASK_FRL = MA_FR[:, 1]  - Rmid >  BeltHW
-            print('MeLOn WARNING: the STANDBY approach is actived to determine the FRM region!')
+            warnings.warn('MeLOn WARNING: the STANDBY approach is actived to determine the FRM region!')
         
         MASK_FRS = ~np.logical_or(MASK_FRM, MASK_FRL)
         LABEL_FR = np.array(['FR-S'] * len(AstSEx))
@@ -194,7 +195,7 @@ class Hough_MorphClassifier:
                 MASK_HPS = np.zeros(len(AstSEx)).astype(bool)
                 MASK_HPS[_IDX] = True
                 if np.sum(MASK_HPS) < HPS_NumLowerLimit:
-                    print('MeLOn WARNING: The number of High-SNR Point Sources still does not reach the lower limit !')    
+                    warnings.warn('MeLOn WARNING: The number of High-SNR Point Sources still does not reach the lower limit !')    
             print('MeLOn CheckPoint: High-SNR Point-Sources in the image [%d]' %np.sum(MASK_HPS))
 
 

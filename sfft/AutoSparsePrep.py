@@ -20,7 +20,7 @@ class Auto_SparsePrep:
         self.FITS_SCI = FITS_SCI
     
     def Hough(self, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', DETECT_THRESH=2.0, \
-        BoundarySIZE=30, BeltHW=0.2, MAGD_THRESH=0.12, StarExt_iter=4):
+        DETECT_MINAREA=5, DETECT_MAXAREA=0, BoundarySIZE=30, BeltHW=0.2, MAGD_THRESH=0.12, StarExt_iter=4):
         
         # ********************* Determine SubSources ********************* #
 
@@ -29,8 +29,8 @@ class Auto_SparsePrep:
             # NOTE Byproducts: SATLEVEL & FWHM Estimation & SEGMENTATION map
             # NOTE DETECT_THRESH can affect SEGMENTATION map
             Hmc = Hough_MorphClassifier.MakeCatalog(FITS_obj=FITS_obj, GAIN_KEY=GAIN_KEY, \
-                SATUR_KEY=SATUR_KEY, BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, \
-                BACK_FILTERSIZE=3, DETECT_THRESH=DETECT_THRESH, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
+                SATUR_KEY=SATUR_KEY, BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, \
+                DETECT_THRESH=DETECT_THRESH, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, \
                 BACKPHOTO_TYPE='LOCAL', CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, \
                 BoundarySIZE=BoundarySIZE, AddSNR=False)   # FIXME SEx-Configuration is Customizable
             Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], BeltHW=BeltHW, Return_HPS=False)
