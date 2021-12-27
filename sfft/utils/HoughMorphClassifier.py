@@ -77,8 +77,10 @@ class Hough_MorphClassifier:
         BACKPHOTO_TYPE='LOCAL', CHECKIMAGE_TYPE='NONE', \
         AddRD=False, BoundarySIZE=30, AddSNR=True):
 
-        # * Trigger SExtractor (do not use XYWIN here as a compromise for the extended sources)
-        #   NOTE ONLY take Isolated & Non-Saturated Sources (FLAGS = 0) into account
+        # * Trigger SExtractor
+        #   NOTE: it is a compromise to adopt XY rather than XYWIN for both point and extended sources.
+        #   NOTE: only takes Isolated & Non-Saturated sources (FLAGS = 0) into account.
+        #   FIXME: one may need to tune DETECT_THRESH & DETECT_MINAREA for specific program.
 
         PL = ['X_IMAGE', 'Y_IMAGE', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_AUTO', 'MAGERR_AUTO', \
               'FLAGS', 'FLUX_RADIUS', 'FWHM_IMAGE', 'A_IMAGE', 'B_IMAGE']
@@ -96,63 +98,72 @@ class Hough_MorphClassifier:
         LineTheta_thresh=0.2, BeltHW=0.2, PS_ELLIPThresh=0.3, Return_HPS=False, \
         HPS_SNRThresh=100.0, HPS_Reject=0.15, HPS_NumLowerLimit=30):
 
+        A_IMAGE = np.array(AstSEx['A_IMAGE'])
+        B_IMAGE = np.array(AstSEx['B_IMAGE'])
+        MA_FR = np.array([AstSEx['MAG_AUTO'], AstSEx['FLUX_RADIUS']]).T
+        ELLIP = (A_IMAGE - B_IMAGE)/(A_IMAGE + B_IMAGE)
+        MASK_ELLIP = ELLIP < PS_ELLIPThresh
+
         # * Trigger Hough Dectection 
         #    Use Hough-Transformation detect the Point-Source-Line from the scatter points in 
-        #    diagram X [MAG_AUTO] - Y [FLUX_RADIUS], which is a roughly horizon stright line.
-        #    @ Check top-5 peaks in hough space to find the roughly-horizon stright line, which
-        #         is characterized by (HorThetaPeak, HorRhoPeak) in rho = x*sin(theta) + y*cos(theta)
-        #         and further calculate the distance from the scatter points to the detected line.
-        #    @ Note HorThetaPeak is around 0, thus cos(HorThetaPeak) around 1 then >> 0, 
-        #         thus above-line region is x_above * sin(HorThetaPeak) + y_above * cos(HorRhoPeak) > rho.
-        #
-        #    > Trick: It's useful to make restriction on FLUX_RADIUS (R) of the scatter points [JUST] for hough detection.
-        #      NOTE The sources with R value ~ 0.5 are just likely to be hot pixels or cosmic rays 
-        #           (typically only 1/2/3 lighted pixels), which are irrelevant for determing the stright line.
-        #      NOTE For computability of hough-transformation, it's usful to exclude rare sources with unusal huge R > 20.0
-        
-        MA_FR = np.array([AstSEx['MAG_AUTO'], AstSEx['FLUX_RADIUS']]).T
+        #    diagram X [MAG_AUTO] - Y [FLUX_RADIUS], which is a nearly-horizon stright line.
+        #    ** additional remarks
+        #       > It's useful to make restriction on FLUX_RADIUS (R) of the scatter points [JUST] for hough detection.
+        #         e.g., exclude the unusual sources with huge R > 20.0
+        #       > The sources with R value ~ 0.5 are just likely to be hot pixels or cosmic rays 
+        #         (typically only 1/2/3 over-threshold pixels), which are irrelevant for determing the stright line.
+
         MA, FR = MA_FR[:, 0], MA_FR[:, 1]
-        MA_mid = np.nanmedian(MA)
-        Hmask = np.logical_and.reduce((FR > 0.1, FR < 10.0, MA > MA_mid-7.0, MA < MA_mid+7.0))  # FIXME USER-DEFINED
+        MA_MID = np.nanmedian(MA)
+        Hmask = np.logical_and.reduce((FR > 0.1, FR < 10.0, MA > MA_MID-7.0, MA < MA_MID+7.0))  # FIXME USER-DEFINED
         HDOP = Hough_Detection.HD(XY_obj=MA_FR, Hmask=Hmask, res=Hough_res, \
             count_thresh=Hough_count_thresh, peakclip=Hough_peakclip)
+        ThetaPeaks, RhoPeaks, ScaLineDIS = HDOP[1], HDOP[2], HDOP[4]
 
-        CheckMaxP = 5
-        ThetaPeaks, RhoPeaks, ScaLineDIS = HDOP[1][:CheckMaxP], HDOP[2][:CheckMaxP], HDOP[4][:, 0:CheckMaxP]
+        # NOTE: consider the strongest nearly-horizon peak as the one associated with the point source feature.
         Avmask = np.abs(ThetaPeaks) < LineTheta_thresh
-        if np.sum(Avmask) > 0:
-            Horindex = np.where(Avmask)[0][0]
-        else: 
-            ThetaPeaks, RhoPeaks, ScaLineDIS = HDOP[1], HDOP[2], HDOP[4]
-            Avmask = np.abs(ThetaPeaks) < LineTheta_thresh
-            if np.sum(Avmask) > 0:
-                Horindex = np.where(Avmask)[0][0]
-                print('MeLOn WARNING: Point-Source-Line detected from numerous peaks !')
-            else:
-                Horindex = None
-                print('MeLOn WARNING: Hough Transformation Fails to detect Point-Source-Line !')
-
+        AvIDX = np.where(Avmask)[0]
+        if len(AvIDX) == 0: 
+            Horindex = None
+            print('MeLOn WARNING: NO nearly-horizon peak as Point-Source-Line!')
+        if len(AvIDX) == 1:
+            Horindex = AvIDX[0]
+            print('MeLOn CheckPoint: the UNIQUE nearly-horizon peak as Point-Source-Line!')
+        if len(AvIDX) > 1:
+            Horindex = np.min(AvIDX)
+            print('MeLOn WARNING: there are MULTIPLE nearly-horizon peaks and use the STRONGEST as Point-Source-Line!')
+        
         if Horindex is not None:
             HorThetaPeak = ThetaPeaks[Horindex]
             HorRhoPeak = RhoPeaks[Horindex]
-            ScaHorLineDIS = ScaLineDIS[:, Horindex]
-            print('MeLOn CheckPoint: The Hough-Detected Point-Source-Line is characterized by (%s, %s)' \
+            HorScaLineDIS = ScaLineDIS[:, Horindex]
+            print('MeLOn CheckPoint: the Hough-Detected Point-Source-Line is characterized by (%s, %s)' \
                 %(HorThetaPeak, HorRhoPeak))
-            MASK_FRM = ScaHorLineDIS < BeltHW
+
+            # NOTE: Note that HorThetaPeak is around 0, thus cos(HorThetaPeak) around 1 then >> 0, 
+            #       thus above-line/FRL region is x_above * sin(HorThetaPeak) + y_above * cos(HorRhoPeak) > rho.
+            MASK_FRM = HorScaLineDIS < BeltHW
             MASK_FRL = MA_FR[:, 0] * np.sin(HorThetaPeak) + MA_FR[:, 1] * np.cos(HorThetaPeak) > HorRhoPeak
             MASK_FRL = np.logical_and(MASK_FRL, ~MASK_FRM)
+        
         else:
-            BPmask = AstSEx['MAGERR_AUTO'] < 0.2  # emperical cut, reject samples with low significance.
+            # NOTE: If we have enough samples, using the bright & small-FR subgroup might be 
+            #       more appropriate for the estimate. However, it is quite tricky to find a generic
+            #       reliable way to find the point sources when the Hough Transformation doesn't work.
+            #       Here we only simply reject the samples with low significance.
+
+            BPmask = AstSEx['MAGERR_AUTO'] < 0.2
             Rmid = sigma_clipped_stats(MA_FR[BPmask, 1], sigma=3.0, maxiters=5)[1]
             MASK_FRM = np.abs(MA_FR[:, 1]  - Rmid) < BeltHW
             MASK_FRL = MA_FR[:, 1]  - Rmid >  BeltHW
-            print('MeLOn CheckPoint: Alternative scenario is activated to determine the MIDDLE region !')
-
+            print('MeLOn WARNING: the STANDBY approach is actived to determine the FRM region!')
+        
         MASK_FRS = ~np.logical_or(MASK_FRM, MASK_FRL)
-        LABEL_FR =  np.array(['FR-S'] * len(AstSEx))
+        LABEL_FR = np.array(['FR-S'] * len(AstSEx))
         LABEL_FR[MASK_FRM] = 'FR-M'
         LABEL_FR[MASK_FRL] = 'FR-L'
-        print('MeLOn CheckPoint: Got Lables by Hough Transformation [FR-S (%s) / FR-M (%s) / FR-L (%s)] !' \
+
+        print('MeLOn CheckPoint: count Lables from Hough Transformation [FR-S (%s) / FR-M (%s) / FR-L (%s)] !' \
             %(np.sum(MASK_FRS), np.sum(MASK_FRM), np.sum(MASK_FRL)))
 
         # * Produce the 3 hierarchic groups
@@ -160,18 +171,14 @@ class Hough_MorphClassifier:
         MASK_GS = ~MASK_FRS
 
         # *** Point Sources 
-        A_IMAGE = np.array(AstSEx['A_IMAGE'])
-        B_IMAGE = np.array(AstSEx['B_IMAGE'])
-        ELLIP = (A_IMAGE - B_IMAGE)/(A_IMAGE + B_IMAGE)
-        MASK_PS = np.logical_and(MASK_FRM, ELLIP < PS_ELLIPThresh)
-        
+        MASK_PS = np.logical_and(MASK_FRM, MASK_ELLIP)
         assert np.sum(MASK_PS) > 0
         FWHM = round(np.median(AstSEx[MASK_PS]['FWHM_IMAGE']), 6)
 
         print('MeLOn CheckPoint: Good-Sources in the Image [%d] ' %np.sum(MASK_GS))
         print('MeLOn CheckPoint: Point-Sources in the Image [%d] ' %np.sum(MASK_PS))
         print('MeLOn CheckPoint: Estimated [FWHM = %.3f] pixel from Point-Sources' %FWHM)
-        
+
         # **** High-SNR Point Sources 
         MASK_HPS = None
         if Return_HPS:
@@ -189,6 +196,7 @@ class Hough_MorphClassifier:
                 if np.sum(MASK_HPS) < HPS_NumLowerLimit:
                     print('MeLOn WARNING: The number of High-SNR Point Sources still does not reach the lower limit !')    
             print('MeLOn CheckPoint: High-SNR Point-Sources in the image [%d]' %np.sum(MASK_HPS))
+
 
         """
         # * SHOW THE CLASSIFICATION [Just for Check]
