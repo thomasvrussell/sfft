@@ -1,6 +1,7 @@
 import re
 import os
 import sys
+import warnings
 import subprocess
 import numpy as np
 import os.path as pa
@@ -281,14 +282,14 @@ class PY_SEx:
             print('MeLOn CheckPoint: SEx use GAIN=%s [READ from FITS header]' %GAIN)
         else: 
             GAIN = 0.0 
-            print('MeLOn WARNING: SEx use GAIN=%s [SEx DEFAULT]' %GAIN)
+            warnings.warn('MeLOn WARNING: SEx use GAIN=%s [SEx DEFAULT]' %GAIN)
         
         if SATUR_KEY in phr_obj:
             SATURATION = phr_obj[SATUR_KEY]
             print('MeLOn CheckPoint: SEx use SATURATION=%s [READ from FITS header]' %SATURATION)
         else: 
             SATURATION = 50000.0
-            print('MeLOn WARNING: SEx use SATURATION=%s [SEx DEFAULT]' %SATURATION)
+            warnings.warn('MeLOn WARNING: SEx use SATURATION=%s [SEx DEFAULT]' %SATURATION)
         
         # * Main Configurations
         ConfigDict = {}

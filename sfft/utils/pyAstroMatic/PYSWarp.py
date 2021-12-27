@@ -1,6 +1,7 @@
 import re
 import os
 import sys
+import warnings
 import numpy as np
 import os.path as pa
 from astropy.io import fits
@@ -187,7 +188,7 @@ class PY_SWarp:
             if FITS_WRe is not None:
                 fits.HDUList(fits.PrimaryHDU(PixA_WRe.T, header=hdr_op)).writeto(FITS_WRe, overwrite=True)
         except: 
-            print('MeLOn WARNING: SWarp [FAIL] at ', pa.basename(FITS_obj))
+            warnings.warn('MeLOn WARNING: SWarp [FAIL] at ', pa.basename(FITS_obj))
         os.system('rm -rf %s'%TDIR)
 
         return PixA_Re, PixA_WRe, MissingMask
