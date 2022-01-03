@@ -21,5 +21,5 @@ FITS_DIFF = CDIR + '/output_data/my_sfft_difference.fits'
 Easy_SparsePacket.ESP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_DIFF=FITS_DIFF, FITS_Solution=None, \
         ForceConv=ForceConv, GKerHW=None, KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
         ConstPhotRatio=True, backend=backend, CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS, MaskSatContam=True, \
-        GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, DETECT_THRESH=2.0, BoundarySIZE=30, BeltHW=0.2, MAGD_THRESH=0.12, \
-        StarExt_iter=4, trSubtract=trSubtract, RATIO_THRESH=3.0, XY_PriorBan=None, GLockFile=None)
+        GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, BoundarySIZE=30, \
+        BeltHW=0.2, MAGD_THRESH=0.12, StarExt_iter=4, trSubtract=trSubtract, RATIO_THRESH=3.0, XY_PriorBan=None, GLockFile=None)
