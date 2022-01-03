@@ -20,7 +20,9 @@ class Auto_SparsePrep:
         self.FITS_SCI = FITS_SCI
     
     def Hough(self, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', DETECT_THRESH=2.0, \
-        DETECT_MINAREA=5, DETECT_MAXAREA=0, BoundarySIZE=30, BeltHW=0.2, MAGD_THRESH=0.12, StarExt_iter=4):
+        DETECT_MINAREA=5, DETECT_MAXAREA=0, BoundarySIZE=30, \
+        Hough_FRLowerLimit=0.1, BeltHW=0.2, MatchTolFactor=3.0, \
+        MAGD_THRESH=0.12, StarExt_iter=4):
         
         # ********************* Determine SubSources ********************* #
 
@@ -32,8 +34,10 @@ class Auto_SparsePrep:
                 SATUR_KEY=SATUR_KEY, BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, \
                 DETECT_THRESH=DETECT_THRESH, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, \
                 BACKPHOTO_TYPE='LOCAL', CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, \
-                BoundarySIZE=BoundarySIZE, AddSNR=False)   # FIXME SEx-Configuration is Customizable
-            Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], BeltHW=BeltHW, Return_HPS=False)
+                BoundarySIZE=BoundarySIZE, AddSNR=False)          # FIXME SEx-Configuration is Customizable
+
+            Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], \
+                Hough_FRLowerLimit=Hough_FRLowerLimit, BeltHW=BeltHW, Return_HPS=False)
             
             AstSEx_GS = Hmc[0][Hc[2]]
             SATLEVEL = fits.getheader(FITS_obj, ext=0)[SATUR_KEY]
@@ -46,7 +50,11 @@ class Auto_SparsePrep:
         XY_GSs = np.array([AstSEx_GSs['X_IMAGE'], AstSEx_GSs['Y_IMAGE']]).T
 
         # * Determine Matched-GoodSources [MGS]
-        tol = np.sqrt((FWHM_REF/3.0)**2 + (FWHM_SCI/3.0)**2)   # FIXME Customizable
+        #   @ Given precise WCS, one can use a high MatchTolFactor ~3.0
+        #   @ For very sparse fields where WCS can be inaccurate, 
+        #     one can loosen the tolerance with a low MatchTolFactor ~1.0
+        
+        tol = np.sqrt((FWHM_REF/MatchTolFactor)**2 + (FWHM_SCI/MatchTolFactor)**2)
         Symm = Symmetric_Match.SM(POA=XY_GSr, POB=XY_GSs, tol=tol)
         AstSEx_MGSr = AstSEx_GSr[Symm[:, 0]]
         AstSEx_MGSs = AstSEx_GSs[Symm[:, 1]]
@@ -65,7 +73,7 @@ class Auto_SparsePrep:
             AstSEx_SSs[coln].name = coln + '_SCI'
         AstSEx_SS = hstack([AstSEx_SSr, AstSEx_SSs])
         AstSEx_SS.add_column(Column(1+np.arange(len(AstSEx_SS)), name='SEGLABEL'), index=0)
-        print('MeLOn CheckPoint: Number of SubSources out of Matched-GoodSources [%d / %d] !' \
+        print('\nMeLOn CheckPoint: Number of SubSources out of Matched-GoodSources [%d / %d] !' \
             %(len(AstSEx_SS), len(MAGD)))
 
         # ********************* Determine ActiveMask ********************* #
@@ -111,7 +119,7 @@ class Auto_SparsePrep:
 
         # * Make SFFTLmap > ActiveMask > PixA_mREF & PixA_mSCI
         SFFTLmap = np.max(np.array([PixA_SEGr, PixA_SEGs]), axis=0)
-        SFFTLmap[ProZone] = 0      # NOTE After-burn equivalent operation
+        SFFTLmap[ProZone] = 0             # NOTE After-burn equivalent operation
         struct0 = ndimage.generate_binary_structure(2, 1)
         struct = ndimage.iterate_structure(struct0, StarExt_iter)
         SFFTLmap = ndimage.grey_dilation(SFFTLmap, footprint=struct)

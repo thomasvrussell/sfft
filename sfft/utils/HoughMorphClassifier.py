@@ -95,10 +95,10 @@ class Hough_MorphClassifier:
         
         return PYSEX_OP
     
-    def Classifier(AstSEx, Hough_res=0.05, Hough_count_thresh=1, Hough_peakclip=0.7, \
+    def Classifier(AstSEx, Hough_FRLowerLimit=0.1, Hough_res=0.05, Hough_count_thresh=1, Hough_peakclip=0.7, \
         LineTheta_thresh=0.2, BeltHW=0.2, PS_ELLIPThresh=0.3, Return_HPS=False, \
         HPS_SNRThresh=100.0, HPS_Reject=0.15, HPS_NumLowerLimit=30):
-
+        
         A_IMAGE = np.array(AstSEx['A_IMAGE'])
         B_IMAGE = np.array(AstSEx['B_IMAGE'])
         MA_FR = np.array([AstSEx['MAG_AUTO'], AstSEx['FLUX_RADIUS']]).T
@@ -108,15 +108,22 @@ class Hough_MorphClassifier:
         # * Trigger Hough Dectection 
         #    Use Hough-Transformation detect the Point-Source-Line from the scatter points in 
         #    diagram X [MAG_AUTO] - Y [FLUX_RADIUS], which is a nearly-horizon stright line.
-        #    ** additional remarks
-        #       > It's useful to make restriction on FLUX_RADIUS (R) of the scatter points [JUST] for hough detection.
-        #         e.g., exclude the unusual sources with huge R > 20.0
-        #       > The sources with R value ~ 0.5 are just likely to be hot pixels or cosmic rays 
-        #         (typically only 1/2/3 over-threshold pixels), which are irrelevant for determing the stright line.
+        
+        # ** Remarks on the Mask for Hough Transformation
+        #    It is s useful to make restriction on FLUX_RADIUS (R) of the scatter points for hough detection.
+        #    I. Exclude the sources with unusally large R > 20.0 can speed up the process.
+        #    II. The sources with small R (typically ~ 0.5) are likely hot pixels or cosmic rays.
+        #        The parameter Hough_FRLowerLimit is the lower bound of FLUX_RATIO for Hough transformation.
+        #        Setting a proper lower bound can avoid to detect some line features by chance,
+        #        which are not contributed from point sources but resides in the small-FLUX_RATIO region.
+        #        NOTE: One need to choose a proper Hough_FRLowerLimit according to the fact if the image is 
+        #              under/well/over-sampling (depending on the instrumental configuration and typical seeing conditions)
+        #              recommended values of Hough_FRLowerLimit range from 0.1 to 1.0
 
         MA, FR = MA_FR[:, 0], MA_FR[:, 1]
         MA_MID = np.nanmedian(MA)
-        Hmask = np.logical_and.reduce((FR > 0.1, FR < 10.0, MA > MA_MID-7.0, MA < MA_MID+7.0))  # FIXME USER-DEFINED
+        Hmask = np.logical_and.reduce((FR > Hough_FRLowerLimit, FR < 10.0, MA > MA_MID-7.0, MA < MA_MID+7.0))
+        
         HDOP = Hough_Detection.HD(XY_obj=MA_FR, Hmask=Hmask, res=Hough_res, \
             count_thresh=Hough_count_thresh, peakclip=Hough_peakclip)
         ThetaPeaks, RhoPeaks, ScaLineDIS = HDOP[1], HDOP[2], HDOP[4]
