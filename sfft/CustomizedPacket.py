@@ -202,6 +202,8 @@ class Customized_Packet:
         # * Save solution array
         if FITS_Solution is not None:
             phdu = fits.PrimaryHDU()
+            phdu.header['N0'] = (SFFTConfig[0]['N0'], 'MeLOn: SFFT')
+            phdu.header['N1'] = (SFFTConfig[0]['N1'], 'MeLOn: SFFT')
             phdu.header['DK'] = (SFFTConfig[0]['DK'], 'MeLOn: SFFT')
             phdu.header['DB'] = (SFFTConfig[0]['DB'], 'MeLOn: SFFT')
             phdu.header['L0'] = (SFFTConfig[0]['L0'], 'MeLOn: SFFT')
