@@ -40,7 +40,8 @@ class Easy_SparsePacket:
                               # that allow parallel computing on CPUs. However, Numpy backend is 
                               # generally much slower than GPU backends.
 
-        -GLockFile [None]     # File path for file locking to avoid GPU to deal with multiple tasks at the same time.
+        -GLockFile [None]     # File path for a locking file.
+                              # The existence of this file is to avoid GPU to deal with multiple tasks at the same time.
                               # -GLockFile = None means SFFT will automatically create a temporary file.
 
         # ----------------------------- Preliminary Image-Masking with Source Selection --------------------------------- #
