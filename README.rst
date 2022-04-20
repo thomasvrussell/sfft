@@ -64,7 +64,7 @@ Note that sfft subtraction is implemented as a two-step process. First of all, w
 Tips for Parallel Computing
 -----------
 
-- Here we take the module ``sfft.EasySparsePacket`` as example. Note that sparse-flavor-sfft involves two steps: the first step is preprocessing for image masking (on CPU) and the second step is image subtraction (on GPU). Consider a general situation that the user has T tasks (image-pairs) waitting for subtraction and the computing platform is equipped with M CPU threads and N GPUs. Mostly, the numbers M and T are larger than N. 
+- Here we take the module ``sfft.EasySparsePacket`` as example. Note that sparse-flavor-sfft involves two steps: the first step is preprocessing for image masking (on CPU) and the second step is to perform image subtraction (on GPU). Consider a general situation that the user has T tasks (image-pairs) waitting for subtraction and the computing platform is equipped with M CPU threads and N GPUs. Mostly, the numbers M and T are larger than N. 
 
 - To optimize the total computing cost, one can trigger a set of subtraction tasks simultaneously, e.g., via multiple .py scripts or ``sfft.utils.meta.Multi_Proc``. We need to specify a fixed path of a locking file (GLockFile in ``sfft.EasySparsePacket``) for each GPU device (CUDA_DEVICE in ``sfft.EasySparsePacket``). The locking file is used to avoid the situation that an individual GPU has to carry out multiple tasks at the same time. This concern is usually necessary when the input images have large size so that processing multiple tasks will exceed the GPU memory limit. 
 
