@@ -64,7 +64,7 @@ Note that sfft subtraction is implemented as a two-step process. First of all, w
 Tips for Parallel Computing
 -----------
 
-- Here we take the module ``sfft.EasySparsePacket`` as example. Note that sparse-flavor-sfft involves two steps: the first step is preprocessing for image masking (on CPU) and the second step is image subtraction (on GPU). Consider a general situation that the user has N tasks (image-pairs) waitting for subtraction and the computing platform is equipped with M_{CPU}
+- Here we take the module ``sfft.EasySparsePacket`` as example. Note that sparse-flavor-sfft involves two steps: the first step is preprocessing for image masking (on CPU) and the second step is image subtraction (on GPU). Consider a general situation that the user has $N_{task}$ tasks (image-pairs) waitting for subtraction and the computing platform is equipped with M_{CPU}
 
 Common issues
 -----------
