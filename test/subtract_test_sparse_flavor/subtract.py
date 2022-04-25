@@ -2,7 +2,7 @@ import os
 import os.path as pa
 from sfft.EasySparsePacket import Easy_SparsePacket
 
-backend = 'Pycuda'    # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
+backend = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
 CUDA_DEVICE = '0'     # FIXME ONLY work for backend Pycuda / Cupy
 NUM_CPU_THREADS = 8   # FIXME ONLY work for backend Numpy   
 ForceConv = 'REF'     # FIXME {None, 'REF', 'SCI'}, None mean AUTO mode that avoids deconvolution
