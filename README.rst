@@ -12,7 +12,9 @@ Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in 
     :alt: Latest Version
 .. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=red&left_text=Downloads
     :target: https://pepy.tech/project/sfft
-.. image:: https://img.shields.io/badge/License-MIT-red.svg
+.. image:: https://img.shields.io/badge/python-3.7-green.svg
+    :target: https://www.python.org/downloads/release/python-370/
+.. image:: https://img.shields.io/badge/License-MIT-yellow.svg
     :target: https://opensource.org/licenses/MIT
 
 Installation
