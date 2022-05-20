@@ -12,6 +12,8 @@ Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in 
     :alt: Latest Version
 .. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=red&left_text=Downloads
     :target: https://pepy.tech/project/sfft
+.. image:: https://static.pepy.tech/personalized-badge/sfft?period=month&units=international_system&left_color=grey&right_color=red&left_text=Downloads/month
+    :target: https://pepy.tech/project/sfft
 .. image:: https://img.shields.io/badge/python-3.7-green.svg
     :target: https://www.python.org/downloads/release/python-370/
 .. image:: https://img.shields.io/badge/License-MIT-yellow.svg
@@ -77,6 +79,11 @@ Common issues
     pip install llvmlite==0.36.0 --ignore-installed
 
 - If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of image subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find the problem if you wrap any sfft subtraction task in a loop (e.g., try this in the customized sfft subtraction test). This problem can be solved by running a trivial subtraction (e.g., simply using empty images) in advance and making the pipe waiting for the subsequent observations (please see what we do in the test subtract_test_customized).
+
+Todo list
+-----------
+
+- Add a function for optimizing sfft on a given computing platform with multiple CPU threading and one/multiple GPU card(s). This would be very useful to reduce the overall time cost when users have a large set of image-pairs to be processed simultaneously (e.g., serve for DECam, each exposure produces 61 CCD images). 
 
 Development
 -----------
