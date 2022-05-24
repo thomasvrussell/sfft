@@ -1,5 +1,3 @@
-import re
-import os
 import numpy as np
 import os.path as pa
 from astropy.io import fits
@@ -91,11 +89,10 @@ __version__ = "v1.0"
 class Stamp_Generator:
     @staticmethod
     def SG(FITS_obj=None, StampImgSize=None, Coordinates=None, \
-        CoorType='Image',  AutoFill='Nan', MDIR=None):
+        CoorType='Image', AutoFill='Nan', MDIR=None):
 
         NSX, NSY = StampImgSize
         NCoors = Coordinates.shape[0]
-        Stamptags = np.arange(NCoors)
         hdl = fits.open(FITS_obj)
         hdr = hdl[0].header
         data = hdl[0].data
@@ -109,7 +106,7 @@ class Stamp_Generator:
 
         # * Determin the auto fill value for boundary case
         fill_value = AutoFill
-        if AutoFill is 'Median':
+        if AutoFill == 'Median':
             fill_value = np.nanmedian(data)
         if AutoFill == 'Nan':
             fill_value = -65536    # FIXME In most cases, It works
@@ -151,4 +148,3 @@ class Stamp_Generator:
                 FITS_StpLst.append(FITS_Stp)
         
         return PixA_StpLst, FITS_StpLst
-

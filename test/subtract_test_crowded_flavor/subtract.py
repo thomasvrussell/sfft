@@ -19,8 +19,11 @@ BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy i
 CUDA_DEVICE_4SUBTRACT = '0'     # FIXME ONLY work for backend Pycuda / Cupy
 NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy   
 ForceConv = 'REF'               # FIXME {'AUTO', 'REF', 'SCI'}, where AUTO mode will avoid deconvolution
+
 MaskSatContam = False           # FIXME {True, False}, mask the saturation-contaminated regions by NaN on the difference?
-                                #       switch to True if you want to get the same difference in 4check (will slightly slower).
+                                # P.S. Although the difference in 4check is generated with MaskSatContam=True (just for better comparison),
+                                #      Generally, I would recommend users to adopt the default False as it will be faster.
+                                #      In practice, you may have good alternatives to find the contaminated regions, e.g., using data quality masks.
 
 GAIN_KEY = 'GAIN'               # NOTE Keyword of Gain in FITS header
 SATUR_KEY = 'SATURATE'          # NOTE Keyword of Saturation in FITS header
