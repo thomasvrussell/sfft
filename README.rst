@@ -135,4 +135,5 @@ Citing
 *Image Subtraction in Fourier Space. Hu, L., Wang, L., Chen, X. and Yang, J. 2021*
 
 Arxiv link: `<https://arxiv.org/abs/2109.09334>`_.
+
 Related DOI: TBD
