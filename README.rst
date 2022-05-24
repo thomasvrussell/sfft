@@ -108,6 +108,8 @@ What's new
 Todo list
 -----------
 
+- Given the fact that the SExtractor catalogs can be already available (says, from astrometric calibration) before image subtraction. I may need to develop a module which allows users to feed SExtractor products as inputs of sfft. This will significantly reduce the preprocessing time in sfft. [Lei, May 24, 2022]
+
 - Write a detailed documentation for sfft! [Lei, May 24, 2022]
 
 - The multiprocessing mode is expected to accomondate multiple GPU devices, however, the function has not tested on such a multi-GPUs platform. [Lei, May 24, 2022]
