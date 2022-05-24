@@ -44,12 +44,12 @@ Case 2. You may enable the CuPy backend for CUDA 11.5 via: ::
 
     pip install cupy-cuda115  # CuPy backend
                    
-P.S. CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11.*.
+- Note. CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11.
 
-Dependencies on astronomical softwares
+Dependencies
 -----------
 
-You need further to install additional astronomical softwares for sfft.
+You need further to install additional astronomical software for sfft.
 
 - `SExtractor <https://github.com/astromatic/sextractor>`_: SExtractor is required for sfft subtraction, as it enables sfft to determine a proper pixel mask over the input image-pair before the image subtraction (this is critical for a more reasonable parameter-solving). Note that we have wrapped SExtractor into a Python module ``sfft.utils.pyAstroMatic.PYSEx`` so that one can trigger SExtractor from Python. As an AstrOmatic software, you can install SExtractor following `<https://www.astromatic.net/software/sextractor/>`_, or alternatively, install via conda: ::
 
