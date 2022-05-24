@@ -44,9 +44,7 @@ sfft has the following three backends to perform the image subtraction.
 
     pip install cupy-cuda115  # CuPy backend
                    
-| *CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory.* 
-| *Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue.* 
-| *Note that PyCUDA backend is still not compatiable with CUDA 11.*
+- Additional Remark: CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11.
 
 Dependencies
 -----------
@@ -80,10 +78,10 @@ Advanced users may want to create the customized masked images with more elabora
 Parallel Computing
 -----------
 
-- In a particular time-domain survey, one may need to process a large set of image-pairs simultaneously. Assume that you have Nt tasks which should be processed by a computing platform with Nc CPU threads and Ng GPU devices. Generally, Nt >> Ng and Nc >> Ng, e.g., Nt = 61 (DECam CCD tiles), Nc = 40 (CPU with 20 cores and 40 threads), and Ng = 1 (one Tesla A100 available).
-|
+- In a particular time-domain survey, one may need to process a large set of image-pairs simultaneously. Assume that you have Nt tasks which should be processed by a computing platform with Nc CPU threads and Ng GPU devices. Generally, Nt >> Ng and Nc >> Ng, e.g., Nt = 61 (DECam CCD tiles), Nc = 40 (CPU with 20 cores and 40 threads), and Ng = 1 (one Tesla A100 available). ::
+
 - Note that we generally need to avoid multiple tasks using one GPU at the same time (GPU out-of-memory issue). That is to say, we CANNOT simply trigger a set of sfft functions (e.g., ``sfft.EasySparsePacket``) to process a large set of image-pairs simultaneously.
-|
+
 - Since version 1.1, sfft has allowed for multiple tasks without conflicting GPU usage, by using the modules ``sfft.MultiEasySparsePacket`` for sparse-flavor-sfft and ``sfft.MultiEasyCrowdedPacket`` for crowded-flavor-sfft, respectively. Please see the directory test/subtract_test_multiprocessing to find the examples. Note that ONLY the CuPy backend is supported in multiprocessing mode.
 
 Common issues
