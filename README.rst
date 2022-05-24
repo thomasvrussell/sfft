@@ -109,7 +109,7 @@ Todo list
 
 - Write a detailed documentation for sfft! [Lei, May 24, 2022]
 
-- I have made the multiprocessing mode to accomondate multiple GPU devices, but the function is not tested on such a platform yet. [Lei, May 24, 2022]
+- The multiprocessing mode is expected to accomondate multiple GPU devices, however, the function has not tested on such a multi-GPUs platform. [Lei, May 24, 2022]
 
 - Add a function for optimizing sfft on a given computing platform with multiple CPU threading and one/multiple GPU card(s). This would be very useful to reduce the overall time cost when users have a large set of image-pairs to be processed simultaneously (e.g., serve for DECam, each exposure produces 61 CCD images). [Lei, May 20, 2022] **<DONE>**
 
