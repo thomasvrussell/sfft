@@ -35,16 +35,16 @@ sfft has the following three backends to perform the image subtraction.
 .. [#] **PyCUDA backend** : The core functions of sfft are written in `PyCUDA <https://github.com/inducer/pycuda>`_ and `Scikit-Cuda <https://github.com/lebedov/scikit-cuda>`_. Users need to install PyCUDA and Scikit-Cuda according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 .. [#] **CuPy backend** : The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 
-Case 1. You may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via: ::
+- Case 1. You may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via: ::
 
     pip install pycuda==2020.1 scikit-cuda==0.5.3  # PyCUDA backend
     pip install cupy-cuda101                       # CuPy backend
 
-Case 2. You may enable the CuPy backend for CUDA 11.5 via: ::
+- Case 2. You may enable the CuPy backend for CUDA 11.5 via: ::
 
     pip install cupy-cuda115  # CuPy backend
                    
-- Note. CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11.
+- Additional Remark: CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11.
 
 Dependencies
 -----------

@@ -17,6 +17,8 @@ TIMEOUT_4PREPRO_EACHTASK = 120     # FIXME timeout (sec) of preprocessing for ea
 TIMEOUT_4SUBTRACT_EACHTASK = 120   # FIXME timeout (sec) of sfft subtraction for each task
 
 ForceConv = 'REF'                  # FIXME {None, 'REF', 'SCI'}, None mean AUTO mode that avoids deconvolution
+MaskSatContam = False              # FIXME {True, False}, mask the saturation-contaminated regions by NaN on the difference?
+
 GAIN_KEY = 'GAIN'                  # NOTE Keyword of Gain in FITS header
 SATUR_KEY = 'ESATUR'               # NOTE Keyword of Saturation in FITS header
 
@@ -48,8 +50,8 @@ ForceConv_Queue = [ForceConv] * NUM_TASK
 
 res = MultiEasy_CrowdedPacket(FITS_REF_Queue, FITS_SCI_Queue, FITS_DIFF_Queue=FITS_DIFF_Queue, \
     FITS_Solution_Queue=FITS_Solution_Queue, ForceConv_Queue=ForceConv_Queue, GKerHW_Queue=[], KerHWRatio=2.0, \
-    KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, MaskSatContam=True, BACKSIZE_SUPER=128, \
-    GAIN_KEY='GAIN', SATUR_KEY='SATURATE', DETECT_THRESH=5.0, StarExt_iter=2, PriorBanMask_Queue=[]).\
+    KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, MaskSatContam=MaskSatContam, \
+    BACKSIZE_SUPER=128, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, DETECT_THRESH=5.0, StarExt_iter=2, PriorBanMask_Queue=[]).\
     MESP_Cupy(NUM_THREADS_4PREPROC=NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT=NUM_THREADS_4SUBTRACT, \
     CUDA_DEVICES_4SUBTRACT=CUDA_DEVICES_4SUBTRACT, TIMEOUT_4PREPRO_EACHTASK=TIMEOUT_4PREPRO_EACHTASK, \
     TIMEOUT_4SUBTRACT_EACHTASK=TIMEOUT_4SUBTRACT_EACHTASK)
