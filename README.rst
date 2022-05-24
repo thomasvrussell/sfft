@@ -44,7 +44,9 @@ sfft has the following three backends to perform the image subtraction.
 
     pip install cupy-cuda115  # CuPy backend
                    
-- Additional Remark: CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11.
+> Additional Remark: CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. 
+> Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. 
+> Note that PyCUDA backend is still not compatiable with CUDA 11.
 
 Dependencies
 -----------
