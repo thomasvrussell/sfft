@@ -35,12 +35,21 @@ sfft has the following three backends to perform the image subtraction.
 .. [#] **PyCUDA backend** : The core functions of sfft are written in `PyCUDA <https://github.com/inducer/pycuda>`_ and `Scikit-Cuda <https://github.com/lebedov/scikit-cuda>`_. Users need to install PyCUDA and Scikit-Cuda according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 .. [#] **CuPy backend** : The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 
-For example, you may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via: ::
+Case 1. You may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via: ::
 
-    conda install -c conda-forge cudatoolkit=10.1
-    pip install pycuda==2020.1 scikit-cuda==0.5.3 cupy-cuda101
+    pip install pycuda==2020.1 scikit-cuda==0.5.3  # PyCUDA backend
+    pip install cupy-cuda101                       # CuPy backend
 
-Finally, you need further to install additional astronomical softwares for sfft.
+Case 2. You may enable the CuPy backend for CUDA 11.5 via: ::
+
+    pip install cupy-cuda115  # CuPy backend
+                   
+P.S. CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11.*.
+
+Dependencies on astronomical softwares
+-----------
+
+You need further to install additional astronomical softwares for sfft.
 
 - `SExtractor <https://github.com/astromatic/sextractor>`_: SExtractor is required for sfft subtraction, as it enables sfft to determine a proper pixel mask over the input image-pair before the image subtraction (this is critical for a more reasonable parameter-solving). Note that we have wrapped SExtractor into a Python module ``sfft.utils.pyAstroMatic.PYSEx`` so that one can trigger SExtractor from Python. As an AstrOmatic software, you can install SExtractor following `<https://www.astromatic.net/software/sextractor/>`_, or alternatively, install via conda: ::
 
@@ -67,11 +76,11 @@ Note that sfft subtraction is implemented as a two-step process. First of all, w
 Parallel Computing
 -----------
 
-- In a particular time-domain survey, one may need to process a large set of image-pairs simultaneously. Assume that you have $N_{task}$ tasks which should be processed by a computing platform with $N_{cpu}$ CPU threads and $N_{gpu}$ GPU devices. Generally, $N_{task}$ >> $N_{gpu}$ and $N_{cpu}$ >> $N_{gpu}$, e.g., $N_{task}$ = 61 (DECam CCD tiles), $N_{cpu}$ = 40 (CPU with 20 cores and 40 threads), and $N_{gpu}$ = 1 (one Tesla A100 available). 
+- In a particular time-domain survey, one may need to process a large set of image-pairs simultaneously. Assume that you have Nt tasks which should be processed by a computing platform with Nc CPU threads and Ng GPU devices. Generally, Nt >> Ng and Nc >> Ng, e.g., Nt = 61 (DECam CCD tiles), Nc = 40 (CPU with 20 cores and 40 threads), and Ng = 1 (one Tesla A100 available).
 
 - Note that we generally need to avoid multiple tasks using one GPU at the same time (GPU out-of-memory issue). That is to say, we CANNOT simply trigger a set of sfft functions (e.g., ``sfft.EasySparsePacket``) to process a large set of image-pairs simultaneously. 
 
-- Since version 1.1, sfft has allowed for multiple tasks without conflicting GPU usage, by using the modules ``sfft.MultiEasySparsePacket`` for sparse-flavor-sfft and ``sfft.MultiEasyCrowdedPacket`` for crowded-flavor-sfft, respectively. Please see the directory test/subtract_test_multiprocessing to find the examples.
+- Since version 1.1, sfft has allowed for multiple tasks without conflicting GPU usage, by using the modules ``sfft.MultiEasySparsePacket`` for sparse-flavor-sfft and ``sfft.MultiEasyCrowdedPacket`` for crowded-flavor-sfft, respectively. Please see the directory test/subtract_test_multiprocessing to find the examples. Note that ONLY the CuPy backend is supported in multiprocessing mode.
 
 Common issues
 -----------
@@ -85,7 +94,7 @@ Common issues
 What's new
 -----------
 
-- The sfft is now optimized for multiple tasks since version 1.1.0 (Only Cupy backend is supported now). [Lei, May 24, 2022]
+- The sfft is now optimized for multiple tasks since version 1.1.0. [Lei, May 24, 2022]
 
 - A few argument-names have been changed since version 1.1.0, please see the test scripts. [Lei, May 24, 2022]
 
