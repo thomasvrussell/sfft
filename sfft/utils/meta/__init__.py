@@ -6,3 +6,4 @@ Remarks on Internal Packages Imports:
 
 from .FileLockKit import FileLock
 from .MultiProc import Multi_Proc
+from .TimeoutKit import Timeout, TimeoutAfter

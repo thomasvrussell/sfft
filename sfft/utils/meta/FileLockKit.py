@@ -6,6 +6,7 @@ import sys
 import time
 import errno
 
+# warning: it has been deprecated since v1.1
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.0"
 

@@ -7,12 +7,26 @@ from tempfile import mkdtemp
 from sfft.CustomizedPacket import Customized_Packet
 CDIR = pa.dirname(pa.abspath(__file__))
 
+"""
+* Updates in Version 1.1+
+
+-backend (1.0.*) > -BACKEND_4SUBTRACT (1.1+)
+-CUDA_DEVICE (1.0.*) > -CUDA_DEVICE_4SUBTRACT (1.1+)
+-NUM_CPU_THREADS (1.0.*) > -NUM_CPU_THREADS_4SUBTRACT (1.1+)
+
+-ForceConv = None (1.0.*) > -ForceConv = 'AUTO' (1.1+)
+
+-GLockFile > removed (1.1+)
+
+"""
+
 # * configurations 
-backend = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
-CUDA_DEVICE = '0'     # FIXME ONLY work for backend Pycuda / Cupy
-NUM_CPU_THREADS = 8   # FIXME ONLY work for backend Numpy   
-ForceConv = 'REF'     # FIXME {REF', 'SCI'}
-GKerHW = 4            # FIXME given kernel half-width
+BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
+CUDA_DEVICE_4SUBTRACT = '0'     # FIXME ONLY work for backend Pycuda / Cupy
+NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy
+
+ForceConv = 'REF'               # FIXME {REF', 'SCI'}
+GKerHW = 4                      # FIXME given kernel half-width
 
 # * input data
 # NOTE 'mini' region is selected near M31 center:
@@ -32,6 +46,11 @@ FITS_REF = CDIR + '/input_data/ztf_001735_zg_c01_q2_refimg.resampled.mini.fits'
 FITS_SCI = CDIR + '/input_data/ztf_20180705481609_001735_zg_c01_o_q2_sciimg.mini.fits'
 FITS_mREF = FITS_REF[:-5] + '.masked.fits'
 FITS_mSCI = FITS_SCI[:-5] + '.masked.fits'
+
+# *************************** IMPORTANT NOTICE *************************** #
+#  I strongly recommend users to read the descriptions of the parameters 
+#  via help(sfft.Customized_Packet).
+# *************************** IMPORTANT NOTICE *************************** #
 
 # * trigger a GPU warming-up 
 #   NOTE: the warming-up itself is not an ingredient of the image subtraction.
@@ -69,12 +88,12 @@ def GPU_wraming_up():
 
     Customized_Packet.CP(FITS_REF=_FITS_REF, FITS_SCI=_FITS_SCI, FITS_mREF=_FITS_mREF, FITS_mSCI=_FITS_mSCI, \
         ForceConv=ForceConv, GKerHW=GKerHW, FITS_DIFF=None, FITS_Solution=None, \
-        KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, backend=backend, \
-        CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS, GLockFile=None)
+        KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+        CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
     os.system('rm -rf %s' %TDIR)
     return None
 
-if backend in ['Cupy', 'Pycuda']:
+if BACKEND_4SUBTRACT in ['Cupy', 'Pycuda']:
     print('\n---------------------------------- GPU warming-up --------------------------------------')
     print('MeLOn CheckPoint: GPU warming-up [START]!')
     print('MeLOn Note: GPU warming-up is not an ingredient of SFFT.')
@@ -90,8 +109,8 @@ print('MeLOn CheckPoint: SFFT subtraction [START]!')
 FITS_DIFF = CDIR + '/output_data/sfft_diff.fits'
 Customized_Packet.CP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_mREF=FITS_mREF, FITS_mSCI=FITS_mSCI, \
     ForceConv=ForceConv, GKerHW=GKerHW, FITS_DIFF=FITS_DIFF, FITS_Solution=None, \
-    KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, backend=backend, \
-    CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS, GLockFile=None)
+    KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+    CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
 
 if pa.exists(FITS_DIFF):
     print('MeLOn CheckPoint: SFFT subtraction [END]!')

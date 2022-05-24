@@ -1,17 +1,14 @@
-import os
-import sys
 import warnings
 import fastremap
 import numpy as np
-import os.path as pa
 from astropy.io import fits
 import scipy.ndimage as ndimage
-from astropy.table import Table, Column, hstack
+from astropy.table import Column, hstack
 from sfft.utils.SymmetricMatch import Symmetric_Match
 from sfft.utils.HoughMorphClassifier import Hough_MorphClassifier
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
+__version__ = "v1.1"
 
 class Auto_SparsePrep:
     def __init__(self, FITS_REF, FITS_SCI):
@@ -19,10 +16,10 @@ class Auto_SparsePrep:
         self.FITS_REF = FITS_REF
         self.FITS_SCI = FITS_SCI
     
-    def Hough(self, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', DETECT_THRESH=2.0, \
+    def AutoMask(self, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', DETECT_THRESH=2.0, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, BoundarySIZE=30, \
         Hough_FRLowerLimit=0.1, BeltHW=0.2, MatchTolFactor=3.0, \
-        MAGD_THRESH=0.12, StarExt_iter=4):
+        MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan=None):
         
         # ********************* Determine SubSources ********************* #
 
@@ -117,19 +114,36 @@ class Auto_SparsePrep:
             NaNmask_U = np.logical_or(NaNmask_REF, NaNmask_SCI)
             ProZone[NaNmask_U] = True
 
-        # * Make SFFTLmap > ActiveMask > PixA_mREF & PixA_mSCI
+        # * Make SFFTLmap 
         SFFTLmap = np.max(np.array([PixA_SEGr, PixA_SEGs]), axis=0)
         SFFTLmap[ProZone] = 0             # NOTE After-burn equivalent operation
         struct0 = ndimage.generate_binary_structure(2, 1)
         struct = ndimage.iterate_structure(struct0, StarExt_iter)
         SFFTLmap = ndimage.grey_dilation(SFFTLmap, footprint=struct)
         SFFTLmap[ProZone] = -128
-        ActiveMask = SFFTLmap > 0
 
-        # NOTE: The preparation can guarantee that mREF & mSCI are NaN-Free !
+        if XY_PriorBan is not None:
+            # ** Identify the PriorBanned SubSources and decorate AstSEx_SS
+            SEGL_PB = np.unique([SFFTLmap[int(_x - 0.5), int(_y - 0.5)] for _x, _y in XY_PriorBan])
+            SEGL_PB = SEGL_PB[SEGL_PB > 0] 
+            PBMASK_SS = np.in1d(SEGL_SS, SEGL_PB)
+            AstSEx_SS.add_column(Column(PBMASK_SS, name='MASK_PriorBan'))
+
+            print('MeLOn CheckPoint: Find [%d] PriorBanned / Not-Working SubSources out of [%d] Auto-Determined SubSources!\n' \
+                  %(np.sum(PBMASK_SS), len(AstSEx_SS)) + \
+                  'MeLOn CheckPoint: There are [%d] given PriorBan coordinates!' %(XY_PriorBan.shape[0]))
+            
+            # ** Update Label Map (SFFTLmap) by inactivating the PriorBanned SubSources
+            _mappings = {label: -64 for label in SEGL_SS[PBMASK_SS]}
+            fastremap.remap(SFFTLmap, _mappings, preserve_missing_labels=True, in_place=True)   
+
+        # * Create ActiveMask
+        #   NOTE: The preparation can guarantee that mREF & mSCI are NaN-Free !
+        ActiveMask = SFFTLmap > 0
         ActivePROP = np.sum(ActiveMask) / (ActiveMask.shape[0] * ActiveMask.shape[1])
         print('MeLOn CheckPoint: ActiveMask Pixel Proportion [%s]' %('{:.2%}'.format(ActivePROP)))
 
+        # * Produce masked images PixA_mREF & PixA_mSCI
         PixA_mREF = PixA_REF.copy()
         PixA_mSCI = PixA_SCI.copy()
         PixA_mREF[~ActiveMask] = 0.0      # NOTE REF has been sky-subtracted
@@ -156,103 +170,3 @@ class Auto_SparsePrep:
 
         return SFFTPrepDict
     
-    def Refinement(self, SFFTPrepDict, trSubtract=False, trConvdSide=None, \
-        SFFTConfig=None, backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8, \
-        RATIO_THRESH=3.0, XY_PriorBan=None):
-
-        # * Read from input SFFTPrepDict, note they will be updated in the refinement 
-        AstSEx_SS = SFFTPrepDict['SExCatalog-SubSource']
-        SFFTLmap = SFFTPrepDict['SFFT-LabelMap']
-        ActiveMask = SFFTPrepDict['Active-Mask']
-        PixA_mREF = SFFTPrepDict['PixA_mREF']
-        PixA_mSCI = SFFTPrepDict['PixA_mSCI']
-
-        SurvMask_TS = None
-        if trSubtract:
-            from sfft.sfftcore.SFFTSubtract import ElementalSFFTSubtract
-            
-            # * Trigger a trial SFFT Element-Subtraction on mREF & mSCI
-            if trConvdSide == 'REF':
-                PixA_trDIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_mREF, PixA_J=PixA_mSCI, \
-                    SFFTConfig=SFFTConfig, SFFTSolution=None, Subtract=True, backend=backend, \
-                    CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)[1]
-
-            if trConvdSide == 'SCI':
-                PixA_trDIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_mSCI, PixA_J=PixA_mREF, \
-                    SFFTConfig=SFFTConfig, SFFTSolution=None, Subtract=True, backend=backend, \
-                    CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)[1]
-
-            # * Estimate expected variance of SubSources on difference
-            #   NOTE hypothesis: SubSources are stationary
-            Gr = np.array(AstSEx_SS['FLUXERR_AUTO_REF'])
-            Gs = np.array(AstSEx_SS['FLUXERR_AUTO_SCI'])
-            if trConvdSide == 'REF':
-                dm = np.median(AstSEx_SS['MAG_AUTO_SCI'] - AstSEx_SS['MAG_AUTO_REF'])
-                VARr = (Gr/(10**(dm/2.5)))**2
-                VARs = Gs**2
-            if trConvdSide == 'SCI':
-                dm = np.median(AstSEx_SS['MAG_AUTO_REF'] - AstSEx_SS['MAG_AUTO_SCI'])
-                VARr = Gr**2
-                VARs = (Gs/(10**(dm/2.5)))**2
-            ExpDVAR_SS = VARr + VARs
-
-            # * Find variables in trial-difference and identify bad SubSources
-            SEGL_SS = np.array(AstSEx_SS['SEGLABEL']).astype(int)
-            DFSUM_SS = ndimage.labeled_comprehension(PixA_trDIFF, SFFTLmap, SEGL_SS, np.sum, float, 0.0)
-            RATIO_SS = DFSUM_SS / np.sqrt(np.clip(ExpDVAR_SS, a_min=0.1, a_max=None))
-            SurvMask_TS = np.abs(RATIO_SS) < RATIO_THRESH
-            if np.sum(SurvMask_TS) < 0.4 * len(AstSEx_SS):
-                print('MeLOn WARNING: SubSource Rejection (%d / %d) by Trial-Subtraction is SKIPPED' \
-                    %(np.sum(~SurvMask_TS), len(AstSEx_SS)))
-                SurvMask_TS = np.ones(len(AstSEx_SS)).astype(bool)       # NOTE UPDATE
-            SEGL_bSS_TS = SEGL_SS[~SurvMask_TS]
-            
-            # * UPDATE SubSource-Catalog AstSEx_SS [trial-subtraction]
-            AstSEx_SS.add_column(Column(ExpDVAR_SS, name='ExpDVAR'))
-            AstSEx_SS.add_column(Column(DFSUM_SS, name='DFSUM'))
-            AstSEx_SS.add_column(Column(RATIO_SS, name='RATIO'))
-            AstSEx_SS.add_column(Column(SurvMask_TS, name='SurvMask_TS'))
-            print('MeLOn CheckPoint: trial-difference helps to reject SubSources [%d / %d] !' \
-                    %(np.sum(~SurvMask_TS), len(AstSEx_SS)))
-        
-        SurvMask_PB = None
-        if XY_PriorBan is not None:
-
-            SEGL_bSS_PB = np.unique([SFFTLmap[int(_x - 0.5), int(_y - 0.5)] for _x, _y in XY_PriorBan])
-            SEGL_bSS_PB = SEGL_bSS_PB[SEGL_bSS_PB > 0] 
-            SurvMask_PB = ~np.in1d(SEGL_SS, SEGL_bSS_PB)
-
-            # * UPDATE SubSource-Catalog AstSEx_SS [prior-ban]
-            AstSEx_SS.add_column(Column(SurvMask_PB, name='SurvMask_PB'))
-            print('MeLOn CheckPoint: prior-ban helps to reject SubSources [%d / %d] !' \
-                    %(np.sum(~SurvMask_PB), len(AstSEx_SS)))
-
-        # * Post Update Operations
-        SurvMask = None
-        if SurvMask_TS is not None and SurvMask_PB is not None:
-            SurvMask = np.logical_and(SurvMask_TS, SurvMask_PB)
-        if SurvMask_TS is not None and SurvMask_PB is None:
-            SurvMask = SurvMask_TS.copy()
-        if SurvMask_TS is None and SurvMask_PB is not None:
-            SurvMask = SurvMask_PB.copy()
-        
-        # * UPDATE SFFTLmap > ActiveMask > PixA_mREF & PixA_mSCI
-        if SurvMask is not None:
-            _mappings = {}
-            SEGL_bSS = SEGL_SS[~SurvMask]
-            for label in SEGL_bSS: _mappings[label] = -64
-            fastremap.remap(SFFTLmap, _mappings, preserve_missing_labels=True, in_place=True)   # NOTE UPDATE
-            _mask = SFFTLmap == -64
-            
-            ActiveMask[_mask] = False      #  NOTE UPDATE, always be SFFTLmap > 0
-            PixA_mREF[_mask] = 0.0         #  NOTE UPDATE
-            PixA_mSCI[_mask] = 0.0         #  NOTE UPDATE
-            AstSEx_SS.add_column(Column(SurvMask, name='SurvMask'))
-            print('MeLOn CheckPoint: Total SubSource Rejections [%d / %d] !' \
-                    %(np.sum(~SurvMask), len(AstSEx_SS)))
-        
-        # NOTE: The preparation can guarantee that mREF & mSCI are NaN-Free !
-        ActivePROP = np.sum(ActiveMask) / (ActiveMask.shape[0] * ActiveMask.shape[1])
-        print('MeLOn CheckPoint: After-Refinement ActiveMask Pixel Proportion [%s]' %('{:.2%}'.format(ActivePROP)))
-    
-        return SFFTPrepDict

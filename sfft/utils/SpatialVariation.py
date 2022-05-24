@@ -1,15 +1,13 @@
-import os
 import sys
 import numpy as np
 from sympy import *
-import os.path as pa
 from copy import deepcopy
 from astropy.io import fits
 from astropy.convolution import convolve
 from sfft.utils.meta.MultiProc import Multi_Proc
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
+__version__ = "v1.1"
 
 # * Symbol Convention NOTE
 #    X (x) / Y (y) ----- ScaledFortranCoor
@@ -273,14 +271,14 @@ class SVKRealization:
 # * Bias of SFFT-SVConv
 #    SFFT-SVConv is slightly biased (towards overestimate) due to the approaximation: 
 #    the bias can be trivial for most cases as it is typically ~ 0.01-0.5 mmag.
-#    The bias is the error of relative flux zeropoint estimated by SFFT.
+#    The bias is the error of relative flux zeropoint estimated by sfft.
 #    REF: Hartung (2012) developed a CUDA approach to precisely calculate SVConv. 
 #    Frankly, our scenario is deprecated, it is just an alternative.
    
 class SFFT_SVConv:
     @staticmethod
     def SSVC(PixA_obj, Standard_dict=None, Sfft_dict=None, PSFMODEL=None, DK=2, \
-        backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
+        BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
         
         N0, N1 = PixA_obj.shape
         if np.sum(np.isnan(PixA_obj)) != 0:
@@ -322,17 +320,17 @@ class SFFT_SVConv:
         Solution = list(a_ijab * N0*N1) + [0.0]*Fpq
         Solution = np.array(Solution).astype(np.float64)
         
-        from SFFTConfigure import SingleSFFTConfigure
-        from SFFTSubtract import ElementalSFFTSubtract
+        from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
+        from sfft.sfftcore.SFFTSubtract import ElementalSFFTSubtract
 
-        SFFTConfig = SingleSFFTConfigure.SSC(NX=N0, NY=N1, KerHW=KerHW, \
-            KerPolyOrder=DK, BGPolyOrder=DB, ConstPhotRatio=True, \
-            backend=backend, CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)  # NOTE ConstPhotRatio does not matter
-        
+        SFFTConfig = SingleSFFTConfigure.SSC(NX=N0, NY=N1, KerHW=KerHW, KerPolyOrder=DK, BGPolyOrder=DB, \
+            ConstPhotRatio=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)  # NOTE ConstPhotRatio does not matter
+
         _PixA_J = np.zeros(PixA_obj.shape).astype(np.float64)
-        _PixA_DIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_obj, PixA_J=_PixA_J, \
-            SFFTConfig=SFFTConfig, SFFTSolution=Solution, Subtract=True, \
-            backend=backend, CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)[1]
+        _PixA_DIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_obj, PixA_J=_PixA_J, SFFTConfig=SFFTConfig, \
+            SFFTSolution=Solution, Subtract=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[1]
         PixA_SFFT_SVConv = _PixA_J - _PixA_DIFF
 
         """
@@ -342,9 +340,9 @@ class SFFT_SVConv:
 
         PixA_1 = np.ones(PixA_obj.shape).astype(np.float64)
         _PixA_J = np.zeros(PixA_obj.shape).astype(np.float64)
-        _PixA_DIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_1, PixA_J=_PixA_J, \
-            SFFTConfig=SFFTConfig, SFFTSolution=Solution, Subtract=True, \
-            backend=backend, CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)[1]
+        _PixA_DIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_1, PixA_J=_PixA_J, SFFTConfig=SFFTConfig, \
+            SFFTSolution=Solution, Subtract=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[1]
         RHS1 = _PixA_J - _PixA_DIFF
 
         LHS1 = np.zeros(PixA_obj.shape).astype(np.float64)
@@ -425,4 +423,3 @@ class GRID_SVConv:
             PixA_GRID_SVConv[xyrg[0]: xyrg[1], xyrg[2]: xyrg[3]] = fragment
 
         return PixA_GRID_SVConv
-

@@ -9,7 +9,7 @@ from astropy.stats import sigma_clipped_stats
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
+__version__ = "v1.1"
 
 class Auto_CrowdedPrep:
     def __init__(self, FITS_REF, FITS_SCI):

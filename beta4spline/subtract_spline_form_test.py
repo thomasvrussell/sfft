@@ -20,5 +20,5 @@ FITS_Solution = GDIR + '/MDATA/So-N42.fits' # FIXME, output kernel solution
 Customized_Packet.CP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_mREF=FITS_mREF, FITS_mSCI=FITS_mSCI, \
     ForceConv=ForceConv, GKerHW=GKerHW, FITS_DIFF=FITS_DIFF, FITS_Solution=FITS_Solution, \
     KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=False, backend=backend, \
-    CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS, GLockFile=None)
+    CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)
 

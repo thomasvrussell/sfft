@@ -5,7 +5,6 @@ import os.path as pa
 from astropy.io import fits
 from tempfile import mkdtemp
 from astropy.time import Time
-from FileLockKit import FileLock
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.0"
@@ -14,7 +13,7 @@ class Customized_Packet:
     @staticmethod
     def CP(FITS_REF, FITS_SCI, FITS_mREF, FITS_mSCI, ForceConv, GKerHW, FITS_DIFF=None, \
         FITS_Solution=None, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8, GLockFile=None):
+        backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
         
         # * Read input images
         PixA_REF = fits.getdata(FITS_REF, ext=0).T
@@ -49,74 +48,54 @@ class Customized_Packet:
         
         ConvdSide = ForceConv
         KerHW = GKerHW
-        if GLockFile is None:
-            TDIR = mkdtemp(suffix=None, prefix='4lock', dir=None)
-            LockFile = pa.join(TDIR, 'tmplock.txt')
-        else: LockFile = GLockFile
         
-        # * Configure SFFT
+        # * Compile Functions in SFFT Subtraction
         from SFFTConfigureRF import SingleSFFTConfigure
 
         Tcomp_start = time.time()
         SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], KerHW=KerHW, \
             KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
             backend=backend, CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)
-        print('MeLOn Report: Compilation Takes [%.3f s]' %(time.time() - Tcomp_start))
+        print('MeLOn Report: Compiling Functions in SFFT Subtraction Takes [%.3f s]' %(time.time() - Tcomp_start))
+
+        # * Perform SFFT Subtraction
+        from SFFTSubtractRF import GeneralSFFTSubtract
+
+        if ConvdSide == 'REF':
+            PixA_mI, PixA_mJ = PixA_mREF, PixA_mSCI
+            if NaNmask_U is not None:
+                PixA_I, PixA_J = PixA_REF.copy(), PixA_SCI.copy()
+                PixA_I[NaNmask_U] = PixA_mI[NaNmask_U]
+                PixA_J[NaNmask_U] = PixA_mJ[NaNmask_U]
+            else: PixA_I, PixA_J = PixA_REF, PixA_SCI
+
+        if ConvdSide == 'SCI':
+            PixA_mI, PixA_mJ = PixA_mSCI, PixA_mREF
+            if NaNmask_U is not None:
+                PixA_I, PixA_J = PixA_SCI.copy(), PixA_REF.copy()
+                PixA_I[NaNmask_U] = PixA_mI[NaNmask_U]
+                PixA_J[NaNmask_U] = PixA_mJ[NaNmask_U]
+            else: PixA_I, PixA_J = PixA_SCI, PixA_REF
         
-        with FileLock(LockFile):
-            with open(LockFile, "a") as f:
-                LTIME0 = Time.now()
+        Tsub_start = time.time()
+        _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
+            SFFTConfig=SFFTConfig, ContamMask_I=None, backend=backend, \
+            CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)
+        Solution, PixA_DIFF = _tmp[:2]
+        print('MeLOn Report: SFFT Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
+        
+        # * Modifications on difference image
+        #   a) when REF is convolved, DIFF = SCI - Conv(REF)
+        #      PSF(DIFF) is coincident with PSF(SCI), transients on SCI are positive signal in DIFF.
+        #   b) when SCI is convolved, DIFF = Conv(SCI) - REF
+        #      PSF(DIFF) is coincident with PSF(REF), transients on SCI are still positive signal in DIFF.
 
-                # * Perform SFFT Subtraction
-                from SFFTSubtractRF import GeneralSFFTSubtract
-
-                if ConvdSide == 'REF':
-                    PixA_mI, PixA_mJ = PixA_mREF, PixA_mSCI
-                    if NaNmask_U is not None:
-                        PixA_I, PixA_J = PixA_REF.copy(), PixA_SCI.copy()
-                        PixA_I[NaNmask_U] = PixA_mI[NaNmask_U]
-                        PixA_J[NaNmask_U] = PixA_mJ[NaNmask_U]
-                    else: PixA_I, PixA_J = PixA_REF, PixA_SCI
-
-                if ConvdSide == 'SCI':
-                    PixA_mI, PixA_mJ = PixA_mSCI, PixA_mREF
-                    if NaNmask_U is not None:
-                        PixA_I, PixA_J = PixA_SCI.copy(), PixA_REF.copy()
-                        PixA_I[NaNmask_U] = PixA_mI[NaNmask_U]
-                        PixA_J[NaNmask_U] = PixA_mJ[NaNmask_U]
-                    else: PixA_I, PixA_J = PixA_SCI, PixA_REF
-                
-                Tsub_start = time.time()
-                _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
-                    SFFTConfig=SFFTConfig, ContamMask_I=None, backend=backend, \
-                    CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)
-                Solution, PixA_DIFF = _tmp[:2]
-                print('MeLOn Report: Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
-                
-                # * Modifications on difference image
-                #   a) when REF is convolved, DIFF = SCI - Conv(REF)
-                #      PSF(DIFF) is coincident with PSF(SCI), transients on SCI are positive signal in DIFF.
-                #   b) when SCI is convolved, DIFF = Conv(SCI) - REF
-                #      PSF(DIFF) is coincident with PSF(REF), transients on SCI are still positive signal in DIFF.
-
-                if NaNmask_U is not None:
-                    # ** Mask Union-NaN region
-                    PixA_DIFF[NaNmask_U] = np.nan
-                if ConvdSide == 'SCI': 
-                    # ** Flip difference when science is convolved
-                    PixA_DIFF = -PixA_DIFF
-                
-                LTIME1 = Time.now()
-                Lmessage = 'FILELOCK | REF = %s & SCI = %s | %s + %.2f s' \
-                    %(pa.basename(FITS_REF), pa.basename(FITS_SCI), \
-                    LTIME0.isot, (LTIME1.mjd-LTIME0.mjd)*24*3600)
-                
-                print('\n---@--- %s ---@---\n' %Lmessage)
-                f.write('EasyCrowdedPacket: %s \n' %Lmessage)
-                f.flush()
-
-        if GLockFile is None:
-            os.system('rm -rf %s' %TDIR)
+        if NaNmask_U is not None:
+            # ** Mask Union-NaN region
+            PixA_DIFF[NaNmask_U] = np.nan
+        if ConvdSide == 'SCI': 
+            # ** Flip difference when science is convolved
+            PixA_DIFF = -PixA_DIFF
 
         # * Save difference image
         if FITS_DIFF is not None:

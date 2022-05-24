@@ -3,15 +3,15 @@ import sys
 import numpy as np
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
+__version__ = "v1.1"
 
 class SingleSFFTConfigure_Pycuda:
     @staticmethod
-    def SSCP(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, CUDA_DEVICE='0'):
+    def SSCP(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, CUDA_DEVICE_4SUBTRACT='0'):
 
         import pycuda.autoinit
         from pycuda.compiler import SourceModule
-        os.environ["CUDA_DEVICE"] = CUDA_DEVICE
+        os.environ["CUDA_DEVICE"] = CUDA_DEVICE_4SUBTRACT
 
         N0, N1 = int(NX), int(NY)
         w0, w1 = int(KerHW), int(KerHW)
@@ -818,10 +818,10 @@ class SingleSFFTConfigure_Pycuda:
     
 class SingleSFFTConfigure_Cupy:
     @staticmethod
-    def SSCC(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, CUDA_DEVICE='0'):
+    def SSCC(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, CUDA_DEVICE_4SUBTRACT='0'):
         
         import cupy as cp
-        os.environ["CUDA_DEVICE"] = CUDA_DEVICE
+        os.environ["CUDA_DEVICE"] = CUDA_DEVICE_4SUBTRACT
 
         N0, N1 = int(NX), int(NY)
         w0, w1 = int(KerHW), int(KerHW)
@@ -1628,10 +1628,10 @@ class SingleSFFTConfigure_Cupy:
 
 class SingleSFFTConfigure_Numpy:
     @staticmethod
-    def SSCN(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, NUM_CPU_THREADS=8):
+    def SSCN(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, NUM_CPU_THREADS_4SUBTRACT=8):
 
         import numba as nb
-        nb.set_num_threads = NUM_CPU_THREADS
+        nb.set_num_threads = NUM_CPU_THREADS_4SUBTRACT
 
         N0, N1 = int(NX), int(NY)
         w0, w1 = int(KerHW), int(KerHW)
@@ -2184,7 +2184,7 @@ class SingleSFFTConfigure_Numpy:
 class SingleSFFTConfigure:
     @staticmethod
     def SSC(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
+        BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
 
         """
         # Arguments:
@@ -2193,39 +2193,40 @@ class SingleSFFTConfigure:
         # c) KerPolyOrder: The order of Polynomial Variation for PSF-Matching Kernel.
         # d) BGPolyOrder: The order of Polynomial Variation for Differential Background.
         # e) ConstPhotRatio: Use a constant photometric ratio in image subtraction ?
-        # f) backend: Which backend would you like to perform SFFT on ?
-        # g) CUDA_DEVICE (backend = Pycuda / Cupy): Which GPU device would you want to perform SFFT on ?
-        # h) NUM_CPU_THREADS (backend = Numpy): How many CPU threads would you want to perform SFFT on ?
+        # f) BACKEND_4SUBTRACT: Which backend would you like to perform SFFT subtraction on ?
+        # g) CUDA_DEVICE_4SUBTRACT (BACKEND_4SUBTRACT = Pycuda / Cupy): Which GPU device would you want to perform SFFT subtraction on ?
+        # h) NUM_CPU_THREADS_4SUBTRACT (BACKEND_4SUBTRACT = Numpy): How many CPU threads would you want to perform SFFT subtraction on ?
         
         """
 
-        if backend == 'Pycuda':
+        if BACKEND_4SUBTRACT == 'Pycuda':
             SFFTConfig = SingleSFFTConfigure_Pycuda.SSCP(NX=NX, NY=NY, KerHW=KerHW, \
                 KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
-                CUDA_DEVICE=CUDA_DEVICE)
+                CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
         
-        if backend == 'Cupy':
+        if BACKEND_4SUBTRACT == 'Cupy':
             SFFTConfig = SingleSFFTConfigure_Cupy.SSCC(NX=NX, NY=NY, KerHW=KerHW, \
                 KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
-                CUDA_DEVICE=CUDA_DEVICE)
+                CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
         
-        if backend == 'Numpy':
+        if BACKEND_4SUBTRACT == 'Numpy':
             SFFTConfig = SingleSFFTConfigure_Numpy.SSCN(NX=NX, NY=NY, KerHW=KerHW, \
                 KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
-                NUM_CPU_THREADS=NUM_CPU_THREADS)
+                NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
         
         return SFFTConfig
 
 class BatchSFFTConfigure:
     @staticmethod
     def BSCP(NX, NY, KerHW_CLst, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
+        BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
     
         SFFTConfig_Dict = {}
         for KerHW in KerHW_CLst:            
             SFFTConfig = SingleSFFTConfigure.SSC(NX=NX, NY=NY, KerHW=KerHW, \
                 KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
-                backend=backend, CUDA_DEVICE=CUDA_DEVICE)
+                BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
+                NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
             SFFTConfig_Dict[KerHW] = SFFTConfig
 
         return SFFTConfig_Dict

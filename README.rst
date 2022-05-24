@@ -31,7 +31,7 @@ Or alternatively, install any desired version of sfft from Github `<https://gith
 
 sfft has the following three backends to perform the image subtraction.
 
-.. [#] **NumPy backend** : sfft will totally run on the CPU devices. No other dependencies are required for this backend.
+.. [#] **NumPy backend** : sfft will totally run on the CPU devices. NO GPU devices and CUDA dependencies are required for this backend.
 .. [#] **PyCUDA backend** : The core functions of sfft are written in `PyCUDA <https://github.com/inducer/pycuda>`_ and `Scikit-Cuda <https://github.com/lebedov/scikit-cuda>`_. Users need to install PyCUDA and Scikit-Cuda according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 .. [#] **CuPy backend** : The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 
@@ -64,12 +64,14 @@ Note that sfft subtraction is implemented as a two-step process. First of all, w
 
 .. [*] **customized sfft subtraction** : The example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket`` . More detailed explanations of the module: help(``sfft.CustomizedPacket``).
 
-Tips for Parallel Computing
+Parallel Computing
 -----------
 
-- Here we take the module ``sfft.EasySparsePacket`` as example. Note that sparse-flavor-sfft involves two steps: the first step is preprocessing for image masking (on CPU) and the second step is to perform image subtraction (on GPU). Consider a general situation that the user has T tasks (image-pairs) waitting for subtraction and the computing platform is equipped with M CPU threads and N GPUs. Mostly, the numbers M and T are larger than N. 
+- In a particular time-domain survey, one may need to process a large set of image-pairs simultaneously. Assume that you have $N_{task}$ tasks which should be processed by a computing platform with $N_{cpu}$ CPU threads and $N_{gpu}$ GPU devices. Generally, $N_{task}$ >> $N_{gpu}$ and $N_{cpu}$ >> $N_{gpu}$, e.g., $N_{task}$ = 61 (DECam CCD tiles), $N_{cpu}$ = 40 (CPU with 20 cores and 40 threads), and $N_{gpu}$ = 1 (one Tesla A100 available). 
 
-- To optimize the total computing cost, one can trigger a set of subtraction tasks simultaneously, e.g., via multiple .py scripts or ``sfft.utils.meta.Multi_Proc``. We need to specify a fixed path of a locking file (GLockFile in ``sfft.EasySparsePacket``) for each GPU device (CUDA_DEVICE in ``sfft.EasySparsePacket``). The locking file is used to avoid the situation that an individual GPU has to carry out multiple tasks at the same time. This concern is usually necessary when the input images have large size so that processing multiple tasks will exceed the GPU memory limit. 
+- Note that we generally need to avoid multiple tasks using one GPU at the same time (GPU out-of-memory issue). That is to say, we CANNOT simply trigger a set of sfft functions (e.g., ``sfft.EasySparsePacket``) to process a large set of image-pairs simultaneously. 
+
+- Since version 1.1, sfft has allowed for multiple tasks without conflicting GPU usage, by using the modules ``sfft.MultiEasySparsePacket`` for sparse-flavor-sfft and ``sfft.MultiEasyCrowdedPacket`` for crowded-flavor-sfft, respectively. Please see the directory test/subtract_test_multiprocessing to find the examples.
 
 Common issues
 -----------
@@ -80,8 +82,23 @@ Common issues
 
 - If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of image subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find the problem if you wrap any sfft subtraction task in a loop (e.g., try this in the customized sfft subtraction test). This problem can be solved by running a trivial subtraction (e.g., simply using empty images) in advance and making the pipe waiting for the subsequent observations (please see what we do in the test subtract_test_customized).
 
+What's new
+-----------
+
+- The sfft is now optimized for multiple tasks since version 1.1.0 (Only Cupy backend is supported now). [Lei, May 24, 2022]
+
+- A few argument-names have been changed since version 1.1.0, please see the test scripts. [Lei, May 24, 2022]
+
+- Locking file is removed since version 1.1.0, as I found it unreliable in our tests, i.e., -GLockFile is removed. [Lei, May 24, 2022]
+
+- The trial subtraction for refinement is removed since version 1.1.0. However, I add a post-subtraction check to search anomalies on the difference image using the same logic. One can feed the coordinates of the anomalies to sfft again as Prior-Banned sources to refine the subtraction (see -XY_PriorBan in ``sfft.MultiEasySparsePacket``).
+
 Todo list
 -----------
+
+- Write a detailed documentation for sfft! [Lei, May 24, 2022]
+
+- I have made the multiprocessing mode to accomondate multiple GPU devices, but the function is not tested on such a platform yet. [Lei, May 24, 2022]
 
 - Add a function for optimizing sfft on a given computing platform with multiple CPU threading and one/multiple GPU card(s). This would be very useful to reduce the overall time cost when users have a large set of image-pairs to be processed simultaneously (e.g., serve for DECam, each exposure produces 61 CCD images). [Lei, May 20, 2022]
 

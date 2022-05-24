@@ -2,13 +2,26 @@ import os
 import os.path as pa
 from sfft.EasyCrowdedPacket import Easy_CrowdedPacket
 
-backend = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
-CUDA_DEVICE = '0'     # FIXME ONLY work for backend Pycuda / Cupy
-NUM_CPU_THREADS = 8   # FIXME ONLY work for backend Numpy   
-ForceConv = 'REF'     # FIXME {None, 'REF', 'SCI'}, None mean AUTO mode that avoids deconvolution
+"""
+* Updates in Version 1.1+
 
-GAIN_KEY = 'GAIN'         # NOTE Keyword of Gain in FITS header
-SATUR_KEY = 'SATURATE'    # NOTE Keyword of Saturation in FITS header
+-backend (1.0.*) > -BACKEND_4SUBTRACT (1.1+)
+-CUDA_DEVICE (1.0.*) > -CUDA_DEVICE_4SUBTRACT (1.1+)
+-NUM_CPU_THREADS (1.0.*) > -NUM_CPU_THREADS_4SUBTRACT (1.1+)
+
+-ForceConv = None (1.0.*) > -ForceConv = 'AUTO' (1.1+)
+
+-GLockFile > removed (1.1+)
+
+"""
+
+BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
+CUDA_DEVICE_4SUBTRACT = '0'     # FIXME ONLY work for backend Pycuda / Cupy
+NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy   
+ForceConv = 'REF'               # FIXME {'AUTO', 'REF', 'SCI'}, where AUTO mode will avoid deconvolution
+
+GAIN_KEY = 'GAIN'               # NOTE Keyword of Gain in FITS header
+SATUR_KEY = 'SATURATE'          # NOTE Keyword of Saturation in FITS header
 CDIR = pa.dirname(pa.abspath(__file__))
 
 # NOTE 'mini' region is selected near M31 center:
@@ -28,8 +41,13 @@ FITS_REF = CDIR + '/input_data/ztf_001735_zg_c01_q2_refimg.resampled.mini.fits'
 FITS_SCI = CDIR + '/input_data/ztf_20180705481609_001735_zg_c01_o_q2_sciimg.mini.fits'   
 FITS_DIFF = CDIR + '/output_data/your_sfft_difference.fits'
 
+# *************************** IMPORTANT NOTICE *************************** #
+#  I strongly recommend users to read the descriptions of the parameters 
+#  via help(sfft.Easy_CrowdedPacket).
+# *************************** IMPORTANT NOTICE *************************** #
+
 Easy_CrowdedPacket.ECP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_DIFF=FITS_DIFF, FITS_Solution=None, \
-    ForceConv='REF', GKerHW=None, KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-    backend=backend, CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS, MaskSatContam=True, \
-    BACKSIZE_SUPER=128, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, DETECT_THRESH=5.0, \
-    StarExt_iter=2, PriorBanMask=None, GLockFile=None)
+    ForceConv=ForceConv, GKerHW=None, KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
+    MaskSatContam=True, BACKSIZE_SUPER=128, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, DETECT_THRESH=5.0, \
+    StarExt_iter=2, PriorBanMask=None, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
+    NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
