@@ -137,4 +137,4 @@ Citing
 
 Arxiv link: `<https://arxiv.org/abs/2109.09334>`_.
 
-Related DOI: TBD
+Related DOI: TBD (Accepted by ApJ, waiting for DOI)
