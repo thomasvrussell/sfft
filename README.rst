@@ -80,7 +80,7 @@ Note that sfft subtraction is implemented as a two-step process. First of all, w
 
 Advanced users may want to create the customized masked images with more elaborate pixel masking to replace the built-in masking process in sfft:
 
-.. [*] **customized sfft subtraction** : The example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket`` . More detailed explanations of the module: help(``sfft.CustomizedPacket``).
+.. [*] **customized sfft subtraction** : The example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket``. More detailed explanations of the module: help(``sfft.CustomizedPacket``).
 
 Parallel Computing
 -----------
@@ -123,9 +123,6 @@ Common issues
     pip install llvmlite==0.36.0 --ignore-installed
 
 - If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of image subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find the problem if you wrap any sfft subtraction task in a loop (e.g., try this in the customized sfft subtraction test). This problem can be solved by running a trivial subtraction (e.g., simply using empty images) in advance and making the pipe waiting for the subsequent observations (please see what we do in the test subtract_test_customized).
-
-
-- SFFT can accommodate the spatial variations in wide-ﬁeld imaging data, including PSF, photometric scaling, and sky background.
 
 Development
 -----------
