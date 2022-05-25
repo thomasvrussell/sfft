@@ -97,7 +97,7 @@ In sfft, we provide a customized module which allows users to adopt their own im
 Parallel Computing
 -----------
 
-We have also developed modules to optimize the overall computing performance of sparse-flavor-sfft and crowded-flavor-sfft for the cases when multiple tasks need to be deal with simultaneously.
+We have also developed modules to optimize the overall computing performance of sparse-flavor-sfft and crowded-flavor-sfft for the cases when you need to deal with multiple tasks simultaneously.
 
 - In a particular time-domain survey, one may need to process a large set of image-pairs simultaneously. Assume that you have Nt tasks which should be processed by a computing platform with Nc CPU threads and Ng GPU devices. Generally, Nt >> Ng and Nc >> Ng. 
 
