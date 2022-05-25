@@ -22,7 +22,8 @@ SFFT brings about a remarkable improvement of computational performance of aroun
 
 ..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_subtract_speed.png
 |
-
+To get a clear picture of our method, we summarize a variety of features from different perspectives for SFFT and other existing image subtraction methods:
+|
 ..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_features.png
 
 Installation
