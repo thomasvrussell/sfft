@@ -73,16 +73,29 @@ We have prepared several examples in the test directory so that you can familar 
 
 .. [*] **sfft subtraction for sparse field** : The example in subdirectory named subtract_test_sparse_flavor. We use sparse-flavor-sfft (module ``sfft.EasySparsePacket``) to perform image subtraction for CTIO-4m DECam observations. More detailed explanations of this module, see help(``sfft.EasySparsePacket``). **IMPORTANT NOTICE: the input images of sparse-flavor-sfft should be SKY-SUBTRACTED!**
 
-.. [*] **difference noise decorrelation** : The example in subdirectory named difference_noise_decorrelation. We use noise-decorrelation toolkit (module ``sfft.utils.DeCorrelationCalculator``) to whiten the background noise on difference image. In this test, the difference image is generated from image subtraction (by sfft) between a coadded reference image and a coadded science image, each stacked from 5 DECam individual observations with PSF homogenization (by sfft). The toolkit can be also applied to whiten a coadded image as long as convolution is involved in the stacking process.
+- Our software provides two flavors for image subtraction, crowded-flavor-sfft and sparse-flavor-sfft, to accommodate the situations for the crowded and sparse fields, respectively. The two flavors actually follow the same routine for image subtraction and differ only in ways of masking the data. Proper image masking is required in the current version of SFFT to identify the pixels that are not correctly modeled by SFFT, e.g., saturated sources, casual cosmic rays and moving objects, bad CCD pixels, optical ghosts, and even the variable objects and transients themselves. The pre-subtraction processing for proper image masking is referred to as **preprocessing** in sfft.
 
-Note that sfft subtraction is implemented as a two-step process. First of all, we need to mask the regions which can be be well-modeled by image subtraction (e.g., saturated stars, variables, cosmic rays, bad pixels, etc.). We designed two flavors of sfft (crowded & sparse), which actually follow the same subtraction algorithm but differ only in ways of the preliminary image-masking. The masked images are used to solve the parameters of image matching, and the solution will be ultimately applied on the raw un-masked images to get the final difference image. 
+- Our software also provides a generic and robust function to perform **preprocessing** of the data, which has been extensively tested with data from various transient surveys. When you run crowded-flavor-sfft and sparse-flavor-sfft, sfft actually performs the generic **preprocessing** for image masking and do the sfft subtraction subsequently. 
 
-Advanced users may want to create the customized masked images with more elaborate pixel masking to replace the built-in masking process in sfft:
+Customized usage
+-----------
+
+The built-in **preprocessing** in sfft (based on SExtractor) is only designed to provide a safe and generic approach which can adapt to diverse imaging data. In contrast to the high speed of the image subtraction, the computing performance of the built-in **preprocessing** is much less remarkable (says, 10 times more computing time). Given a particular time-domain program, we do believe there is plenty of room for further optimization of the computing expense on the **preprocessing**.
+
+- For sparse-flavor-sfft, the built-in **preprocessing** makes an automatic source selection based on SExtractor catalogs and then create the masked images for subsequent subtraction. To optimize the overall computing expense of the pipeline, one can make use of the SExtractor products already generated in the preceding modules (e.g., astrometric calibration) for the automatic source selection (which is fast) and avoid repeated photometry. 
+
+- For crowded-flavor-sfft, the built-in **preprocessing** only masks the saturated sources identified by SExtractor. When data quality masks for the imaging data are available, one can easily replace the built-in **preprocessing** and make a more elaborate pixel masking.
+
+In sfft, we provide a customized module which allows users to adopt their own image masking strategies, i.e., the module only perform the sfft subtraction. In this test, you would see the lightning fast speed of sfft subtraction on GPU devices!
 
 .. [*] **customized sfft subtraction** : The example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket``. More detailed explanations of the module: help(``sfft.CustomizedPacket``).
 
+**Additional Remarks**: If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of sfft subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find in above test that the GPU warming-up is quite slow. Fortunately, this problem can be esaily solved by running a trivial subtraction (e.g., on empty images) in advance and making the pipe waiting for the subsequent observations (see above test).
+
 Parallel Computing
 -----------
+
+We have also developed modules to optimize the overall computing performance of sparse-flavor-sfft and crowded-flavor-sfft for the cases when multiple tasks need to be deal with simultaneously.
 
 - In a particular time-domain survey, one may need to process a large set of image-pairs simultaneously. Assume that you have Nt tasks which should be processed by a computing platform with Nc CPU threads and Ng GPU devices. Generally, Nt >> Ng and Nc >> Ng. 
 
@@ -91,6 +104,13 @@ Parallel Computing
 - Note that we generally need to avoid multiple tasks using one GPU at the same time (GPU out-of-memory issue). That is to say, we CANNOT simply trigger a set of sfft functions (e.g., ``sfft.EasySparsePacket``) to process a large set of image-pairs simultaneously.
 
 - Since version 1.1, sfft has allowed for multiple tasks without conflicting GPU usage, by using the modules ``sfft.MultiEasySparsePacket`` for sparse-flavor-sfft and ``sfft.MultiEasyCrowdedPacket`` for crowded-flavor-sfft, respectively. Please see the directory test/subtract_test_multiprocessing to find the examples. Note that ONLY the CuPy backend is supported in multiprocessing mode.
+
+Additional Function
+-----------
+
+We also present a decorrelation module to whiten the background noise of the difference image.
+
+.. [*] **difference noise decorrelation** : The example in subdirectory named difference_noise_decorrelation. We use noise-decorrelation toolkit (module ``sfft.utils.DeCorrelationCalculator``) to whiten the background noise on difference image. In this test, the difference image is generated from image subtraction (by sfft) between a coadded reference image and a coadded science image, each stacked from 5 DECam individual observations with PSF homogenization (by sfft). The toolkit can be also applied to whiten a coadded image as long as convolution is involved in the stacking process.
 
 What's new
 -----------
@@ -120,8 +140,6 @@ Common issues
 - If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. The setup.py in sfft cannot properly update llvmlite to the desired version, then you may get errors related to Numba or llvmlite. If so, please manually install llvmlite by: ::
 
     pip install llvmlite==0.36.0 --ignore-installed
-
-- If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of image subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find the problem if you wrap any sfft subtraction task in a loop (e.g., try this in the customized sfft subtraction test). This problem can be solved by running a trivial subtraction (e.g., simply using empty images) in advance and making the pipe waiting for the subsequent observations (please see what we do in the test subtract_test_customized).
 
 Development
 -----------
