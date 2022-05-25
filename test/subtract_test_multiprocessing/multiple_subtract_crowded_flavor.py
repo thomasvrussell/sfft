@@ -40,7 +40,6 @@ for taskidx in range(NUM_TASK):
 FITS_REF_Queue = [taskmdir + '/task-%d/%s' %(taskidx, FNAME_REF) for taskidx in range(NUM_TASK)]
 FITS_SCI_Queue = [taskmdir + '/task-%d/%s' %(taskidx, FNAME_SCI) for taskidx in range(NUM_TASK)]
 FITS_DIFF_Queue = [taskmdir + '/task-%d/my_sfft_diff.fits' %taskidx for taskidx in range(NUM_TASK)]
-FITS_Solution_Queue = [taskmdir + '/task-%d/my_sfft_solution' %taskidx for taskidx in range(NUM_TASK)]
 ForceConv_Queue = [ForceConv] * NUM_TASK
 
 # *************************** IMPORTANT NOTICE *************************** #
@@ -49,7 +48,7 @@ ForceConv_Queue = [ForceConv] * NUM_TASK
 # *************************** IMPORTANT NOTICE *************************** #
 
 res = MultiEasy_CrowdedPacket(FITS_REF_Queue, FITS_SCI_Queue, FITS_DIFF_Queue=FITS_DIFF_Queue, \
-    FITS_Solution_Queue=FITS_Solution_Queue, ForceConv_Queue=ForceConv_Queue, GKerHW_Queue=[], KerHWRatio=2.0, \
+    FITS_Solution_Queue=[], ForceConv_Queue=ForceConv_Queue, GKerHW_Queue=[], KerHWRatio=2.0, \
     KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, MaskSatContam=MaskSatContam, \
     BACKSIZE_SUPER=128, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, DETECT_THRESH=5.0, StarExt_iter=2, PriorBanMask_Queue=[]).\
     MESP_Cupy(NUM_THREADS_4PREPROC=NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT=NUM_THREADS_4SUBTRACT, \
