@@ -41,14 +41,14 @@ sfft has the following three backends to perform the image subtraction.
 .. [#] **PyCUDA backend** : The core functions of sfft are written in `PyCUDA <https://github.com/inducer/pycuda>`_ and `Scikit-Cuda <https://github.com/lebedov/scikit-cuda>`_. Users need to install PyCUDA and Scikit-Cuda according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 .. [#] **CuPy backend** : The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 
-- Case 1. You may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via: ::
+- CUDA 11: E.g, you may enable the CuPy backend for CUDA 11.5 via: ::
+
+    pip install cupy-cuda115  # CuPy backend
+
+- CUDA 10: E.g, you may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via: ::
 
     pip install pycuda==2020.1 scikit-cuda==0.5.3  # PyCUDA backend
     pip install cupy-cuda101                       # CuPy backend
-
-- Case 2. You may enable the CuPy backend for CUDA 11.5 via: ::
-
-    pip install cupy-cuda115  # CuPy backend
                    
 **Additional Remarks**: CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11.
 
@@ -73,7 +73,9 @@ We have prepared several examples in the test directory so that you can familar 
 
 .. [*] **sfft subtraction for sparse field** : The example in subdirectory named subtract_test_sparse_flavor. We use sparse-flavor-sfft (module ``sfft.EasySparsePacket``) to perform image subtraction for CTIO-4m DECam observations. More detailed explanations of this module, see help(``sfft.EasySparsePacket``). **IMPORTANT NOTICE: the input images of sparse-flavor-sfft should be SKY-SUBTRACTED!**
 
-- Our software provides two flavors for image subtraction, crowded-flavor-sfft and sparse-flavor-sfft, to accommodate the situations for the crowded and sparse fields, respectively. The two flavors actually follow the same routine for image subtraction and differ only in ways of masking the data. Proper image masking is required in the current version of SFFT to identify the pixels that are not correctly modeled by SFFT, e.g., saturated sources, casual cosmic rays and moving objects, bad CCD pixels, optical ghosts, and even the variable objects and transients themselves. The pre-subtraction processing for proper image masking is referred to as **preprocessing** in sfft.
+- Our software provides two flavors for image subtraction, crowded-flavor-sfft and sparse-flavor-sfft, to accommodate the situations for the crowded and sparse fields, respectively. The two flavors actually follow the same routine for image subtraction and differ only in ways of masking the data. 
+
+- Proper image masking is required in the current version of SFFT to identify the pixels that are not correctly modeled by SFFT, e.g., saturated sources, casual cosmic rays and moving objects, bad CCD pixels, optical ghosts, and even the variable objects and transients themselves. The pre-subtraction processing for proper image masking is referred to as **preprocessing** in sfft.
 
 - Our software also provides a generic and robust function to perform **preprocessing** of the data, which has been extensively tested with data from various transient surveys. When you run crowded-flavor-sfft and sparse-flavor-sfft, sfft actually performs the generic **preprocessing** for image masking and do the sfft subtraction subsequently. 
 
