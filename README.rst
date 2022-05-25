@@ -18,10 +18,9 @@ Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in 
 .. image:: https://img.shields.io/badge/License-MIT-blue.svg
     :target: https://opensource.org/licenses/MIT
 
+Subtraction in Fourier space brings about a remarkable improvement of computational performance of around an order of magnitude compared to other published image subtraction codes. 
 
-
-
-
+..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_subtraction_speed.png
 
 Installation
 -----------
@@ -120,6 +119,9 @@ Common issues
     pip install llvmlite==0.36.0 --ignore-installed
 
 - If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of image subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find the problem if you wrap any sfft subtraction task in a loop (e.g., try this in the customized sfft subtraction test). This problem can be solved by running a trivial subtraction (e.g., simply using empty images) in advance and making the pipe waiting for the subsequent observations (please see what we do in the test subtract_test_customized).
+
+
+- SFFT can accommodate the spatial variations in wide-ﬁeld imaging data, including PSF, photometric scaling, and sky background.
 
 Development
 -----------
