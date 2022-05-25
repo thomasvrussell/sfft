@@ -23,7 +23,7 @@ SFFT brings about a remarkable improvement of computational performance of aroun
 ..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_subtract_speed.png
 |
 
-..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/method_comparisons.png
+..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_features.png
 
 Installation
 -----------
