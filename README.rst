@@ -1,4 +1,4 @@
-..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_dlogo.png
+..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_logo.png
 
 Package Description
 -------------------
