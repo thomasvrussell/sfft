@@ -8,10 +8,10 @@ __version__ = "v1.0"
 
 class SingleSFFTConfigure_Numpy:
     @staticmethod
-    def SSCN(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, NUM_CPU_THREADS=8):
+    def SSCN(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, NUM_CPU_THREADS_4SUBTRACT=8):
 
         import numba as nb
-        nb.set_num_threads = NUM_CPU_THREADS
+        nb.set_num_threads = NUM_CPU_THREADS_4SUBTRACT
 
         N0, N1 = int(NX), int(NY)
         w0, w1 = int(KerHW), int(KerHW)
@@ -605,7 +605,7 @@ class SingleSFFTConfigure_Numpy:
 class SingleSFFTConfigure:
     @staticmethod
     def SSC(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
+        BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
 
         """
         # Arguments:
@@ -614,16 +614,17 @@ class SingleSFFTConfigure:
         # c) KerPolyOrder: The order of Polynomial Variation for PSF-Matching Kernel.
         # d) BGPolyOrder: The order of Polynomial Variation for Differential Background.
         # e) ConstPhotRatio: Use a constant photometric ratio in image subtraction ?
-        # f) backend: Which backend would you like to perform SFFT on ?
-        # g) CUDA_DEVICE (backend = Pycuda / Cupy): Which GPU device would you want to perform SFFT on ?
-        # h) NUM_CPU_THREADS (backend = Numpy): How many CPU threads would you want to perform SFFT on ?
+        # f) BACKEND_4SUBTRACT: Which backend would you like to perform SFFT on ?
+        # g) CUDA_DEVICE_4SUBTRACT (BACKEND_4SUBTRACT = Pycuda / Cupy): Which GPU device would you want to perform SFFT on ?
+        # h) NUM_CPU_THREADS_4SUBTRACT (BACKEND_4SUBTRACT = Numpy): How many CPU threads would you want to perform SFFT on ?
         
         """
 
-        if backend == 'Numpy':
+        # * ONLY Numpy backend available now.
+        if BACKEND_4SUBTRACT == 'Numpy':
             SFFTConfig = SingleSFFTConfigure_Numpy.SSCN(NX=NX, NY=NY, KerHW=KerHW, \
                 KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
-                NUM_CPU_THREADS=NUM_CPU_THREADS)
+                NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
         
         return SFFTConfig
 

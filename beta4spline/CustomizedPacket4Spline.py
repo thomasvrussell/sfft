@@ -13,8 +13,11 @@ class Customized_Packet:
     @staticmethod
     def CP(FITS_REF, FITS_SCI, FITS_mREF, FITS_mSCI, ForceConv, GKerHW, FITS_DIFF=None, \
         FITS_Solution=None, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
+        BACKEND_4SUBTRACT='Numpy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
         
+        # * ONLY Numpy backend available now.
+        assert BACKEND_4SUBTRACT == 'Numpy'
+
         # * Read input images
         PixA_REF = fits.getdata(FITS_REF, ext=0).T
         PixA_SCI = fits.getdata(FITS_SCI, ext=0).T
@@ -50,16 +53,16 @@ class Customized_Packet:
         KerHW = GKerHW
         
         # * Compile Functions in SFFT Subtraction
-        from SFFTConfigureRF import SingleSFFTConfigure
+        from SFFTConfigure4Spline import SingleSFFTConfigure
 
         Tcomp_start = time.time()
         SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], KerHW=KerHW, \
             KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
-            backend=backend, CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)
+            BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
         print('MeLOn Report: Compiling Functions in SFFT Subtraction Takes [%.3f s]' %(time.time() - Tcomp_start))
 
         # * Perform SFFT Subtraction
-        from SFFTSubtractRF import GeneralSFFTSubtract
+        from SFFTSubtract4Spline import GeneralSFFTSubtract
 
         if ConvdSide == 'REF':
             PixA_mI, PixA_mJ = PixA_mREF, PixA_mSCI
@@ -79,8 +82,8 @@ class Customized_Packet:
         
         Tsub_start = time.time()
         _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
-            SFFTConfig=SFFTConfig, ContamMask_I=None, backend=backend, \
-            CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)
+            SFFTConfig=SFFTConfig, ContamMask_I=None, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
         Solution, PixA_DIFF = _tmp[:2]
         print('MeLOn Report: SFFT Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
         

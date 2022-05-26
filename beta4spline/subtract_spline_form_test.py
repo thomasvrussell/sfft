@@ -3,10 +3,20 @@ import sys
 import os.path as pa
 from CustomizedPacket4Spline import Customized_Packet
 
-backend = 'Numpy'    
-CUDA_DEVICE = '0'     
-NUM_CPU_THREADS = 8   
-ForceConv = 'REF'     
+"""
+* Updates in Version 1.1+
+
+-backend (1.0.*) > -BACKEND_4SUBTRACT (1.1+)
+-CUDA_DEVICE (1.0.*) > -CUDA_DEVICE_4SUBTRACT (1.1+)
+-NUM_CPU_THREADS (1.0.*) > -NUM_CPU_THREADS_4SUBTRACT (1.1+)
+
+"""
+
+BACKEND_4SUBTRACT = 'Numpy'    
+CUDA_DEVICE_4SUBTRACT = '0'     
+NUM_CPU_THREADS_4SUBTRACT = 8   
+
+ForceConv = 'REF'
 GKerHW = 4
 
 GDIR = '/data1/LeiHu/MESS/SFFTpaper/SplineForm'
@@ -19,6 +29,6 @@ FITS_Solution = GDIR + '/MDATA/So-N42.fits' # FIXME, output kernel solution
 
 Customized_Packet.CP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_mREF=FITS_mREF, FITS_mSCI=FITS_mSCI, \
     ForceConv=ForceConv, GKerHW=GKerHW, FITS_DIFF=FITS_DIFF, FITS_Solution=FITS_Solution, \
-    KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=False, backend=backend, \
-    CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)
+    KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=False, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+    CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
 

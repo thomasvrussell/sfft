@@ -8,10 +8,10 @@ __version__ = "v1.0"
 
 class ElementalSFFTSubtract_Numpy:
     @staticmethod
-    def ESSN(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, NUM_CPU_THREADS=8):
+    def ESSN(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, NUM_CPU_THREADS_4SUBTRACT=8):
 
         import pyfftw
-        pyfftw.config.NUM_THREADS = NUM_CPU_THREADS
+        pyfftw.config.NUM_THREADS = NUM_CPU_THREADS_4SUBTRACT
         pyfftw.interfaces.cache.enable()
         
         ta = time.time()
@@ -347,16 +347,17 @@ class ElementalSFFTSubtract_Numpy:
 
 class ElementalSFFTSubtract:
     @staticmethod
-    def ESS(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
+    def ESS(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
         
-        if backend == 'Numpy':
-            Solution, PixA_DIFF = ElementalSFFTSubtract_Numpy.ESSN(PixA_I=PixA_I, PixA_J=PixA_J, SFFTConfig=SFFTConfig, SFFTSolution=SFFTSolution, Subtract=Subtract, NUM_CPU_THREADS=NUM_CPU_THREADS)
+        # * ONLY Numpy backend available now.
+        if BACKEND_4SUBTRACT == 'Numpy':
+            Solution, PixA_DIFF = ElementalSFFTSubtract_Numpy.ESSN(PixA_I=PixA_I, PixA_J=PixA_J, SFFTConfig=SFFTConfig, SFFTSolution=SFFTSolution, Subtract=Subtract, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
         
         return Solution, PixA_DIFF
 
 class GeneralSFFTSubtract:
     @staticmethod
-    def GSS(PixA_I, PixA_J, PixA_mI, PixA_mJ, SFFTConfig, ContamMask_I=None, backend='Pycuda', CUDA_DEVICE='0', NUM_CPU_THREADS=8):
+    def GSS(PixA_I, PixA_J, PixA_mI, PixA_mJ, SFFTConfig, ContamMask_I=None, BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
 
         """
         # Arguments:
@@ -368,9 +369,9 @@ class GeneralSFFTSubtract:
         # f) ContamMask_I: Contaminate-Region in Image I (e.g., Saturation and Bad pixels).
         #               We will calculate the propagated Contaminate-Region on convolved I.
         # 
-        # g) backend: Which backend would you like to perform SFFT on ?
-        # h) CUDA_DEVICE (backend = Pycuda / Cupy): Which GPU device would you want to perform SFFT on ?
-        # i) NUM_CPU_THREADS (backend = Numpy): How many CPU threads would you want to perform SFFT on ?
+        # g) BACKEND_4SUBTRACT: Which BACKEND_4SUBTRACT would you like to perform SFFT on ?
+        # h) CUDA_DEVICE_4SUBTRACT (backend = Pycuda / Cupy): Which GPU device would you want to perform SFFT on ?
+        # i) NUM_CPU_THREADS_4SUBTRACT (BACKEND_4SUBTRACT = Numpy): How many CPU threads would you want to perform SFFT on ?
         #
         # NOTE: The SFFT parameter-solving is performed between mI & mJ, 
         #       then we apply the solution to input Images I & J.
@@ -385,13 +386,13 @@ class GeneralSFFTSubtract:
 
         # * Subtraction Solution derived from input masked image-pair
         Solution = ElementalSFFTSubtract.ESS(PixA_I=PixA_mI, PixA_J=PixA_mJ, \
-            SFFTConfig=SFFTConfig, SFFTSolution=None, Subtract=False, backend=backend, \
-            CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)[0]
+            SFFTConfig=SFFTConfig, SFFTSolution=None, Subtract=False, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[0]
         
         # * Subtraction of the input image-pair (use above solution)
         PixA_DIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_I, PixA_J=PixA_J, \
-            SFFTConfig=SFFTConfig, SFFTSolution=Solution, Subtract=True, backend=backend, \
-            CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)[1]
+            SFFTConfig=SFFTConfig, SFFTSolution=Solution, Subtract=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[1]
 
         # * Identify propagated contamination region through convolving I
         ContamMask_CI = None
@@ -405,8 +406,8 @@ class GeneralSFFTSubtract:
 
             # NOTE Convolved_I is inverse DIFF
             _tmpD = ElementalSFFTSubtract.ESS(PixA_I=_tmpI, PixA_J=_tmpJ, \
-                SFFTConfig=SFFTConfig, SFFTSolution=tSolution, Subtract=True, backend=backend, \
-                CUDA_DEVICE=CUDA_DEVICE, NUM_CPU_THREADS=NUM_CPU_THREADS)[1]
+                SFFTConfig=SFFTConfig, SFFTSolution=tSolution, Subtract=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+                CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[1]
             ContamMask_CI = _tmpD < -0.001     # FIXME Customizable
         
         return Solution, PixA_DIFF, ContamMask_CI
