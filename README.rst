@@ -90,7 +90,9 @@ The built-in **preprocessing** in sfft (based on SExtractor) is only designed to
 
 - For crowded-flavor-sfft, the built-in **preprocessing** only mask the saturation-contaminated pixels using SExtractor. When data quality masks for the observed imaging data are available in a survey program, one can instead identify the invalid pixels using the data quality masks and mask them by local background. Hence, the built-in **preprocessing** can be totally skipped.
 
-Besides, we encourage users to design dedicated image-masking strategies for their survey programs to unleash the great power of sfft subtraction. Our software provides a customized module which allows users to feed their own image-masking results, i.e., the module only perform the sfft subtraction. In this test, you would see the lightning fast speed of sfft subtraction on GPU devices!
+Besides, we encourage users to design dedicated image-masking strategies for their survey programs to unleash the great power of sfft subtraction!
+
+Our software provides a customized module which allows users to feed their own image-masking results, i.e., the module only perform the sfft subtraction. In this test, you would see the lightning fast speed of sfft subtraction on GPU devices!
 
 .. [*] **customized sfft subtraction** : The example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket``. More detailed explanations of the module: help(``sfft.CustomizedPacket``).
 
