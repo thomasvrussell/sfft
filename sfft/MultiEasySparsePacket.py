@@ -486,8 +486,7 @@ class MultiEasy_SparsePacket:
                             print('\nMeLOn CheckPoint: Successful Subtraction for task-[%d] in thread-[%d]!' \
                                 %(taskidx, INDEX_THREAD_4SUBTRACT))
                     except:
-                        # ** free GPU memory when the subtraction fails
-                        #    
+                        # ** free GPU memory when the subtraction fails 
                         import cupy as cp
                         with cp.cuda.Device(int(CUDA_DEVICE_4SUBTRACT)):
                             mempool = cp.get_default_memory_pool()
