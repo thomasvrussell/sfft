@@ -51,6 +51,8 @@ __version__ = "v1.0"
 #                          ++ If remaining sources are less than 30 (HPS_NumLowerLimit),
 #                             Simply Use the point-sources with highest SNR_WIN.
 #                          NOTE In Common, this subset is for Flux-Calibration & Building PSF Model.
+#                          NOTE The defult HPS_SNRThresh = 100 might be too high, you may loosen it to
+#                               ~ 15 to make sure you have enough samples, especially for psf modeling.
 # 
 #      @ Remarks on the HPS BrightEnd-Cutoff 
 #        Assume SExtractor received precise SATURATE, saturated sources should be fully rejected via FLAG constrain. 
