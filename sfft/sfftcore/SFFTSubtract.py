@@ -1339,34 +1339,7 @@ class ElementalSFFTSubtract:
     @staticmethod
     def ESS(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, \
         BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
-                                
-        print(r"""
-                                __    __    __    __
-                               /  \  /  \  /  \  /  \
-                              /    \/    \/    \/    \
-            █████████████████/  /██/  /██/  /██/  /█████████████████████████
-                            /  / \   / \   / \   / \  \____
-                           /  /   \_/   \_/   \_/   \    o \__,
-                          / _/                       \_____/  `
-                          |/
 
-                      █████████  ███████████ ███████████ ███████████        
-                     ███░░░░░███░░███░░░░░░█░░███░░░░░░█░█░░░███░░░█            
-                    ░███    ░░░  ░███   █ ░  ░███   █ ░ ░   ░███  ░ 
-                    ░░█████████  ░███████    ░███████       ░███    
-                     ░░░░░░░░███ ░███░░░█    ░███░░░█       ░███    
-                     ███    ░███ ░███  ░     ░███  ░        ░███    
-                    ░░█████████  █████       █████          █████   
-                     ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░         
-
-                    sfft (1.1) supported by @LeiHu
-
-                    GitHub: https://github.com/thomasvrussell/sfft
-                    Related Paper: https://arxiv.org/abs/2109.09334
-
-            ████████████████████████████████████████████████████████████████
-            """)
-        
         if BACKEND_4SUBTRACT == 'Pycuda':
             Solution, PixA_DIFF = ElementalSFFTSubtract_Pycuda.ESSP(PixA_I=PixA_I, PixA_J=PixA_J, SFFTConfig=SFFTConfig, \
                 SFFTSolution=SFFTSolution, Subtract=Subtract, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
@@ -1404,6 +1377,33 @@ class GeneralSFFTSubtract:
         #       then we apply the solution to input Images I & J.
         #
         """
+        
+        print(r"""
+                                __    __    __    __
+                               /  \  /  \  /  \  /  \
+                              /    \/    \/    \/    \
+            █████████████████/  /██/  /██/  /██/  /█████████████████████████
+                            /  / \   / \   / \   / \  \____
+                           /  /   \_/   \_/   \_/   \    o \__,
+                          / _/                       \_____/  `
+                          |/
+
+                      █████████  ███████████ ███████████ ███████████        
+                     ███░░░░░███░░███░░░░░░█░░███░░░░░░█░█░░░███░░░█            
+                    ░███    ░░░  ░███   █ ░  ░███   █ ░ ░   ░███  ░ 
+                    ░░█████████  ░███████    ░███████       ░███    
+                     ░░░░░░░░███ ░███░░░█    ░███░░░█       ░███    
+                     ███    ░███ ░███  ░     ░███  ░        ░███    
+                    ░░█████████  █████       █████          █████   
+                     ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░         
+
+                    sfft (1.1) supported by @LeiHu
+
+                    GitHub: https://github.com/thomasvrussell/sfft
+                    Related Paper: https://arxiv.org/abs/2109.09334
+
+            ████████████████████████████████████████████████████████████████
+            """)
         
         # * Size-Check Processes
         tmplst = [PixA_I.shape, PixA_J.shape]
