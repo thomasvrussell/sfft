@@ -1339,7 +1339,18 @@ class ElementalSFFTSubtract:
     @staticmethod
     def ESS(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, \
         BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
-
+                                
+        print("""
+                █████████  ███████████ ███████████ ███████████
+               ███░░░░░███░░███░░░░░░█░░███░░░░░░█░█░░░███░░░█
+              ░███    ░░░  ░███   █ ░  ░███   █ ░ ░   ░███  ░ 
+              ░░█████████  ░███████    ░███████       ░███    
+               ░░░░░░░░███ ░███░░░█    ░███░░░█       ░███    
+               ███    ░███ ░███  ░     ░███  ░        ░███    
+              ░░█████████  █████       █████          █████   
+               ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░            
+            """)
+        
         if BACKEND_4SUBTRACT == 'Pycuda':
             Solution, PixA_DIFF = ElementalSFFTSubtract_Pycuda.ESSP(PixA_I=PixA_I, PixA_J=PixA_J, SFFTConfig=SFFTConfig, \
                 SFFTSolution=SFFTSolution, Subtract=Subtract, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
