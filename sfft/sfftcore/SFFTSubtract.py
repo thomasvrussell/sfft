@@ -1404,6 +1404,7 @@ class GeneralSFFTSubtract:
                     Related Paper: https://arxiv.org/abs/2109.09334
                     
             ████████████████████████████████████████████████████████████████
+            
             """)
         
         # * Size-Check Processes
