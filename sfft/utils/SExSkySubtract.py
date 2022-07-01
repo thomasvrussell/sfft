@@ -40,7 +40,7 @@ class SEx_SkySubtract:
             with fits.open(FITS_obj) as hdl:
                 hdl[0].header['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
                 hdl[0].header['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
-                ESATUR = float(hdl[0].header['SATURATE']) - SKYPEAK  # NOTE a conservative value
+                ESATUR = float(hdl[0].header[SATUR_KEY]) - SKYPEAK  # NOTE a conservative value
                 hdl[0].header['ESATUR'] = (ESATUR, 'MeLOn: Effective SATURATE after SEx-SKY-SUB')
                 hdl[0].data[:, :] = PixA_skysub.T
                 hdl.writeto(FITS_skysub, overwrite=True)
