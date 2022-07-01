@@ -14,7 +14,7 @@ from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
+__version__ = "v1.1"
 
 """
 # MeLOn Note
@@ -443,7 +443,7 @@ class PY_SEx:
             if AddRD:
                 def read_wcs(FITS_obj):
                     phr = fits.getheader(FITS_obj, ext=0)
-                    if phr['CTYPE1'] == 'RA---TAN':
+                    if phr['CTYPE1'] == 'RA---TAN' and 'PV1_0' in phr:
                         _hdr = phr.copy()
                         _hdr['CTYPE1'] = 'RA---TPV'
                         _hdr['CTYPE2'] = 'DEC--TPV'
