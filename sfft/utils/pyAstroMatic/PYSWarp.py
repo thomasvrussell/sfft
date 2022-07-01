@@ -154,8 +154,10 @@ class PY_SWarp:
 
             if 'CD1_1' in hdr_wcs and 'PC1_1' in hdr_op:
                 hdr_op.rename_keyword('PC1_1', 'CD1_1')
-                hdr_op.rename_keyword('PC1_2', 'CD1_2')
-                hdr_op.rename_keyword('PC2_1', 'CD2_1')
+                if 'PC1_2' in hdr_op:
+                    hdr_op.rename_keyword('PC1_2', 'CD1_2')
+                if 'PC2_1' in hdr_op:
+                    hdr_op.rename_keyword('PC2_1', 'CD2_1')
                 hdr_op.rename_keyword('PC2_2', 'CD2_2')
             
             return hdr_op
