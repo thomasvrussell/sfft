@@ -132,6 +132,8 @@ What's new
 Todo list
 -----------
 
+- Incorporate the separate functions (in the folder beta4spline) for spline form sfft into the unified sfft functions. Note that only Numpy backend is currently available and the spline form is very memory-consuming. [Lei, July 6, 2022]
+
 - Write a detailed documentation for sfft! [Lei, May 24, 2022]
 
 - We notice that SExtractor may have been called to perform astrometric calibration before image subtraction. It is definitely not wise to run SExtractor again in sfft, I need to develop a module which allows users to feed SExtractor products as inputs of sfft, which will significantly reduce the preprocessing time in sfft. [Lei, May 24, 2022]
