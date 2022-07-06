@@ -37,7 +37,7 @@ class SingleSFFTConfigure_Numpy:
         L1 = 2*w1+1                       # matching-kernel YSize
         Fab = L0 * L1                     # dof for index 𝛼𝛽
         #Fij = int((DK+1)*(DK+2)/2)        # dof for matching-kernel polynomial index ij 
-        Fij = 36                          # BiQuadratic B-Spline with ndiv=2
+        Fij = 36                          # BiQuadratic B-Spline with Ndiv=4, SplD=2
         Fpq = int((DB+1)*(DB+2)/2)        # dof for differential-background polynomial index pq
         SCALE = np.float64(1/(N0*N1))     # Scale of Image-Size
         SCALE_L = np.float64(1/SCALE)     # Reciprocal Scale of Image Size

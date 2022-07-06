@@ -27,8 +27,11 @@ FITS_mSCI = GDIR + '/MDATA/mJ.fits'         # FIXME, masked science image
 FITS_DIFF = GDIR + '/MDATA/D-N42.fits'      # FIXME, output difference image
 FITS_Solution = GDIR + '/MDATA/So-N42.fits' # FIXME, output kernel solution
 
+# Kernel: we use BiQuadratic B-Spline with number_division = 4 * 4, spline degree = 2.
+# Background: we still use a polynomial form.
+# NOTE: Here -KerPolyOrder is an invalid parameter, just a placeholder.
+
 Customized_Packet.CP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_mREF=FITS_mREF, FITS_mSCI=FITS_mSCI, \
     ForceConv=ForceConv, GKerHW=GKerHW, FITS_DIFF=FITS_DIFF, FITS_Solution=FITS_Solution, \
     KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=False, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
     CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
-
