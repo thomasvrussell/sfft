@@ -30,6 +30,7 @@ FITS_Solution = GDIR + '/MDATA/So-N42.fits' # FIXME, output kernel solution
 # Kernel: we use BiQuadratic B-Spline with number_division = 4 * 4, spline degree = 2.
 # Background: we still use a polynomial form.
 # NOTE: Here -KerPolyOrder is an invalid parameter, just a placeholder.
+# NOTE: Here ConstPhotRatio has to be Fasle. I yet to consider how to deal with the PhotRatio in spline form.
 
 Customized_Packet.CP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_mREF=FITS_mREF, FITS_mSCI=FITS_mSCI, \
     ForceConv=ForceConv, GKerHW=GKerHW, FITS_DIFF=FITS_DIFF, FITS_Solution=FITS_Solution, \
