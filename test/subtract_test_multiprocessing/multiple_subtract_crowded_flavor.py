@@ -4,7 +4,9 @@ from sfft.MultiEasyCrowdedPacket import MultiEasy_CrowdedPacket
 CDIR = pa.dirname(pa.abspath(__file__))
 
 """
-* Added test in Version 1.1+
+* Updates in Version 1.1+ 
+
+The test was created!
 
 """
 
@@ -20,7 +22,7 @@ ForceConv = 'REF'                  # FIXME {None, 'REF', 'SCI'}, None mean AUTO 
 MaskSatContam = False              # FIXME {True, False}, mask the saturation-contaminated regions by NaN on the difference?
 
 GAIN_KEY = 'GAIN'                  # NOTE Keyword of Gain in FITS header
-SATUR_KEY = 'ESATUR'               # NOTE Keyword of Saturation in FITS header
+SATUR_KEY = 'SATURATE'             # NOTE Keyword of Saturation in FITS header
 
 # * Make multiple tasks (just copy the data in the crowded flavor test multiple times)
 origin_dir = pa.join(pa.dirname(CDIR), 'subtract_test_crowded_flavor', 'input_data')
@@ -47,11 +49,15 @@ ForceConv_Queue = [ForceConv] * NUM_TASK
 #  via help(sfft.MultiEasy_CrowdedPacket).
 # *************************** IMPORTANT NOTICE *************************** #
 
-res = MultiEasy_CrowdedPacket(FITS_REF_Queue, FITS_SCI_Queue, FITS_DIFF_Queue=FITS_DIFF_Queue, \
-    FITS_Solution_Queue=[], ForceConv_Queue=ForceConv_Queue, GKerHW_Queue=[], KerHWRatio=2.0, \
-    KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, MaskSatContam=MaskSatContam, \
-    BACKSIZE_SUPER=128, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, DETECT_THRESH=5.0, StarExt_iter=2, PriorBanMask_Queue=[]).\
-    MESP_Cupy(NUM_THREADS_4PREPROC=NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT=NUM_THREADS_4SUBTRACT, \
+_MECP = MultiEasy_CrowdedPacket(FITS_REF_Queue=FITS_REF_Queue, FITS_SCI_Queue=FITS_SCI_Queue, \
+    FITS_DIFF_Queue=FITS_DIFF_Queue, FITS_Solution_Queue=[], ForceConv_Queue=ForceConv_Queue, \
+    GKerHW_Queue=[], KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
+    ConstPhotRatio=True, MaskSatContam=MaskSatContam, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
+    BACK_TYPE='AUTO', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, \
+    DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
+    ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask_Queue=[])
+
+res = _MECP.MESP_Cupy(NUM_THREADS_4PREPROC=NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT=NUM_THREADS_4SUBTRACT, \
     CUDA_DEVICES_4SUBTRACT=CUDA_DEVICES_4SUBTRACT, TIMEOUT_4PREPRO_EACHTASK=TIMEOUT_4PREPRO_EACHTASK, \
     TIMEOUT_4SUBTRACT_EACHTASK=TIMEOUT_4SUBTRACT_EACHTASK)
 

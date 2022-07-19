@@ -3,6 +3,10 @@ import os.path as pa
 from sfft.EasySparsePacket import Easy_SparsePacket
 
 """
+* Updates in Version 1.2+
+
+-XY_PriorSelect    # New parameter!
+
 * Updates in Version 1.1+
 
 -backend (1.0.*) > -BACKEND_4SUBTRACT (1.1+)
@@ -24,7 +28,8 @@ ForceConv = 'REF'               # FIXME {'AUTO', 'REF', 'SCI'}, where AUTO mode 
 MaskSatContam = False           # FIXME {True, False}, mask the saturation-contaminated regions by NaN on the difference?
                                 # P.S. Although the difference in 4check is generated with MaskSatContam=True (just for better comparison),
                                 #      Generally, I would recommend users to adopt the default False as it will be faster.
-                                #      In practice, you may have good alternatives to find the contaminated regions, e.g., using data quality masks.
+                                #      In practice, you may have good alternatives to find the contaminated regions, 
+                                #      e.g., using data quality masks.
 
 GAIN_KEY = 'GAIN'               # NOTE Keyword of Gain in FITS header
 SATUR_KEY = 'ESATUR'            # NOTE Keyword of Saturation in FITS header
@@ -41,8 +46,10 @@ FITS_DIFF = CDIR + '/output_data/my_sfft_difference.fits'
 
 Easy_SparsePacket.ESP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_DIFF=FITS_DIFF, FITS_Solution=None, \
     ForceConv=ForceConv, GKerHW=None, KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
-    ConstPhotRatio=True, MaskSatContam=MaskSatContam, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, DETECT_THRESH=2.0, \
-    DETECT_MINAREA=5, DETECT_MAXAREA=0, BoundarySIZE=30, Hough_FRLowerLimit=0.1, BeltHW=0.2, MatchTolFactor=3.0, \
-    MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan=None, CheckPostAnomaly=False, PARATIO_THRESH=3.0, \
-    BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
-    NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
+    ConstPhotRatio=True, MaskSatContam=MaskSatContam, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
+    BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, \
+    DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
+    ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect=None, Hough_FRLowerLimit=0.1, BeltHW=0.2, \
+    PS_ELLIPThresh=0.3, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan=None, \
+    CheckPostAnomaly=False, PARATIO_THRESH=3.0, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+    CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)

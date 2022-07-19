@@ -7,15 +7,18 @@ import os.path as pa
 from astropy.io import fits
 from sfft.AutoCrowdedPrep import Auto_CrowdedPrep
 from sfft.utils.meta.TimeoutKit import TimeoutAfter
+# version: Jul 19, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.1"
+__version__ = "v1.2"
 
 class MultiEasy_CrowdedPacket:
     def __init__(self, FITS_REF_Queue, FITS_SCI_Queue, FITS_DIFF_Queue=[], FITS_Solution_Queue=[], \
         ForceConv_Queue=[], GKerHW_Queue=[], KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
-        ConstPhotRatio=True, MaskSatContam=False, BACKSIZE_SUPER=128, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
-        DETECT_THRESH=5.0, StarExt_iter=2, PriorBanMask_Queue=[]):
+        ConstPhotRatio=True, MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
+        BACK_TYPE='AUTO', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, \
+        DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
+        ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask_Queue=[]):
 
         """
         # NOTE: This function is to Perform Crowded-Flavor SFFT for multiple tasks:
@@ -42,23 +45,57 @@ class MultiEasy_CrowdedPacket:
 
         # ----------------------------- Preprocessing with Saturation Rejection for Image-Masking --------------------------------- #
 
-        -GAIN_KEY ['GAIN']                  # keyword of GAIN in FITS header (of reference & science), for SExtractor configuration
-                                            # NOTE: we need to use SExtractor check image SEGMENTATION to mask Saturated sources.
+        # > Configurations for SExtractor
 
-        -SATUR_KEY ['SATURATE']             # keyword of saturation in FITS header (of reference & science), for SExtractor configuration
+        -GAIN_KEY ['GAIN']                  # SExtractor Parameter GAIN_KEY
+                                            # i.e., keyword of GAIN in FITS header (of reference & science)
+
+        -SATUR_KEY ['SATURATE']             # SExtractor Parameter SATUR_KEY
+                                            # i.e., keyword of effective saturation in FITS header (of reference & science)
                                             # Remarks: note that Crowded-Flavor SFFT does not require sky-subtracted images as inputs,
                                             #          so the default keyword is the common name for saturation level.
+        
+        -BACK_TYPE ['AUTO']                 # SExtractor Parameter BACK_TYPE = [AUTO or MANUAL].
+         
+        -BACK_VALUE [0]                     # SExtractor Parameter BACK_VALUE (only work for BACK_TYPE='MANUAL')
 
-        -DETECT_THRESH [5.0]                # Detect threshold for SExtractor configuration.
+        -BACK_SIZE [64]                     # SExtractor Parameter BACK_SIZE
 
-        -BACKSIZE_SUPER [128]               # BACK_SIZE for SExtractor configuration.
-                                            # NOTE: '_SUPER' means we would like to use a realtively large BACK_SIZE 
-                                            #        to make a super-smooth (structure-less) background.
+        -BACK_FILTERSIZE [3]                # SExtractor Parameter BACK_FILTERSIZE
+
+        -DETECT_THRESH [5.0]                # SExtractor Parameter DETECT_THRESH
+
+        -DETECT_MINAREA [5]                 # SExtractor Parameter DETECT_MINAREA
+        
+        -DETECT_MAXAREA [0]                 # SExtractor Parameter DETECT_MAXAREA
+
+        -DEBLEND_MINCONT [0.005]            # SExtractor Parameter DEBLEND_MINCONT (typically, 0.001 - 0.005)
+
+        -BACKPHOTO_TYPE ['LOCAL']           # SExtractor Parameter BACKPHOTO_TYPE
+
+        -ONLY_FLAGS [None]                  # Restrict SExtractor Output Photometry Catalog by Source FLAGS
+                                            # Common FLAGS (Here None means no restrictions on FLAGS):
+                                            # 1: aperture photometry is likely to be biased by neighboring sources 
+                                            #    or by more than 10% of bad pixels in any aperture
+                                            # 2: the object has been deblended
+                                            # 4: at least one object pixel is saturated
+
+        -BoundarySIZE [30]                  # Restrict SExtractor Output Photometry Catalog by Dropping Sources at Boundary 
+                                            # NOTE: This would help to avoid selecting sources too close to image boundary. 
+
+        # > Other Configurations
+
+        -BACK_SIZE_SUPER [128]              # Also a SExtractor configuration BACK_SIZE, however, the background is 
+                                            # used to fill the masked regions (saturation contaminated pixels).
+                                            # NOTE: '_SUPER' means we would like to use a realtively large BACK_SIZE to
+                                            #       make a super-smooth (structure-less) background. So the default
+                                            #       -BACK_SIZE_SUPER > -BACK_SIZE
 
         -StarExt_iter [2]                   # make a further dilation for the masked region initially determined by SExtractor SEGMENTATION.
                                             # -StarExt_iter means the iteration times of the dilation process. 
         
         -PriorBanMask_Queue [[]]]           # A queue of -PriorBanMask in sfft.Easy_CrowdedPacket.
+                                            # Recall -PriorBanMask:
                                             # a Numpy boolean array, with shape consistent with reference (science).
                                             # one can deliver a customized mask that covers known 
                                             # variables/transients/bad-pixels by this argument.
@@ -67,32 +104,32 @@ class MultiEasy_CrowdedPacket:
 
         # ----------------------------- SFFT Subtraction --------------------------------- #
 
-        -ForceConv_Queue ['AUTO']          # A queue of -ForceConv in sfft.Easy_CrowdedPacket.
-                                           # it determines which image will be convolved, can be 'REF', 'SCI' and 'AUTO'.
-                                           # -ForceConv = 'AUTO' means SFFT will determine the convolution direction according to 
-                                           # FWHM_SCI and FWHM_REF: the image with better seeing will be convolved to avoid deconvolution.
+        -ForceConv_Queue ['AUTO']           # A queue of -ForceConv in sfft.Easy_CrowdedPacket.
+                                            # it determines which image will be convolved, can be 'REF', 'SCI' and 'AUTO'.
+                                            # -ForceConv = 'AUTO' means SFFT will determine the convolution direction according to 
+                                            # FWHM_SCI and FWHM_REF: the image with better seeing will be convolved to avoid deconvolution.
 
-        -GKerHW_Queue [None]               # A queue of -GKerHW in sfft.Easy_CrowdedPacket.
-                                           # The given kernel half-width, None means the kernel size will be 
-                                           # automatically determined by -KerHWRatio (to be seeing-related). 
+        -GKerHW_Queue [None]                # A queue of -GKerHW in sfft.Easy_CrowdedPacket.
+                                            # The given kernel half-width, None means the kernel size will be 
+                                            # automatically determined by -KerHWRatio (to be seeing-related). 
 
-        -KerHWRatio [2.0]                  # The ratio between FWHM and the kernel half-width
-                                           # KerHW = int(KerHWRatio * Max(FWHM_REF, FWHM_SCI))
+        -KerHWRatio [2.0]                   # The ratio between FWHM and the kernel half-width
+                                            # KerHW = int(KerHWRatio * Max(FWHM_REF, FWHM_SCI))
 
-        -KerHWLimit [(2, 20)]              # The lower & upper bounds for kernel half-width 
-                                           # KerHW is updated as np.clip(KerHW, KerHWLimit[0], KerHWLimit[1]) 
-                                           # Remarks: this is useful for a survey since it can constrain the peak GPU memory usage.
+        -KerHWLimit [(2, 20)]               # The lower & upper bounds for kernel half-width 
+                                            # KerHW is updated as np.clip(KerHW, KerHWLimit[0], KerHWLimit[1]) 
+                                            # Remarks: this is useful for a survey since it can constrain the peak GPU memory usage.
 
-        -KerPolyOrder [2]                  # Polynomial degree of kernel spatial variation.
+        -KerPolyOrder [2]                   # Polynomial degree of kernel spatial variation.
 
-        -BGPolyOrder [2]                   # Polynomial degree of background spatial variation.
-                                           # It is non-trivial for Crowded-Flavor SFFT, as the input images are usually not sky subtracted.
-
-        -ConstPhotRatio [True]             # Constant photometric ratio between images ? can be True or False
-                                           # ConstPhotRatio = True: the sum of convolution kernel is restricted to be a 
-                                           #                constant across the field. 
-                                           # ConstPhotRatio = False: the flux scaling between images is modeled by a 
-                                           #                polynomial with degree -KerPolyOrder.
+        -BGPolyOrder [2]                    # Polynomial degree of background spatial variation.
+                                            # It is non-trivial for Crowded-Flavor SFFT, as the input images are usually not sky subtracted.
+        
+        -ConstPhotRatio [True]              # Constant photometric ratio between images? can be True or False
+                                            # ConstPhotRatio = True: the sum of convolution kernel is restricted 
+                                            #   to be a constant across the field. 
+                                            # ConstPhotRatio = False: the flux scaling between images is modeled
+                                            #   by a polynomial with degree -KerPolyOrder.
 
         -MaskSatContam [False]              # Mask saturation-contaminated regions on difference image ? can be True or False
                                             # NOTE the pixels enclosed in the regions are replaced by NaN.
@@ -129,41 +166,55 @@ class MultiEasy_CrowdedPacket:
 
         self.FITS_REF_Queue = FITS_REF_Queue
         self.FITS_SCI_Queue = FITS_SCI_Queue
+
         self.KerHWRatio = KerHWRatio
         self.KerHWLimit = KerHWLimit
         self.KerPolyOrder = KerPolyOrder
         self.BGPolyOrder = BGPolyOrder
         self.ConstPhotRatio = ConstPhotRatio
         self.MaskSatContam = MaskSatContam
-        self.BACKSIZE_SUPER = BACKSIZE_SUPER
+        
         self.GAIN_KEY = GAIN_KEY
         self.SATUR_KEY = SATUR_KEY
+        self.BACK_TYPE = BACK_TYPE
+        self.BACK_VALUE = BACK_VALUE
+        self.BACK_SIZE = BACK_SIZE
+        self.BACK_FILTERSIZE = BACK_FILTERSIZE
+        
         self.DETECT_THRESH = DETECT_THRESH
+        self.DETECT_MINAREA = DETECT_MINAREA
+        self.DETECT_MAXAREA = DETECT_MAXAREA
+        self.DEBLEND_MINCONT = DEBLEND_MINCONT
+        self.BACKPHOTO_TYPE = BACKPHOTO_TYPE
+        self.ONLY_FLAGS = ONLY_FLAGS
+        self.BoundarySIZE = BoundarySIZE
+        
+        self.BACK_SIZE_SUPER = BACK_SIZE_SUPER
         self.StarExt_iter = StarExt_iter
         self.NUM_TASK = len(FITS_SCI_Queue)
 
         if FITS_DIFF_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument FITS_DIFF_Queue is Empty then Use default [None] instead !!!')
+            warnings.warn('MeLOn WARNING: Argument FITS_DIFF_Queue is Empty then Use default [...None...] instead!')
             self.FITS_DIFF_Queue = [None] * self.NUM_TASK
         else: self.FITS_DIFF_Queue = FITS_DIFF_Queue
         
         if FITS_Solution_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument FITS_Solution_Queue is Empty then Use default [None] instead !!!')
+            warnings.warn('MeLOn WARNING: Argument FITS_Solution_Queue is Empty then Use default [...None...] instead!')
             self.FITS_Solution_Queue = [None] * self.NUM_TASK
         else: self.FITS_Solution_Queue = FITS_Solution_Queue
         
         if ForceConv_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument ForceConv_Queue is Empty then Use default [AUTO] instead !!!')
+            warnings.warn('MeLOn WARNING: Argument ForceConv_Queue is Empty then Use default [...AUTO...] instead!')
             self.ForceConv_Queue = ['AUTO'] * self.NUM_TASK
         else: self.ForceConv_Queue = ForceConv_Queue
 
         if GKerHW_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument GKerHW_Queue is Empty then Use default [None] instead !!!')
+            warnings.warn('MeLOn WARNING: Argument GKerHW_Queue is Empty then Use default [...None...] instead!')
             self.GKerHW_Queue = [None] * self.NUM_TASK
         else: self.GKerHW_Queue = GKerHW_Queue
 
         if PriorBanMask_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument PriorBanMask_Queue is Empty then Use default [None] instead !!!')
+            warnings.warn('MeLOn WARNING: Argument PriorBanMask_Queue is Empty then Use default [...None...] instead!')
             self.PriorBanMask_Queue = [None] * self.NUM_TASK
         else: self.PriorBanMask_Queue = PriorBanMask_Queue
 
@@ -198,20 +249,23 @@ class MultiEasy_CrowdedPacket:
                 PriorBanMask = self.PriorBanMask_Queue[taskidx]
                 try:
                     with TimeoutAfter(timeout=TIMEOUT_4PREPRO_EACHTASK, exception=TimeoutError):
-                        SFFTPrepDict = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI).\
-                            AutoMask(BACKSIZE_SUPER=self.BACKSIZE_SUPER, GAIN_KEY=self.GAIN_KEY, \
-                            SATUR_KEY=self.SATUR_KEY, DETECT_THRESH=self.DETECT_THRESH, \
-                            StarExt_iter=self.StarExt_iter, PriorBanMask=PriorBanMask)
-
+                        _ACP = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=self.GAIN_KEY, \
+                            SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
+                            BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, \
+                            DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, \
+                            BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE)
+                        SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=self.BACK_SIZE_SUPER, StarExt_iter=self.StarExt_iter, \
+                            PriorBanMask=PriorBanMask)
+                        
                         DICT_STATUS_BAR['task-[%d]' %taskidx] = 1    # NOTE Preprocessing Successed
                         DICT_PRODUCTS['task-[%d]' %taskidx]['SFFTPrepDict'] = SFFTPrepDict
                         print('\nMeLOn CheckPoint: Successful Preprocessing for task-[%d] in thread-[%d]!' \
-                            %(taskidx, INDEX_THREAD_4PREPROC))
+                               %(taskidx, INDEX_THREAD_4PREPROC))
                 except:
                     DICT_STATUS_BAR['task-[%d]' %taskidx] = -1      # NOTE Preprocessing Failed
                     DICT_PRODUCTS['task-[%d]' %taskidx]['SFFTPrepDict'] = None
                     print('\nMeLOn ERROR: UnSuccessful Preprocessing for task-[%d] in thread-[%d]!' \
-                        %(taskidx, INDEX_THREAD_4PREPROC))
+                           %(taskidx, INDEX_THREAD_4PREPROC))
             
             print('\nMeLOn Report: Preprocessing thread-[%d] comes to end!' %INDEX_THREAD_4PREPROC)
 

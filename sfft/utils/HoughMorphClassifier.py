@@ -1,84 +1,90 @@
 import sys
 import warnings
 import numpy as np
+from PYSEx import PY_SEx
 from tempfile import mkdtemp
-from astropy.stats import sigma_clipped_stats 
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.HoughDetection import Hough_Detection
+# version: Jul 19, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
-
-"""
-# MeLOn Notes
-# @ Point-Source Extractor
-#   A) A PSFEx suggested Morphological Classifier, based on a 2D distribution diagram
-#      FLUX_RADIUS [X-axis] - MAG_AUTO [Y-axis], A universal but naive approach.
-#      We first draw all isolated sources on the plane, and the typical distribution will form a 'Y' shape.
-#      A nearly vertical branch, A nearly horizontal branch and their cross with a tail at faint side.
-#
-#      Here I give rough conclusions with comments, note I have compared with Legacy Survety Tractor Catalog.
-#      a. The point sources would be distributed around the nearly vertical stright line. {vertical branch}
-#         NOTE At the faint end, point sources no longer cling to the line, being diffuse in the cross and tail.
-#      b. Close to the bright end of the stright-line are saturated or slight-nonlinear sources, with a deviated direction.
-#      c. The right side of the line are typically extended structure, mainly including various galaxies. {horizontal branch}
-#         NOTE At the faint end, likewise, extended sources also exist, being diffuse in the cross and tail.
-#      d. Scattering points are located at very left side of the line, they are generally hotpix, cosmic-ray or 
-#         some small-scale artifacts. Keep in mind, they are typically outlier-like and away from the cross and tail.
-#
-#      METHOD: For simplicity, we only crudely divide the diagram into 3 regions, w.r.t. the vetical line.
-#              they are, Radius-Mid (FR-M), Radius-Large (FR-L) and Radius-Small (FR-S).
-#
-#   B) 3 hierarchic groups                
-#      > Good Sources:
-#            + NOT in FR-S region (union of FR-M & FR-L)
-#              NOTE Good Sources is consist of the vertical & horizontal branches with their cross (not the tail), 
-#                   which is roughly equivalent to the set of REAL Point-Sources & Extended Sources 
-#                   with rejection the samples in the tail (at faint & small-radius end).
-#              NOTE Good Sources are commonly used as FITTING Candidates in Image Subtraction.
-#                   It is acceptable to lose the samples in the tail.
-#         
-#           >> {subgroup} Point Sources:
-#                  + Restricted into FR-M Region   |||   Should be located around the Hough-Line
-#                  + Basically Circular-Shape      |||   PsfEx-ELLIPTICITY = (A-B) / (A+B) < PS_ELLIPThresh
-#                    NOTE At cross region, this identification criteria mis-include some extended source
-#                         On the flip side, some REAL PointSource samples are missing in the tail.
-#                    NOTE Point Sources are usually employed as FWHM Estimator.
-#                    NOTE We may lossen PS_ELLIPThresh if psf itself is significantly asymmetric (e.g. tracking problem).
-#
-#                  >>> {sub-subgroup} High-SNR Point Sources
-#                          + SNR_WIN > HPS_SNRThresh, then reject the bright end [typically, 15% (HPS_Reject)] point-sources.
-#                          ++ If remaining sources are less than 30 (HPS_NumLowerLimit),
-#                             Simply Use the point-sources with highest SNR_WIN.
-#                          NOTE In Common, this subset is for Flux-Calibration & Building PSF Model.
-#                          NOTE The defult HPS_SNRThresh = 100 might be too high, you may loosen it to
-#                               ~ 15 to make sure you have enough samples, especially for psf modeling.
-# 
-#      @ Remarks on the HPS BrightEnd-Cutoff 
-#        Assume SExtractor received precise SATURATE, saturated sources should be fully rejected via FLAG constrain. 
-#        However, in practice, it's hard to fullfill this condition strictly, that is why we design a simple BrightEnd-Cutoff
-#        to prevent the set from such contaminations. Compared with mentioned usage of GS & PS, that of HPS is more 
-#        vulnerable to such situation. FLUX-Calibtation and Building PSF-Model do not require sample completeness, but 
-#        likely to be sensitive to the sources with appreiable non-linear response.
-#
-#   C) Additional WARNINGS
-#      a. This extracor is ONLY designed for sparse field (isolated sources dominated case).
-#         We just take these isloated & non-saturated sources (FLAGS=0) into account in this function.
-#
-#      b. We employ Hough Transformation to detect the Stright-Line feature in the image, 
-#         naturally sampled from the raw scatter diagram. But note such diagram makes sense 
-#         only if we could detect enough sources (typically > 200) in the given image.
-#         NOTE Reversed axes employed --- MAG_AUTO [X-axis] - FLUX_RADIUS [Y-axis].
-
-"""
+__version__ = "v1.2"
 
 class Hough_MorphClassifier:
+    
+    """
+    # @ Point-Source Extractor
+    #   A) A PSFEx suggested Morphological Classifier, based on a 2D distribution diagram
+    #      FLUX_RADIUS [X-axis] - MAG_AUTO [Y-axis], A universal but naive approach.
+    #      We first draw all isolated sources on the plane, and the typical distribution will form a 'Y' shape.
+    #      A nearly vertical branch, A nearly horizontal branch and their cross with a tail at faint side.
+    #
+    #      Here I give rough conclusions with comments, note I have compared with Legacy Survety Tractor Catalog.
+    #      a. The point sources would be distributed around the nearly vertical stright line. {vertical branch}
+    #         NOTE At the faint end, point sources no longer cling to the line, being diffuse in the cross and tail.
+    #      b. Close to the bright end of the stright-line are saturated or slight-nonlinear sources, with a deviated direction.
+    #      c. The right side of the line are typically extended structure, mainly including various galaxies. {horizontal branch}
+    #         NOTE At the faint end, likewise, extended sources also exist, being diffuse in the cross and tail.
+    #      d. Scattering points are located at very left side of the line, they are generally hotpix, cosmic-ray or 
+    #         some small-scale artifacts. Keep in mind, they are typically outlier-like and away from the cross and tail.
+    #
+    #      METHOD: For simplicity, we only crudely divide the diagram into 3 regions, w.r.t. the vetical line.
+    #              they are, Radius-Mid (FR-M), Radius-Large (FR-L) and Radius-Small (FR-S).
+    #
+    #   B) 3 hierarchic groups                
+    #      > Good Sources:
+    #            + NOT in FR-S region (union of FR-M & FR-L)
+    #              NOTE Good Sources is consist of the vertical & horizontal branches with their cross (not the tail), 
+    #                   which is roughly equivalent to the set of REAL Point-Sources & Extended Sources 
+    #                   with rejection the samples in the tail (at faint & small-radius end).
+    #              NOTE Good Sources are commonly used as FITTING Candidates in Image Subtraction.
+    #                   It is acceptable to lose the samples in the tail.
+    #         
+    #           >> {subgroup} Point Sources:
+    #                  + Restricted into FR-M Region   |||   Should be located around the Hough-Line
+    #                  + Basically Circular-Shape      |||   PsfEx-ELLIPTICITY = (A-B) / (A+B) < PS_ELLIPThresh
+    #                    NOTE At cross region, this identification criteria mis-include some extended source
+    #                         On the flip side, some REAL PointSource samples are missing in the tail.
+    #                    NOTE Point Sources are usually employed as FWHM Estimator.
+    #                    NOTE We may lossen PS_ELLIPThresh if psf itself is significantly asymmetric (e.g. tracking problem).
+    #                    WARNING: At the faint end, this subgroup would be contaminated by round extended sources 
+    #                             (meet PS_ELLIPThresh) which also lie in the cross region. When the field is galaxy-dominated, 
+    #                             especially, the contamination can be severe and you may over-estimated FWHM!
+    #
+    #                  >>> {sub-subgroup} High-SNR Point Sources
+    #                          + SNR_WIN > HPS_SNRThresh, then reject the bright end [typically, 15% (HPS_Reject)] point-sources.
+    #                          ++ If remaining sources are less than 30 (HPS_NumLowerLimit),
+    #                             Simply Use the point-sources with highest SNR_WIN.
+    #                          NOTE Usually, this subset is for Flux-Calibration & Building PSF Model.
+    #                          NOTE The defult HPS_SNRThresh = 100 might be too high, you may loosen it to
+    #                               ~ 15 to make sure you have enough samples, especially for psf modeling.
+    #                          WARNING: For galaxy-dominated field, it would be better to estimate FWHM by this set.
+    #                                   As SNR is GAIN-sensitive, please ensure the correctness of the GAIN keyword.
+    # 
+    #      @ Remarks on the HPS BrightEnd-Cutoff 
+    #        Assume SExtractor received precise SATURATE, saturated sources should be fully rejected via FLAG constrain. 
+    #        However, in practice, it's hard to fullfill this condition strictly, that is why we design a simple BrightEnd-Cutoff
+    #        to prevent the set from such contaminations. Compared with mentioned usage of GS & PS, that of HPS is more 
+    #        vulnerable to such situation. FLUX-Calibtation and Building PSF-Model do not require sample completeness, but 
+    #        likely to be sensitive to the sources with appreiable non-linear response.
+    #
+    #   C) Additional WARNINGS
+    #      a. This extracor is ONLY designed for sparse field (isolated sources dominated cases).
+    #         We usually only take these isloated & non-saturated sources (FLAGS=0) into account in this function.
+    #         Sometimes, we may loosen the constrain on FLAGS to be [0,2].
+    #
+    #      b. We employ Hough Transformation to detect the Stright-Line feature in the image, 
+    #         naturally sampled from the raw scatter diagram. But note such diagram makes sense 
+    #         only if we could detect enough sources (typically > 200) in the given image.
+    #         NOTE Reversed axes employed --- MAG_AUTO [X-axis] - FLUX_RADIUS [Y-axis].
+    #
+    """
 
     def MakeCatalog(FITS_obj, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
         BACK_TYPE='AUTO', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, \
-        DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
-        BACKPHOTO_TYPE='LOCAL', CHECKIMAGE_TYPE='NONE', \
-        AddRD=False, BoundarySIZE=30, AddSNR=True):
+        DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, \
+        BACKPHOTO_TYPE='LOCAL', CHECKIMAGE_TYPE='NONE', AddRD=False, ONLY_FLAGS=[0], \
+        BoundarySIZE=30, AddSNR=True):
 
         # * Trigger SExtractor
         #   NOTE: it is a compromise to adopt XY rather than XYWIN for both point and extended sources.
@@ -92,8 +98,8 @@ class Hough_MorphClassifier:
         PYSEX_OP = PY_SEx.PS(FITS_obj=FITS_obj, PL=PL, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
             BACK_TYPE=BACK_TYPE, BACK_VALUE=BACK_VALUE, BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, \
             DETECT_THRESH=DETECT_THRESH, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, \
-            BACKPHOTO_TYPE=BACKPHOTO_TYPE, CHECKIMAGE_TYPE=CHECKIMAGE_TYPE, AddRD=AddRD, ONLY_FLAG0=True, \
-            XBoundary=BoundarySIZE, YBoundary=BoundarySIZE, MDIR=None)
+            DEBLEND_MINCONT=DEBLEND_MINCONT, BACKPHOTO_TYPE=BACKPHOTO_TYPE, CHECKIMAGE_TYPE=CHECKIMAGE_TYPE, \
+            AddRD=AddRD, ONLY_FLAGS=ONLY_FLAGS, XBoundary=BoundarySIZE, YBoundary=BoundarySIZE, MDIR=None)
         
         return PYSEX_OP
     
@@ -121,11 +127,12 @@ class Hough_MorphClassifier:
         #        NOTE: One need to choose a proper Hough_FRLowerLimit according to the fact if the image is 
         #              under/well/over-sampling (depending on the instrumental configuration and typical seeing conditions)
         #              recommended values of Hough_FRLowerLimit range from 0.1 to 1.0
-
+        
         MA, FR = MA_FR[:, 0], MA_FR[:, 1]
         MA_MID = np.nanmedian(MA)
         Hmask = np.logical_and.reduce((FR > Hough_FRLowerLimit, FR < 10.0, MA > MA_MID-7.0, MA < MA_MID+7.0))
         
+        # FIXME USER-DEFINED
         HDOP = Hough_Detection.HD(XY_obj=MA_FR, Hmask=Hmask, res=Hough_res, \
             count_thresh=Hough_count_thresh, peakclip=Hough_peakclip)
         ThetaPeaks, RhoPeaks, ScaLineDIS = HDOP[1], HDOP[2], HDOP[4]
@@ -160,12 +167,12 @@ class Hough_MorphClassifier:
             # NOTE: If we have enough samples, using the bright & small-FR subgroup might be 
             #       more appropriate for the estimate. However, it is quite tricky to find a generic
             #       reliable way to find the point sources when the Hough Transformation doesn't work.
-            #       Here we only simply reject the samples with low significance.
+            #       Here we give a simple emperical solution.
 
-            BPmask = AstSEx['MAGERR_AUTO'] < 0.2
-            Rmid = sigma_clipped_stats(MA_FR[BPmask, 1], sigma=3.0, maxiters=5)[1]
-            MASK_FRM = np.abs(MA_FR[:, 1]  - Rmid) < BeltHW
-            MASK_FRL = MA_FR[:, 1]  - Rmid >  BeltHW
+            BPmask = AstSEx['MAGERR_AUTO'] < np.percentile(AstSEx['MAGERR_AUTO'], 75)
+            Rv = np.percentile(MA_FR[BPmask, 1], 25)
+            MASK_FRM = np.abs(MA_FR[:, 1]  - Rv) < BeltHW
+            MASK_FRL = MA_FR[:, 1]  - Rv >  BeltHW
             warnings.warn('MeLOn WARNING: the STANDBY approach is actived to determine the FRM region!')
         
         MASK_FRS = ~np.logical_or(MASK_FRM, MASK_FRL)
@@ -207,16 +214,9 @@ class Hough_MorphClassifier:
                     warnings.warn('MeLOn WARNING: The number of High-SNR Point Sources still does not reach the lower limit !')    
             print('MeLOn CheckPoint: High-SNR Point-Sources in the image [%d]' %np.sum(MASK_HPS))
 
-
         """
         # * SHOW THE CLASSIFICATION [Just for Check]
 
-        DIR_4PLOT = '...'
-        PNG_Check = '/'.join([DIR_4PLOT, 'HMC_Check.png'])
-        AstSEx_GS = AstSEx[MASK_GS]
-        AstSEx_PS = AstSEx[MASK_PS]
-        AstSEx_HPS = AstSEx[MASK_HPS]
-        
         import matplotlib
         import matplotlib.pyplot as plt
         from astroML.plotting import setup_text_plots  # optional
@@ -224,6 +224,11 @@ class Hough_MorphClassifier:
         matplotlib.rc('text', usetex=True)
         matplotlib.rcParams['text.latex.preamble'] = [r'\boldmath']
         plt.switch_backend('agg')
+
+        AstSEx_GS = AstSEx[MASK_GS]
+        AstSEx_PS = AstSEx[MASK_PS]
+        AstSEx_HPS = AstSEx[MASK_HPS]
+        MA_FR = np.array([AstSEx['MAG_AUTO'], AstSEx['FLUX_RADIUS']]).T
 
         plt.figure()
         print('MeLOn CheckPoint: Diagram Checking for HoughMorphClassifier (Natural Axes) !')
@@ -243,7 +248,8 @@ class Hough_MorphClassifier:
         plt.ylabel('MAG AUTO')
         plt.xlim(0, 10.0)
         plt.ylim(MA1+1, MA0-1)
-        plt.savefig(PNG_Check, dpi=400)
+
+        plt.savefig('HMC_Check.png', dpi=400)
         plt.close()
         
         """

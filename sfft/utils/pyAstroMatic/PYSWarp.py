@@ -7,40 +7,12 @@ import os.path as pa
 from astropy.io import fits
 from astropy.wcs import WCS
 from tempfile import mkdtemp
+from CombineHeader import Combine_Header
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
+# version: Jul 19, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.1"
-
-"""
-# MeLOn Notes
-# @ Python Version of SWarp
-#  a) PYSWarp Purpose
-#     a. The current python version only implement Resampling of single SEF-FITS image.
-#     b. Note SWarp can also do the simple combination procedure after Resampling.
-#
-#  b) SWarp destination-frame
-#     @ Default-NE Mode
-#       The output WCS-frame simply use canonical N-E orientation, i.e., NE-WCS-Frame. 
-#       NOTE this mode is not supported in our function.
-#     @ Given-REF Mode
-#       The output WCS-frame (including image size) is determined by the given FITS_ref, 
-#       we ganna to prepare a .head file, coincident name with FITS_Re, to store REF-WCS-Frame.
-# 
-#  c) SWarp resulting header 
-#     a. SWarp will automatically calculate Maximum equivalent Gain (to GAIN) & Exposure (to EXPTIME)
-#        with additional Saturation (SATURATE) value, into resulting product's header. 
-#        However, they are trivial for our non-combination purpose.
-#     b. In our function, the resulting product's header is constructed by removing 
-#        wcs keywords in FITS_obj and adding those in FITS_ref. In additional, 
-#        we will record the SWarp parameters used in the function.
-#     c. SWarp will automatically record the processing time in resulting header.
-#
-#  d) Tips on resampling
-#     NOTE: LANCZOS4 is relatively time-consuming
-#     NOTE: oversampling may cause higher pixel correlation
-
-"""
 
 class PY_SWarp:
     @staticmethod
@@ -48,6 +20,35 @@ class PY_SWarp:
         GAIN_KEY='GAIN', SATUR_KEY='SATURATE', EXPTIME_KEY='EXPTIME', \
         oversampling=1, method='LANCZOS3', SUBTRACT_BACK='N', Fillvalue=None, \
         WEIGHT_SUFFIX='.weight.fits', WRITE_XML='N', VERBOSE_TYPE='NORMAL'):
+
+        """
+        # @ Python Version of SWarp
+        #  a) PYSWarp Purpose
+        #     1. The current python version only implement Resampling of single SEF-FITS image.
+        #     2. Note SWarp can also do the simple combination procedure after Resampling.
+        #
+        #  b) SWarp destination-frame
+        #     @ Default-NE Mode
+        #       The output WCS-frame simply use canonical N-E orientation, i.e., NE-WCS-Frame. 
+        #       NOTE this mode is not supported in our function.
+        #     @ Given-REF Mode
+        #       The output WCS-frame (including image size) is determined by the given FITS_ref, 
+        #       we ganna to prepare a .head file, coincident name with FITS_Re, to store REF-WCS-Frame.
+        # 
+        #  c) SWarp resulting header 
+        #     a. SWarp will automatically calculate Maximum equivalent Gain (to GAIN) & Exposure (to EXPTIME)
+        #        with additional Saturation (SATURATE) value, into resulting product's header. 
+        #        However, they are trivial for our non-combination purpose.
+        #     b. In our function, the resulting product's header is constructed by removing 
+        #        wcs keywords in FITS_obj and adding those in FITS_ref. In additional, 
+        #        we will record the SWarp parameters used in the function.
+        #     c. SWarp will automatically record the processing time in resulting header.
+        #
+        #  d) Tips on resampling
+        #     NOTE: LANCZOS4 is relatively time-consuming
+        #     NOTE: oversampling may cause higher pixel correlation
+        #
+        """
 
         # * Check Process for FITS_obj header
         phr_obj = fits.getheader(FITS_obj, ext=0)
@@ -81,7 +82,7 @@ class PY_SWarp:
         FITS_tWRe = TDIR + '/%s.tmp_wresamp.fits' %pa.basename(FITS_obj)[:-5]
 
         # * Build .head file from FITS_ref
-        #    NOTE: SIP distorsion terms require w.to_header(relax=True)
+        #   NOTE: SIP distorsion terms require w.to_header(relax=True)
 
         phr_ref = fits.getheader(FITS_ref, ext=0)
         w_ref = WCS(phr_ref)            
@@ -98,155 +99,9 @@ class PY_SWarp:
             %(TDIR, FITS_obj, FITS_tRe, FITS_tWRe, swarpconfig_path))
 
         # * Make a combined header for resulting products
-        def combine_header(hdr_base, hdr_wcs):
-            
-            """
-            # Remarks on the wcs convention discrepancy between FITS header and Astropy
-            # Case A:
-            #    FITS HEADER: 
-            #        CTYPE1 = 'RA---TAN'   CTYPE2 = 'DEC--TAN'
-            #        CD1_1 = ...           CD1_2 = ...
-            #        CD2_1 = ...           CD2_2 = ... 
-            #        NOTE: NO DISTORTION TERMS!
-            #    
-            #    Astropy:        
-            #        # print(WCS(phr).to_header())
-            #        CTYPE1 = 'RA---TAN'   CTYPE2 = 'DEC--TAN'
-            #        PC1_1 = ...           PC1_2 = ...
-            #        PC2_1 = ...           PC2_2 = ... 
-            #        NOTE: if CD1_2 = CD2_1 = 0.0, then PC1_2 and PC2_1 will be absent.
-            
-            # Case B:
-            #    FITS HEADER: 
-            #        CTYPE1 = 'RA---TPV'   CTYPE2 = 'DEC--TPV'
-            #        CD1_1 = ...           CD1_2 = ...
-            #        CD2_1 = ...           CD2_2 = ... 
-            #        PV1_0 = ...           PV1_1 = ...
-            #        ...
-            #    
-            #    Astropy:        
-            #        # print(WCS(phr).to_header())
-            #        CTYPE1 = 'RA---TPV'   CTYPE2 = 'DEC--TPV'
-            #        PC1_1 = ...           PC1_2 = ...
-            #        PC2_1 = ...           PC2_2 = ... 
-            #        PV1_0 = ...           PV1_1 = ...
-            #        ...
-            #        NOTE: if CD1_2 = CD2_1 = 0.0, then PC1_2 and PC2_1 will be absent.
-            #
-            # Case B': a possible common situation that causes Astropy.WCS incompatibility.
-            #    FITS HEADER:
-            #        CTYPE1 = 'RA---TAN'   CTYPE2 = 'DEC--TAN'
-            #        CD1_1 = ...           CD1_2 = ...
-            #        CD2_1 = ...           CD2_2 = ... 
-            #        PV1_0 = ...           PV1_1 = ...
-            #        ...
-            #     
-            #    NOTE: One need to correct as follows to avoid the error
-            #          phr['CTYPE1'] = 'RA---TPV'
-            #          phr['CTYPE1'] = 'DEC--TPV'
-            #          w = WCS(phr)
-            #
-            #    Astropy:        
-            #        # print(w.to_header())
-            #        CTYPE1 = 'RA---TPV'   CTYPE2 = 'DEC--TPV'
-            #        PC1_1 = ...           PC1_2 = ...
-            #        PC2_1 = ...           PC2_2 = ... 
-            #        PV1_0 = ...           PV1_1 = ...
-            #        ...
-            #        NOTE: if CD1_2 = CD2_1 = 0.0, then PC1_2 and PC2_1 will be absent.
-            
-            # Case C:
-            #    FITS HEADER: 
-            #        CTYPE1 = 'RA---TAN-SIP'   CTYPE2 = 'DEC--TAN-SIP'
-            #        CD1_1 = ...           CD1_2 = ...
-            #        CD2_1 = ...           CD2_2 = ... 
-            #        A_ORDER = 2           
-            #        A_0_0 = ...           A_0_1 = ...
-            #        ...
-            #        B_ORDER = 2           
-            #        B_0_0 = ...           B_0_1 = ...
-            #        ...
-            #        AP_ORDER = 2           
-            #        AP_0_0 = ...          AP_0_1 = ...
-            #        ...
-            #        BP_ORDER = 2           
-            #        BP_0_0 = ...          BP_0_1 = ...
-            #        ...
-            #    
-            #    Astropy:        
-            #        # print(WCS(phr).to_header(relax=True))
-            #        CTYPE1 = 'RA---TAN-SIP'   CTYPE2 = 'DEC--TAN-SIP'
-            #        PC1_1 = ...           PC1_2 = ...
-            #        PC2_1 = ...           PC2_2 = ... 
-            #        A_ORDER = 2           
-            #        A_0_0 = ...           A_0_1 = ...
-            #        ...
-            #        B_ORDER = 2           
-            #        B_0_0 = ...           B_0_1 = ...
-            #        ...
-            #        AP_ORDER = 2           
-            #        AP_0_0 = ...          AP_0_1 = ...
-            #        ...
-            #        BP_ORDER = 2           
-            #        BP_0_0 = ...          BP_0_1 = ...
-            #        ...
-            #        NOTE: if CD1_2 = CD2_1 = 0.0, then PC1_2 and PC2_1 will be absent.
-            #        NOTE: here remember use relax=True!
-            
-            # NOTE: You may also use PC1_1 in FITS HEADER instead of CD1_1 in above cases.
-            #       It is readable, however, we do not recommend this.
-            """
-
-            def read_wcs(hdr):
-                if hdr['CTYPE1'] == 'RA---TAN' and 'PV1_0' in hdr:
-                    _hdr = hdr.copy()
-                    _hdr['CTYPE1'] = 'RA---TPV'
-                    _hdr['CTYPE2'] = 'DEC--TPV'
-                    w = WCS(_hdr)
-                else: w = WCS(hdr)
-                return w
-
-            # ** Remove wcs entries in hdr_base
-            hdr_b = hdr_base.copy()
-            delkeys = list(read_wcs(hdr_b).to_header(relax=True).keys())
-            if 'CD1_1' in hdr_base: 
-                delkeys += ['CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']
-            if 'MJD-OBS' in delkeys:
-                delkeys.remove('MJD-OBS')
-            if 'DATE-OBS' in delkeys:
-                delkeys.remove('DATE-OBS')
-            for key in delkeys:
-                if key in hdr_b:
-                    del hdr_b[key]
-            
-            # ** Extract wcs entries in hdr_wcs
-            hdr_w = hdr_wcs.copy()
-            wcshdr = read_wcs(hdr_w).to_header(relax=True)
-            if 'PC1_2' not in wcshdr: wcshdr['PC1_2'] = 0.0
-            if 'PC2_1' not in wcshdr: wcshdr['PC2_1'] = 0.0
-            if 'MJD-OBS' in wcshdr: del wcshdr['MJD-OBS']
-            if 'DATE-OBS' in wcshdr: del wcshdr['DATE-OBS']
-            
-            # ** Combine 
-            hdr_op = hdr_b.copy()
-            hdr_op.update(wcshdr)
-
-            # ** Post corrections
-            if hdr_wcs['CTYPE1'] == 'RA---TAN' and 'PV1_0' in hdr_wcs:
-                hdr_op['CTYPE1'] = 'RA---TAN'
-                hdr_op['CTYPE2'] = 'DEC--TAN'
-
-            if 'CD1_1' in hdr_wcs and 'PC1_1' in hdr_op:
-                hdr_op.rename_keyword('PC1_1', 'CD1_1')
-                hdr_op.rename_keyword('PC1_2', 'CD1_2')
-                hdr_op.rename_keyword('PC2_1', 'CD2_1')
-                hdr_op.rename_keyword('PC2_2', 'CD2_2')
-            
-            return hdr_op
-
         hdr_base = fits.getheader(FITS_obj, ext=0)
         hdr_wcs = fits.getheader(FITS_ref, ext=0)
-        hdr_op = combine_header(hdr_base, hdr_wcs)
+        hdr_op = Combine_Header.CH(hdr_base=hdr_base, hdr_wcs=hdr_wcs)
 
         hdr_op['SWARP_O'] = (pa.basename(FITS_obj), 'MeLOn: PYSWarp')
         hdr_op['SWARP_R'] = (pa.basename(FITS_ref), 'MeLOn: PYSWarp')

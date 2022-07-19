@@ -3,16 +3,20 @@ import numpy as np
 import os.path as pa
 from astropy.io import fits
 from sfft.AutoCrowdedPrep import Auto_CrowdedPrep
+# version: Jul 19, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.1"
+__version__ = "v1.2"
 
 class Easy_CrowdedPacket:
     @staticmethod
     def ECP(FITS_REF, FITS_SCI, FITS_DIFF=None, FITS_Solution=None, ForceConv='AUTO', \
-        GKerHW=None, KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        MaskSatContam=False, BACKSIZE_SUPER=128, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', DETECT_THRESH=5.0, \
-        StarExt_iter=2, PriorBanMask=None, BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
+        GKerHW=None, KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
+        ConstPhotRatio=True, MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
+        BACK_TYPE='AUTO', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, \
+        DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
+        ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask=None, \
+        BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
 
         """
         # NOTE: This function is to Perform Crowded-Flavor SFFT for single task:
@@ -41,18 +45,51 @@ class Easy_CrowdedPacket:
 
         # ----------------------------- Preprocessing with Saturation Rejection for Image-Masking --------------------------------- #
 
-        -GAIN_KEY ['GAIN']                  # keyword of GAIN in FITS header (of reference & science), for SExtractor configuration
-                                            # NOTE: we need to use SExtractor check image SEGMENTATION to mask Saturated sources.
+        # > Configurations for SExtractor
 
-        -SATUR_KEY ['SATURATE']             # keyword of saturation in FITS header (of reference & science), for SExtractor configuration
+        -GAIN_KEY ['GAIN']                  # SExtractor Parameter GAIN_KEY
+                                            # i.e., keyword of GAIN in FITS header (of reference & science)
+
+        -SATUR_KEY ['SATURATE']             # SExtractor Parameter SATUR_KEY
+                                            # i.e., keyword of effective saturation in FITS header (of reference & science)
                                             # Remarks: note that Crowded-Flavor SFFT does not require sky-subtracted images as inputs,
                                             #          so the default keyword is the common name for saturation level.
+        
+        -BACK_TYPE ['AUTO']                 # SExtractor Parameter BACK_TYPE = [AUTO or MANUAL].
+         
+        -BACK_VALUE [0]                     # SExtractor Parameter BACK_VALUE (only work for BACK_TYPE='MANUAL')
 
-        -DETECT_THRESH [5.0]                # Detect threshold for SExtractor configuration.
+        -BACK_SIZE [64]                     # SExtractor Parameter BACK_SIZE
 
-        -BACKSIZE_SUPER [128]               # BACK_SIZE for SExtractor configuration.
-                                            # NOTE: '_SUPER' means we would like to use a realtively large BACK_SIZE 
-                                            #        to make a super-smooth (structure-less) background.
+        -BACK_FILTERSIZE [3]                # SExtractor Parameter BACK_FILTERSIZE
+
+        -DETECT_THRESH [5.0]                # SExtractor Parameter DETECT_THRESH
+
+        -DETECT_MINAREA [5]                 # SExtractor Parameter DETECT_MINAREA
+        
+        -DETECT_MAXAREA [0]                 # SExtractor Parameter DETECT_MAXAREA
+
+        -DEBLEND_MINCONT [0.005]            # SExtractor Parameter DEBLEND_MINCONT (typically, 0.001 - 0.005)
+
+        -BACKPHOTO_TYPE ['LOCAL']           # SExtractor Parameter BACKPHOTO_TYPE
+
+        -ONLY_FLAGS [None]                  # Restrict SExtractor Output Photometry Catalog by Source FLAGS
+                                            # Common FLAGS (Here None means no restrictions on FLAGS):
+                                            # 1: aperture photometry is likely to be biased by neighboring sources 
+                                            #    or by more than 10% of bad pixels in any aperture
+                                            # 2: the object has been deblended
+                                            # 4: at least one object pixel is saturated
+
+        -BoundarySIZE [30]                  # Restrict SExtractor Output Photometry Catalog by Dropping Sources at Boundary 
+                                            # NOTE: This would help to avoid selecting sources too close to image boundary. 
+
+        # > Other Configurations
+
+        -BACK_SIZE_SUPER [128]              # Also a SExtractor configuration BACK_SIZE, however, the background is 
+                                            # used to fill the masked regions (saturation contaminated pixels).
+                                            # NOTE: '_SUPER' means we would like to use a realtively large BACK_SIZE to
+                                            #       make a super-smooth (structure-less) background. So the default
+                                            #       -BACK_SIZE_SUPER > -BACK_SIZE
 
         -StarExt_iter [2]                   # make a further dilation for the masked region initially determined by SExtractor SEGMENTATION.
                                             # -StarExt_iter means the iteration times of the dilation process. 
@@ -90,7 +127,7 @@ class Easy_CrowdedPacket:
                                             # ConstPhotRatio = False: the flux scaling between images is modeled by a 
                                             #                polynomial with degree -KerPolyOrder.
 
-        -MaskSatContam [False]              # Mask saturation-contaminated regions on difference image ? can be True or False
+        -MaskSatContam [False]              # Mask saturation-contaminated regions on difference image? can be True or False
                                             # NOTE the pixels enclosed in the regions are replaced by NaN.
 
         # ----------------------------- Input & Output --------------------------------- #
@@ -119,11 +156,13 @@ class Easy_CrowdedPacket:
 
         """
 
-        # * Perform Crowded-Prep [MaskSat]
-        SFFTPrepDict = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI).\
-            AutoMask(BACKSIZE_SUPER=BACKSIZE_SUPER, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
-            DETECT_THRESH=DETECT_THRESH, StarExt_iter=StarExt_iter, PriorBanMask=PriorBanMask)
-        
+        # * Perform Auto Crowded-Prep [Mask Saturation]
+        _ACP = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
+            BACK_TYPE=BACK_TYPE, BACK_VALUE=BACK_VALUE, BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, \
+            DETECT_THRESH=DETECT_THRESH, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, \
+            DEBLEND_MINCONT=DEBLEND_MINCONT, BACKPHOTO_TYPE=BACKPHOTO_TYPE, ONLY_FLAGS=ONLY_FLAGS, BoundarySIZE=BoundarySIZE)
+        SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=BACK_SIZE_SUPER, StarExt_iter=StarExt_iter, PriorBanMask=PriorBanMask)
+
         # * Determine ConvdSide & KerHW
         FWHM_REF = SFFTPrepDict['FWHM_REF']
         FWHM_SCI = SFFTPrepDict['FWHM_SCI']
