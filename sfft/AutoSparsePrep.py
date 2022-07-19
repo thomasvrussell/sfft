@@ -163,15 +163,18 @@ class Auto_SparsePrep:
 
         AstSEx_GSr, FWHM_REF, PixA_SEGr = main_hough(self.FITS_REF)
         AstSEx_GSs, FWHM_SCI, PixA_SEGs = main_hough(self.FITS_SCI)
+        print('MeLOn CheckPoint: Hough FWHM Estimate [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI))
+
         XY_GSr = np.array([AstSEx_GSr['X_IMAGE'], AstSEx_GSr['Y_IMAGE']]).T
         XY_GSs = np.array([AstSEx_GSs['X_IMAGE'], AstSEx_GSs['Y_IMAGE']]).T
+        tol = np.sqrt((FWHM_REF / MatchTolFactor)**2 + (FWHM_SCI / MatchTolFactor)**2)
+        print('MeLOn CheckPoint: Matching Tolerance [tol = %.3f pix]!' %tol)
 
         # * Determine Matched-GoodSources [MGS]
         #   @ Given precise WCS, one can use a high MatchTolFactor ~3.0
         #   @ For very sparse fields where WCS can be inaccurate, 
         #     one can loosen the tolerance with a low MatchTolFactor ~1.0
         
-        tol = np.sqrt((FWHM_REF/MatchTolFactor)**2 + (FWHM_SCI/MatchTolFactor)**2)
         Symm = Symmetric_Match.SM(POA=XY_GSr, POB=XY_GSs, tol=tol)
         AstSEx_MGSr = AstSEx_GSr[Symm[:, 0]]
         AstSEx_MGSs = AstSEx_GSs[Symm[:, 1]]
@@ -210,7 +213,7 @@ class Auto_SparsePrep:
 
         def main_phot(FITS_obj):
             PL = ['X_IMAGE', 'Y_IMAGE', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_AUTO', 'MAGERR_AUTO', \
-                    'FLAGS', 'FLUX_RADIUS', 'FWHM_IMAGE', 'A_IMAGE', 'B_IMAGE']
+                  'FLAGS', 'FLUX_RADIUS', 'FWHM_IMAGE', 'A_IMAGE', 'B_IMAGE']
             PYSEX_OP = PY_SEx.PS(FITS_obj=FITS_obj, PL=PL, GAIN_KEY=self.GAIN_KEY, SATUR_KEY=self.SATUR_KEY, \
                 BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, \
                 BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
@@ -238,11 +241,14 @@ class Auto_SparsePrep:
         
         AstSExr, FWHM_REF, PixA_SEGr = main_phot(self.FITS_REF)
         AstSExs, FWHM_SCI, PixA_SEGs = main_phot(self.FITS_SCI)
+        print('MeLOn CheckPoint: Crude FWHM Estimate [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI))
+
         XYr = np.array([AstSExr['X_IMAGE'], AstSExr['Y_IMAGE']]).T
         XYs = np.array([AstSExs['X_IMAGE'], AstSExs['Y_IMAGE']]).T
+        tol = np.sqrt((FWHM_REF / MatchTolFactor)**2 + (FWHM_SCI / MatchTolFactor)**2)
+        print('MeLOn CheckPoint: Matching Tolerance [tol = %.3f pix]!' %tol)
 
         # * Cross Match REF & SCI catalogs and Combine them
-        tol = np.sqrt((FWHM_REF/MatchTolFactor)**2 + (FWHM_SCI/MatchTolFactor)**2)
         _Symm = Symmetric_Match.SM(POA=XYr, POB=XYs, tol=tol)
         AstSEx_Mr = AstSExr[_Symm[:, 0]]
         AstSEx_Ms = AstSExs[_Symm[:, 1]]
