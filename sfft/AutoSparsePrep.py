@@ -1,10 +1,10 @@
 import warnings
 import fastremap
 import numpy as np
-from PYSEx import PY_SEx
 from astropy.io import fits
 import scipy.ndimage as ndimage
 from astropy.table import Column, hstack
+from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.SymmetricMatch import Symmetric_Match
 from sfft.utils.HoughMorphClassifier import Hough_MorphClassifier
 # version: Jul 19, 2022

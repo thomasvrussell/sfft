@@ -1,7 +1,6 @@
 import sys
 import warnings
 import numpy as np
-from PYSEx import PY_SEx
 from tempfile import mkdtemp
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.HoughDetection import Hough_Detection

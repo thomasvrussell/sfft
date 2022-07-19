@@ -7,7 +7,7 @@ import os.path as pa
 from astropy.io import fits
 from astropy.wcs import WCS
 from tempfile import mkdtemp
-from CombineHeader import Combine_Header
+from sfft.utils.CombineHeader import Combine_Header
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
 # version: Jul 19, 2022
 
