@@ -6,7 +6,7 @@ CDIR = pa.dirname(pa.abspath(__file__))
 """
 * Updates in Version 1.1+ 
 
-The test was created!
+this test was created!
 
 """
 
