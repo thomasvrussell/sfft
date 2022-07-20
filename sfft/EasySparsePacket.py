@@ -6,7 +6,7 @@ from astropy.io import fits
 import scipy.ndimage as ndimage
 from astropy.table import Column
 from sfft.AutoSparsePrep import Auto_SparsePrep
-# version: Jul 19, 2022
+# version: Jul 20, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.2"
@@ -19,8 +19,8 @@ class Easy_SparsePacket:
         BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
         ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect=None, Hough_FRLowerLimit=0.1, BeltHW=0.2, \
-        PS_ELLIPThresh=0.3, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan=None, \
-        CheckPostAnomaly=False, PARATIO_THRESH=3.0, BACKEND_4SUBTRACT='Cupy', \
+        PS_ELLIPThresh=0.3, MatchTol=None, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, \
+        XY_PriorBan=None, CheckPostAnomaly=False, PARATIO_THRESH=3.0, BACKEND_4SUBTRACT='Cupy', \
         CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
         
         """
@@ -111,15 +111,20 @@ class Easy_SparsePacket:
         -PS_ELLIPThresh [0.3]       # An additiona Restriction on ELLIPTICITY (ELLIPTICITY < PS_ELLIPThresh) for point sources.
                                     # NOTE: IT WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE :::: determine point-sources
                                     # NOTE: IT WORKS FOR Auto-Sparse-Prep [SEMI-AUTO] MODE :::: estimate a crude FWHM
-                                    
-        -MatchTolFactor [3.0]       # The separation tolerance of source matching for selecting subtraction sources is 
-                                    # defined as np.sqrt((FWHM_REF/MatchTolFactor)**2 + (FWHM_SCI/MatchTolFactor)**2)
+
+        -MatchTol [None]            # Given separation tolerance (pix) for source matching 
+                                    # NOTE: IT WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE :::: Cross-Match between REF & SCI
+                                    # NOTE: IT WORKS FOR Auto-Sparse-Prep [SEMI-AUTO] MODE :::: Cross-Match between REF & SCI AND
+                                    #       Cross-Match between the prior selection and mean image coordinates of matched REF-SCI sources.
+
+        -MatchTolFactor [3.0]       # The separation tolerance (pix) for source matching calculated by FWHM,
+                                    # MatchTol = np.sqrt((FWHM_REF/MatchTolFactor)**2 + (FWHM_SCI/MatchTolFactor)**2)
                                     # @ Given precise WCS, one can use a high MatchTolFactor ~3.0
                                     # @ For very sparse fields where WCS can be inaccurate, 
                                     #   one can loosen the tolerance with a low MatchTolFactor ~1.0
                                     # NOTE: IT WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE :::: Cross-Match between REF & SCI
-                                    # NOTE: IT WORKS FOR Auto-Sparse-Prep [SEMI-AUTO] MODE :::: Cross-Match between REF & SCI
-                                    #       AND the same tolerance is also used for matching the prior selection.
+                                    # NOTE: IT WORKS FOR Auto-Sparse-Prep [SEMI-AUTO] MODE :::: Cross-Match between REF & SCI AND
+                                    #       Cross-Match between the prior selection and mean image coordinates of matched REF-SCI sources.
 
         -MAGD_THRESH [0.12]         # kicking out the significant variables if the difference of 
                                     # instrument magnitudes (MAG_AUTO) measured on reference and science 
@@ -225,14 +230,15 @@ class Easy_SparsePacket:
             IMAGE_MASK_METHOD = 'HOUGH-AUTO'
             print('MeLOn CheckPoint: TRIGGER Auto-Sparse-Prep [%s] MODE!' %IMAGE_MASK_METHOD)
             SFFTPrepDict = _ASP.HoughAutoMask(Hough_FRLowerLimit=Hough_FRLowerLimit, BeltHW=BeltHW, \
-                PS_ELLIPThresh=PS_ELLIPThresh, MatchTolFactor=MatchTolFactor, MAGD_THRESH=MAGD_THRESH, \
-                StarExt_iter=StarExt_iter, XY_PriorBan=XY_PriorBan)
+                PS_ELLIPThresh=PS_ELLIPThresh, MatchTol=MatchTol, MatchTolFactor=MatchTolFactor, \
+                MAGD_THRESH=MAGD_THRESH, StarExt_iter=StarExt_iter, XY_PriorBan=XY_PriorBan)
         
         if XY_PriorSelect is not None:
             IMAGE_MASK_METHOD = 'SEMI-AUTO'
             print('MeLOn CheckPoint: TRIGGER Auto-Sparse-Prep [%s] MODE!' %IMAGE_MASK_METHOD)
             SFFTPrepDict = _ASP.SemiAutoMask(XY_PriorSelect=XY_PriorSelect, BeltHW=BeltHW, \
-                PS_ELLIPThresh=PS_ELLIPThresh, MatchTolFactor=MatchTolFactor, StarExt_iter=StarExt_iter)
+                PS_ELLIPThresh=PS_ELLIPThresh, MatchTol=MatchTol, MatchTolFactor=MatchTolFactor, \
+                StarExt_iter=StarExt_iter)
 
         # * Determine ConvdSide & KerHW
         FWHM_REF = SFFTPrepDict['FWHM_REF']
@@ -261,7 +267,7 @@ class Easy_SparsePacket:
             BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
             NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
         print('\nMeLOn Report: Compiling Functions in SFFT Subtraction Takes [%.3f s]' %(time.time() - Tcomp_start))
-        
+       
         # * Perform SFFT Subtraction
         from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
 

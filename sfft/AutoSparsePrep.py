@@ -7,7 +7,7 @@ from astropy.table import Column, hstack
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.SymmetricMatch import Symmetric_Match
 from sfft.utils.HoughMorphClassifier import Hough_MorphClassifier
-# version: Jul 19, 2022
+# version: Jul 20, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.2"
@@ -138,7 +138,7 @@ class Auto_SparsePrep:
         return SFFTPrepDict
 
     def HoughAutoMask(self, Hough_FRLowerLimit=0.1, BeltHW=0.2, PS_ELLIPThresh=0.3, \
-        MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan=None):
+        MatchTol=None, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan=None):
         # - Hough Transform is used to determine subtraction-sources
 
         # * Use Hough-MorphClassifer to identify GoodSources in REF & SCI
@@ -168,15 +168,18 @@ class Auto_SparsePrep:
 
         XY_GSr = np.array([AstSEx_GSr['X_IMAGE'], AstSEx_GSr['Y_IMAGE']]).T
         XY_GSs = np.array([AstSEx_GSs['X_IMAGE'], AstSEx_GSs['Y_IMAGE']]).T
-        tol = np.sqrt((FWHM_REF / MatchTolFactor)**2 + (FWHM_SCI / MatchTolFactor)**2)
-        print('MeLOn CheckPoint: Matching Tolerance [tol = %.3f pix]!' %tol)
+
+        UMatchTol = MatchTol
+        if MatchTol is None:
+            # - Given precise WCS, one can use a high MatchTolFactor ~3.0
+            # - For very sparse fields where WCS is inaccurate, one can loosen MatchTolFactor to ~1.0
+            # - WARNING NOTE: it can go wrong when the estimated FWHM is highly inaccurate.
+
+            UMatchTol = np.sqrt((FWHM_REF / MatchTolFactor)**2 + (FWHM_SCI / MatchTolFactor)**2)
+        print('MeLOn CheckPoint: Used Matching Tolerance [tol = %.3f pix]!' %UMatchTol)
 
         # * Determine Matched-GoodSources [MGS]
-        #   @ Given precise WCS, one can use a high MatchTolFactor ~3.0
-        #   @ For very sparse fields where WCS can be inaccurate, 
-        #     one can loosen the tolerance with a low MatchTolFactor ~1.0
-        
-        Symm = Symmetric_Match.SM(POA=XY_GSr, POB=XY_GSs, tol=tol)
+        Symm = Symmetric_Match.SM(POA=XY_GSr, POB=XY_GSs, tol=UMatchTol)
         AstSEx_MGSr = AstSEx_GSr[Symm[:, 0]]
         AstSEx_MGSs = AstSEx_GSs[Symm[:, 1]]
 
@@ -209,7 +212,7 @@ class Auto_SparsePrep:
         return SFFTPrepDict
 
     def SemiAutoMask(self, XY_PriorSelect=None, BeltHW=0.2, PS_ELLIPThresh=0.3, \
-        MatchTolFactor=3.0, StarExt_iter=4, XY_PriorBan=None):
+        MatchTol=None, MatchTolFactor=3.0, StarExt_iter=4, XY_PriorBan=None):
         # - We directly use given Prior-Selection to determine subtraction-sources
 
         def main_phot(FITS_obj):
@@ -246,11 +249,18 @@ class Auto_SparsePrep:
 
         XYr = np.array([AstSExr['X_IMAGE'], AstSExr['Y_IMAGE']]).T
         XYs = np.array([AstSExs['X_IMAGE'], AstSExs['Y_IMAGE']]).T
-        tol = np.sqrt((FWHM_REF / MatchTolFactor)**2 + (FWHM_SCI / MatchTolFactor)**2)
-        print('MeLOn CheckPoint: Matching Tolerance [tol = %.3f pix]!' %tol)
+
+        UMatchTol = MatchTol
+        if MatchTol is None:
+            # - Given precise WCS, one can use a high MatchTolFactor ~3.0
+            # - For very sparse fields where WCS is inaccurate, one can loosen MatchTolFactor to ~1.0
+            # - WARNING NOTE: it can go wrong when the estimated FWHM is highly inaccurate.
+
+            UMatchTol = np.sqrt((FWHM_REF / MatchTolFactor)**2 + (FWHM_SCI / MatchTolFactor)**2)
+        print('MeLOn CheckPoint: Used Matching Tolerance [tol = %.3f pix]!' %UMatchTol)
 
         # * Cross Match REF & SCI catalogs and Combine them
-        _Symm = Symmetric_Match.SM(POA=XYr, POB=XYs, tol=tol)
+        _Symm = Symmetric_Match.SM(POA=XYr, POB=XYs, tol=UMatchTol)
         AstSEx_Mr = AstSExr[_Symm[:, 0]]
         AstSEx_Ms = AstSExs[_Symm[:, 1]]
 
@@ -259,15 +269,17 @@ class Auto_SparsePrep:
             AstSEx_Ms[coln].name = coln + '_SCI'
         AstSEx_iSS = hstack([AstSEx_Mr, AstSEx_Ms])
 
+        X_IMAGE_REF_SCI_MEAN = np.array(AstSEx_iSS['X_IMAGE_REF']/2.0 + AstSEx_iSS['X_IMAGE_SCI']/2.0)
+        Y_IMAGE_REF_SCI_MEAN = np.array(AstSEx_iSS['Y_IMAGE_REF']/2.0 + AstSEx_iSS['Y_IMAGE_SCI']/2.0)
+        AstSEx_iSS.add_column(Column(X_IMAGE_REF_SCI_MEAN, name='X_IMAGE_REF_SCI_MEAN'))
+        AstSEx_iSS.add_column(Column(Y_IMAGE_REF_SCI_MEAN, name='Y_IMAGE_REF_SCI_MEAN'))
+
         # * Only Preserve the Objects in the Prior-Selection 
-        #   WARNING NOTE: here we still use the same tolerance
-        #   WARNING NOTE: we match the prior selection to image coordinates 
-        #                 XY_REF / XY_SCI, up to which image has better seeing.
-        
-        if FWHM_REF < FWHM_SCI: 
-            XY_iSS = np.array([AstSEx_iSS['X_IMAGE_REF'], AstSEx_iSS['Y_IMAGE_REF']]).T
-        else: XY_iSS = np.array([AstSEx_iSS['X_IMAGE_SCI'], AstSEx_iSS['Y_IMAGE_SCI']]).T
-        _Symm = Symmetric_Match.SM(POA=XY_PriorSelect, POB=XY_iSS, tol=tol)
+        #   WARNING NOTE: here we still use the same tolerance!
+        #   WARNING NOTE: we match the prior selection to the mean image coordinates
+
+        XY_iSS = np.array([AstSEx_iSS['X_IMAGE_REF_SCI_MEAN'], AstSEx_iSS['Y_IMAGE_REF_SCI_MEAN']]).T
+        _Symm = Symmetric_Match.SM(POA=XY_PriorSelect, POB=XY_iSS, tol=UMatchTol)
         AstSEx_SS = AstSEx_iSS[_Symm[:, 1]]
         
         # record matching and create unified segmentation label

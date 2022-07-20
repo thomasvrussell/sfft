@@ -4,6 +4,10 @@ from sfft.MultiEasySparsePacket import MultiEasy_SparsePacket
 CDIR = pa.dirname(pa.abspath(__file__))
 
 """
+* Updates in Version 1.2.3+
+
+-MatchTol    # New parameter!
+
 * Updates in Version 1.2+
 
 -XY_PriorSelect_Queue    # New parameter!
@@ -60,8 +64,8 @@ _MESP = MultiEasy_SparsePacket(FITS_REF_Queue=FITS_REF_Queue, FITS_SCI_Queue=FIT
     BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, \
     DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
     ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect_Queue=[], Hough_FRLowerLimit=0.1, BeltHW=0.2, \
-    PS_ELLIPThresh=0.3, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan_Queue=[], \
-    CheckPostAnomaly=False, PARATIO_THRESH=3.0)
+    PS_ELLIPThresh=0.3, MatchTol=None, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, \
+    XY_PriorBan_Queue=[], CheckPostAnomaly=False, PARATIO_THRESH=3.0)
 
 res = _MESP.MESP_Cupy(NUM_THREADS_4PREPROC=NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT=NUM_THREADS_4SUBTRACT, \
     CUDA_DEVICES_4SUBTRACT=CUDA_DEVICES_4SUBTRACT, TIMEOUT_4PREPRO_EACHTASK=TIMEOUT_4PREPRO_EACHTASK, \

@@ -9,8 +9,7 @@ import scipy.ndimage as ndimage
 from astropy.table import Column
 from sfft.AutoSparsePrep import Auto_SparsePrep
 from sfft.utils.meta.TimeoutKit import TimeoutAfter
-
-# version: Jul 19, 2022
+# version: Jul 20, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.2"
@@ -22,8 +21,8 @@ class MultiEasy_SparsePacket:
         BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
         ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect_Queue=[], Hough_FRLowerLimit=0.1, BeltHW=0.2, \
-        PS_ELLIPThresh=0.3, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan_Queue=[], \
-        CheckPostAnomaly=False, PARATIO_THRESH=3.0):
+        PS_ELLIPThresh=0.3, MatchTol=None, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, \
+        XY_PriorBan_Queue=[], CheckPostAnomaly=False, PARATIO_THRESH=3.0):
 
         """
         # NOTE: This function is to Perform Sparse-Flavor SFFT for multiple tasks:
@@ -115,14 +114,19 @@ class MultiEasy_SparsePacket:
                                             # NOTE: IT WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE :::: determine point-sources
                                             # NOTE: IT WORKS FOR Auto-Sparse-Prep [SEMI-AUTO] MODE :::: estimate a crude FWHM
                                     
-        -MatchTolFactor [3.0]               # The separation tolerance of source matching for selecting subtraction sources is 
-                                            # defined as np.sqrt((FWHM_REF/MatchTolFactor)**2 + (FWHM_SCI/MatchTolFactor)**2)
+        -MatchTol [None]                    # Given separation tolerance (pix) for source matching 
+                                            # NOTE: IT WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE :::: Cross-Match between REF & SCI
+                                            # NOTE: IT WORKS FOR Auto-Sparse-Prep [SEMI-AUTO] MODE :::: Cross-Match between REF & SCI AND
+                                            #       Cross-Match between the prior selection and mean image coordinates of matched REF-SCI sources.
+
+        -MatchTolFactor [3.0]               # The separation tolerance (pix) for source matching calculated by FWHM,
+                                            # MatchTol = np.sqrt((FWHM_REF/MatchTolFactor)**2 + (FWHM_SCI/MatchTolFactor)**2)
                                             # @ Given precise WCS, one can use a high MatchTolFactor ~3.0
                                             # @ For very sparse fields where WCS can be inaccurate, 
                                             #   one can loosen the tolerance with a low MatchTolFactor ~1.0
                                             # NOTE: IT WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE :::: Cross-Match between REF & SCI
-                                            # NOTE: IT WORKS FOR Auto-Sparse-Prep [SEMI-AUTO] MODE :::: Cross-Match between REF & SCI
-                                            #       AND the same tolerance is also used for matching the prior selection.
+                                            # NOTE: IT WORKS FOR Auto-Sparse-Prep [SEMI-AUTO] MODE :::: Cross-Match between REF & SCI AND
+                                            #       Cross-Match between the prior selection and mean image coordinates of matched REF-SCI sources.
 
         -MAGD_THRESH [0.12]                 # kicking out the significant variables if the difference of 
                                             # instrument magnitudes (MAG_AUTO) measured on reference and science 
@@ -254,6 +258,7 @@ class MultiEasy_SparsePacket:
         self.Hough_FRLowerLimit = Hough_FRLowerLimit
         self.BeltHW = BeltHW
         self.PS_ELLIPThresh = PS_ELLIPThresh
+        self.MatchTol = MatchTol
         self.MatchTolFactor = MatchTolFactor
         self.MAGD_THRESH = MAGD_THRESH
         
@@ -336,14 +341,15 @@ class MultiEasy_SparsePacket:
                             IMAGE_MASK_METHOD = 'HOUGH-AUTO'
                             print('MeLOn CheckPoint: TRIGGER Auto-Sparse-Prep [%s] MODE for task-[%d]!' %(IMAGE_MASK_METHOD, taskidx))
                             SFFTPrepDict = _ASP.HoughAutoMask(Hough_FRLowerLimit=self.Hough_FRLowerLimit, BeltHW=self.BeltHW, \
-                                PS_ELLIPThresh=self.PS_ELLIPThresh, MatchTolFactor=self.MatchTolFactor, MAGD_THRESH=self.MAGD_THRESH, \
-                                StarExt_iter=self.StarExt_iter, XY_PriorBan=XY_PriorBan)
+                                PS_ELLIPThresh=self.PS_ELLIPThresh, MatchTol=self.MatchTol, MatchTolFactor=self.MatchTolFactor, \
+                                MAGD_THRESH=self.MAGD_THRESH, StarExt_iter=self.StarExt_iter, XY_PriorBan=XY_PriorBan)
                         
                         if XY_PriorSelect is not None:
                             IMAGE_MASK_METHOD = 'SEMI-AUTO'
                             print('MeLOn CheckPoint: TRIGGER Auto-Sparse-Prep [%s] MODE for task-[%d]!' %(IMAGE_MASK_METHOD, taskidx))
                             SFFTPrepDict = _ASP.SemiAutoMask(XY_PriorSelect=XY_PriorSelect, BeltHW=self.BeltHW, \
-                                PS_ELLIPThresh=self.PS_ELLIPThresh, MatchTolFactor=self.MatchTolFactor, StarExt_iter=self.StarExt_iter)
+                                PS_ELLIPThresh=self.PS_ELLIPThresh, MatchTol=self.MatchTol, MatchTolFactor=self.MatchTolFactor, \
+                                StarExt_iter=self.StarExt_iter)
 
                         DICT_STATUS_BAR['task-[%d]' %taskidx] = 1    # NOTE Preprocessing Successed
                         DICT_PRODUCTS['task-[%d]' %taskidx]['SFFTPrepDict'] = SFFTPrepDict

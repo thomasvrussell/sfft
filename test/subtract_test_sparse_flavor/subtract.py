@@ -3,6 +3,10 @@ import os.path as pa
 from sfft.EasySparsePacket import Easy_SparsePacket
 
 """
+* Updates in Version 1.2.3+
+
+-MatchTol    # New parameter!
+
 * Updates in Version 1.2+
 
 -XY_PriorSelect    # New parameter!
@@ -50,6 +54,6 @@ Easy_SparsePacket.ESP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_DIFF=FITS_DIFF,
     BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, \
     DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
     ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect=None, Hough_FRLowerLimit=0.1, BeltHW=0.2, \
-    PS_ELLIPThresh=0.3, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan=None, \
+    PS_ELLIPThresh=0.3, MatchTol=None, MatchTolFactor=3.0, MAGD_THRESH=0.12, StarExt_iter=4, XY_PriorBan=None, \
     CheckPostAnomaly=False, PARATIO_THRESH=3.0, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
     CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
