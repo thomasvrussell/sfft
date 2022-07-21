@@ -238,7 +238,7 @@ class Easy_SparsePacket:
             print('MeLOn CheckPoint: TRIGGER Auto-Sparse-Prep [%s] MODE!' %IMAGE_MASK_METHOD)
             SFFTPrepDict = _ASP.SemiAutoMask(XY_PriorSelect=XY_PriorSelect, BeltHW=BeltHW, \
                 PS_ELLIPThresh=PS_ELLIPThresh, MatchTol=MatchTol, MatchTolFactor=MatchTolFactor, \
-                StarExt_iter=StarExt_iter)
+                StarExt_iter=StarExt_iter, XY_PriorBan=XY_PriorBan)
 
         # * Determine ConvdSide & KerHW
         FWHM_REF = SFFTPrepDict['FWHM_REF']
