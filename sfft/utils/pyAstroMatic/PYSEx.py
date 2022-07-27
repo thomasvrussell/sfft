@@ -613,6 +613,9 @@ class PY_SEx:
                     print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources by symmetric matching | [%s]!' \
                            %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
             
+            print('MeLOn CheckPoint: PYSEx output catalog contains [%d] sources | [%s]!' \
+                   %(len(AstSEx), pa.basename(FITS_obj)))
+
             # ** g. ADD-COLUMN Stamp
             if StampImgSize is not None:
                 _XY = np.array([AstSEx['X_IMAGE'], AstSEx['Y_IMAGE']]).T
