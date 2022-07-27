@@ -12,7 +12,7 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Jul 19, 2022
+# version: Jul 27, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.2"
@@ -26,7 +26,7 @@ class PY_SEx:
         BACKPHOTO_TYPE='LOCAL', PHOT_APERTURES=5.0, NegativeCorr=True, CHECKIMAGE_TYPE='NONE', \
         VIGNET=None, StampImgSize=None, AddRD=False, ONLY_FLAGS=None, XBoundary=0.0, YBoundary=0.0, \
         Coor4Match='XY_', XY_Quest=None, Match_xytol=2.0, RD_Quest=None, Match_rdtol=1.0, \
-        MDIR=None, verbose='QUIET'):
+        Preserve_NoMatch=False, MDIR=None, verbose='QUIET'):
 
         """
         # @Python Version of SExtractor
@@ -587,8 +587,14 @@ class PY_SEx:
                 Symm = Sky_Symmetric_Match.SSM(RD_A=RD_Quest, RD_B=_RD, tol=Match_rdtol)
             
             if Symm is not None:
-                AstSEx = AstSEx[Symm[:, 1]]
-                AstSEx.add_column(Column(Symm[:, 0], name='QuestIndex'))
+                if Preserve_NoMatch:
+                    QuestIDX = -1 * np.ones(len(AstSEx))
+                    QuestIDX[Symm[:, 1]] = Symm[:, 0]
+                    AstSEx.add_column(Column(QuestIDX, name='QuestIndex'))
+                else:
+                    AstSEx = AstSEx[Symm[:, 1]]
+                    QuestIDX = Symm[:, 0]
+                    AstSEx.add_column(Column(QuestIDX, name='QuestIndex'))
                 Modify_AstSEx = True
             
             # ** g. ADD-COLUMN Stamp
