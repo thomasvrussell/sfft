@@ -461,6 +461,9 @@ class PY_SEx:
         if AstSEx is not None:
             Modify_AstSEx = False
 
+            print('MeLOn CheckPoint: SExtractor finds [%d] sources | [%s]!' \
+                   %(len(AstSEx), pa.basename(FITS_obj)))
+
             # ** a. CORRECT the SExtractor bug on MAG & MAGERR due to negative flux count.
             #       For such cases, corresponding MAG & MAGERR will turn to be a trivial 99
             #       PYSEx will re-calculate them from FLUX & FLUXERR 
@@ -546,8 +549,13 @@ class PY_SEx:
                     128	a memory overflow occurred during extraction
                     # NOTE FLAGS == 0 is a typical constrain for getting isolated & non-saturated sources.
                     """
+
+                    _OLEN = len(AstSEx)
                     AstSEx = AstSEx[np.in1d(AstSEx['FLAGS'], ONLY_FLAGS)]    
                     Modify_AstSEx = True
+
+                    print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources by FLAGS restriction | [%s]!' \
+                           %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
             
             # ** e. Remove Boundary Sources
             if XBoundary != 0.0 or XBoundary != 0.0:
@@ -557,8 +565,12 @@ class PY_SEx:
                                                    _XY[:, 0] < NX - XBoundary + 0.5, \
                                                    _XY[:, 1] > YBoundary + 0.5, \
                                                    _XY[:, 1] < NY - YBoundary + 0.5))
+                _OLEN = len(AstSEx)
                 AstSEx = AstSEx[InnerMask]
                 Modify_AstSEx = True
+
+                print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources close to boundary | [%s]!' \
+                   %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
             
             # ** f. Only preserve the sources matched to the quest coordinates
             if Coor4Match == 'XY_':
@@ -587,15 +599,19 @@ class PY_SEx:
                 Symm = Sky_Symmetric_Match.SSM(RD_A=RD_Quest, RD_B=_RD, tol=Match_rdtol)
             
             if Symm is not None:
+                Modify_AstSEx = True
                 if Preserve_NoMatch:
                     QuestIDX = -1 * np.ones(len(AstSEx))
                     QuestIDX[Symm[:, 1]] = Symm[:, 0]
                     AstSEx.add_column(Column(QuestIDX, name='QuestIndex'))
                 else:
+                    _OLEN = len(AstSEx)
                     AstSEx = AstSEx[Symm[:, 1]]
                     QuestIDX = Symm[:, 0]
                     AstSEx.add_column(Column(QuestIDX, name='QuestIndex'))
-                Modify_AstSEx = True
+                    
+                    print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources by symmetric matching | [%s]!' \
+                           %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
             
             # ** g. ADD-COLUMN Stamp
             if StampImgSize is not None:
