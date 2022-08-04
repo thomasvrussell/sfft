@@ -3,73 +3,97 @@ from astropy import units as u
 from scipy.spatial import cKDTree
 from astropy.coordinates import SkyCoord
 from astropy.coordinates import match_coordinates_sky
+# version: Aug 4, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
-
-# MeLon Notes
-# @ Simple Symmetric Match Algorithm
-#   a) POA, POB are two collections of points for matching with shape (Num_A, 2) and (Num_B, 2)
-#   b) Function COSE(PO, POR) return an array attached to PO, that is, for any given po in PO, 
-#      just assign the index of the nearest point (respect to po) from POR, and note if the nearest 
-#      distance still exceeds the tolerance tol, then assign the trivial index POR.shape[0].
-#   c) A pair < a, b > is called symmetric match iff COSE(PO, POR)[a] = b and COSE(POR, PO)[b] = a
-#      where a | b is a index of PO | POR, it actually means a-th of PO and b-th POR 'stay nearest each other'.
-#   d) To find the collection of all symmetric pairs, the economical way is check one by one from the shorter one of PO & POR.
-#      Such collection has shape (Num_symmetric_matched_pairs, 2) 
+__version__ = "v1.2"
 
 class Symmetric_Match:
     @staticmethod
-    def SM(POA, POB, tol):
-        Na, Nb = POA.shape[0], POB.shape[0]
-        def COSE(PO, POR):
+    def SM(XY_A, XY_B, tol, return_distance=False):
+
+        """
+        a) XY_A, XY_B are two collections of points for matching with shape (NUM_A, 2) and (NUM_B, 2)
+        b) The function func_query(PO, POR) returns the matched points for PO in POR.
+           For any given po in PO, assign the index of the nearest point in POR (respect to po), 
+           and if the nearest distance still exceeds the tolerance tol, assign the trivial index POR.shape[0].
+        c) A point pair < a, b > is called symmetrically matched iff they are nearest to each other.
+        """
+
+        def func_query(PO, POR):
+            # Find k-nearest (here k=1) objects in POR
+            # [0] distance to the POR object
+            # [1] index of the POR object, if index = POR.shape[0] 
+            #     the query fails within given tolerance.
             Tree = cKDTree(POR)
-            # [0] means distance [1] means index, return IND = POR.shape[0] means fail to query
-            IND = Tree.query(PO, k=1, distance_upper_bound=tol)[1]
-            return IND
-        cosA = COSE(PO=POA, POR=POB)
-        cosB = COSE(PO=POB, POR=POA)
-        Matcha, Matchb = [], []
-        if Na < Nb:
-            for i in np.where((cosA < Nb))[0]:
-                j = cosA[i]
-                if cosB[j] == i:
-                    Matcha.append(i)
-                    Matchb.append(j)
+            DIST, IDX = Tree.query(PO, k=1, distance_upper_bound=tol)
+            return DIST, IDX
+        
+        NUM_A, NUM_B = XY_A.shape[0], XY_B.shape[0]
+        DIST_alpha, IDX_alpha = func_query(PO=XY_A, POR=XY_B)
+        DIST_beta, IDX_beta = func_query(PO=XY_B, POR=XY_A)
+        
+        MATCH_IDX_A, MATCH_IDX_B, MATCH_DIST = [], [], []
+        if NUM_A < NUM_B:
+            for i in np.where((IDX_alpha < NUM_B))[0]:
+                j = IDX_alpha[i]
+                if IDX_beta[j] == i:
+                    MATCH_IDX_A.append(i)
+                    MATCH_IDX_B.append(j)
+                    MATCH_DIST.append(DIST_alpha[i])
         else:
-            for v in np.where((cosB < Na))[0]:
-                u = cosB[v]
-                if cosA[u] == v:
-                    Matcha.append(u)
-                    Matchb.append(v)
-        Symm = np.array([Matcha, Matchb]).T     
-
-        return Symm
-
+            for v in np.where((IDX_beta < NUM_A))[0]:
+                u = IDX_beta[v]
+                if IDX_alpha[u] == v:
+                    MATCH_IDX_A.append(u)
+                    MATCH_IDX_B.append(v)
+                    MATCH_DIST.append(DIST_beta[v])
+        
+        Symm = np.array([MATCH_IDX_A, MATCH_IDX_B]).T
+        MATCH_DIST = np.array(MATCH_DIST)
+        
+        if return_distance:
+            return Symm, MATCH_DIST
+        else:
+            return Symm
 
 class Sky_Symmetric_Match:
     @staticmethod
-    def SSM(RD_A, RD_B, tol):
-        # NOTE SkyCoord default frame: icrs, only subtle difference w.r.t (equinox='J2000', frame='fk5')
+    def SSM(RD_A, RD_B, tol, return_distance=False):
+        
+        # NOTE: SkyCoord default frame is icrs, only having subtle difference with (equinox='J2000', frame='fk5')
         Skycoors_A = SkyCoord(ra=RD_A[:, 0], dec=RD_A[:, 1], unit=(u.deg, u.deg))
         Skycoors_B = SkyCoord(ra=RD_B[:, 0], dec=RD_B[:, 1], unit=(u.deg, u.deg))
-
-        if RD_A.shape[0] < RD_B.shape[0]:
-            idx_alpha, distance = match_coordinates_sky(Skycoors_A.frame, Skycoors_B.frame)[:2]
-            Aidx_cone = np.where(distance.arcsec < tol)[0]
-            Bidx_cone = idx_alpha[Aidx_cone]
-            idx_beta = match_coordinates_sky(Skycoors_B[Bidx_cone].frame, Skycoors_A.frame)[0]
-            symm_mask = Aidx_cone == idx_beta
-            Aidx_cross = Aidx_cone[symm_mask]
-            Bidx_cross = Bidx_cone[symm_mask]
+        
+        NUM_A, NUM_B = RD_A.shape[0], RD_B.shape[0]
+        if NUM_A < NUM_B:
+            _matchres = match_coordinates_sky(Skycoors_A.frame, Skycoors_B.frame)[:2]
+            IDX_alpha, DIST_alpha = _matchres[0], _matchres[1].arcsec
+            AIDX_cone = np.where(DIST_alpha < tol)[0]
+            BIDX_conep = IDX_alpha[AIDX_cone]
+            DIST_conep = DIST_alpha[AIDX_cone]
+            
+            IDX_beta = match_coordinates_sky(Skycoors_B[BIDX_conep].frame, Skycoors_A.frame)[0]
+            SYMM_MASK = AIDX_cone == IDX_beta
+            MATCH_IDX_A = AIDX_cone[SYMM_MASK]
+            MATCH_IDX_B = BIDX_conep[SYMM_MASK]
+            MATCH_DIST = DIST_conep[SYMM_MASK]
         else:
-            idx_beta, distance = match_coordinates_sky(Skycoors_B.frame, Skycoors_A.frame)[:2]
-            Bidx_cone = np.where(distance.arcsec < tol)[0]
-            Aidx_cone = idx_beta[Bidx_cone]
-            idx_alpha = match_coordinates_sky(Skycoors_A[Aidx_cone].frame, Skycoors_B.frame)[0]
-            symm_mask = Bidx_cone == idx_alpha
-            Bidx_cross = Bidx_cone[symm_mask]
-            Aidx_cross = Aidx_cone[symm_mask]
-        Symm = np.array([Aidx_cross, Bidx_cross]).T
+            _matchres = match_coordinates_sky(Skycoors_B.frame, Skycoors_A.frame)[:2]
+            IDX_beta, DIST_beta = _matchres[0], _matchres[1].arcsec
+            BIDX_cone = np.where(DIST_beta < tol)[0]
+            AIDX_conep = IDX_beta[BIDX_cone]
+            DIST_conep = DIST_beta[BIDX_cone]
+            
+            IDX_alpha = match_coordinates_sky(Skycoors_A[AIDX_conep].frame, Skycoors_B.frame)[0]
+            SYMM_MASK = BIDX_cone == IDX_alpha
+            MATCH_IDX_B = BIDX_cone[SYMM_MASK]
+            MATCH_IDX_A = AIDX_conep[SYMM_MASK]
+            MATCH_DIST = DIST_conep[SYMM_MASK]
+        
+        Symm = np.array([MATCH_IDX_A, MATCH_IDX_B]).T
 
-        return Symm
+        if return_distance:
+            return Symm, MATCH_DIST
+        else:
+            return Symm

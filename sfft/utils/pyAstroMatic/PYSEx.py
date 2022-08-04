@@ -12,7 +12,7 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Jul 27, 2022
+# version: Aug 4, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.2"
@@ -593,10 +593,10 @@ class PY_SEx:
             Symm = None
             if XY_Quest is not None:
                 _XY = np.array([AstSEx[Xcoln_4Match], AstSEx[Ycoln_4Match]]).T
-                Symm = Symmetric_Match.SM(POA=XY_Quest, POB=_XY, tol=Match_xytol)
+                Symm = Symmetric_Match.SM(XY_A=XY_Quest, XY_B=_XY, tol=Match_xytol, return_distance=False)
             if RD_Quest is not None:
                 _RD = np.array([AstSEx[RAcoln_4Match], AstSEx[DECcoln_4Match]]).T
-                Symm = Sky_Symmetric_Match.SSM(RD_A=RD_Quest, RD_B=_RD, tol=Match_rdtol)
+                Symm = Sky_Symmetric_Match.SSM(RD_A=RD_Quest, RD_B=_RD, tol=Match_rdtol, return_distance=False)
             
             if Symm is not None:
                 Modify_AstSEx = True

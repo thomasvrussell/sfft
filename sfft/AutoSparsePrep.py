@@ -7,7 +7,7 @@ from astropy.table import Column, hstack
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.SymmetricMatch import Symmetric_Match
 from sfft.utils.HoughMorphClassifier import Hough_MorphClassifier
-# version: Jul 20, 2022
+# version: Aug 4, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.2"
@@ -179,7 +179,7 @@ class Auto_SparsePrep:
         print('MeLOn CheckPoint: Used Matching Tolerance [tol = %.3f pix]!' %UMatchTol)
 
         # * Determine Matched-GoodSources [MGS]
-        Symm = Symmetric_Match.SM(POA=XY_GSr, POB=XY_GSs, tol=UMatchTol)
+        Symm = Symmetric_Match.SM(XY_A=XY_GSr, XY_B=XY_GSs, tol=UMatchTol, return_distance=False)
         AstSEx_MGSr = AstSEx_GSr[Symm[:, 0]]
         AstSEx_MGSs = AstSEx_GSs[Symm[:, 1]]
 
@@ -260,7 +260,7 @@ class Auto_SparsePrep:
         print('MeLOn CheckPoint: Used Matching Tolerance [tol = %.3f pix]!' %UMatchTol)
 
         # * Cross Match REF & SCI catalogs and Combine them
-        _Symm = Symmetric_Match.SM(POA=XYr, POB=XYs, tol=UMatchTol)
+        _Symm = Symmetric_Match.SM(XY_A=XYr, XY_B=XYs, tol=UMatchTol, return_distance=False)
         AstSEx_Mr = AstSExr[_Symm[:, 0]]
         AstSEx_Ms = AstSExs[_Symm[:, 1]]
 
@@ -279,7 +279,7 @@ class Auto_SparsePrep:
         #   WARNING NOTE: we match the prior selection to the mean image coordinates
 
         XY_iSS = np.array([AstSEx_iSS['X_IMAGE_REF_SCI_MEAN'], AstSEx_iSS['Y_IMAGE_REF_SCI_MEAN']]).T
-        _Symm = Symmetric_Match.SM(POA=XY_PriorSelect, POB=XY_iSS, tol=UMatchTol)
+        _Symm = Symmetric_Match.SM(XY_A=XY_PriorSelect, XY_B=XY_iSS, tol=UMatchTol, return_distance=False)
         AstSEx_SS = AstSEx_iSS[_Symm[:, 1]]
         
         # record matching and create unified segmentation label
