@@ -312,6 +312,8 @@ class Easy_SparsePacket:
         print('\nMeLOn Report: SFFT Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
 
         if CheckPostAnomaly:
+            warnings.warn('MeLOn WARNING: Post-Anomaly Check Process ONLY works when the GAIN values are correct !!!')
+            
             AstSEx_SS = SFFTPrepDict['SExCatalog-SubSource']
             SFFTLmap = SFFTPrepDict['SFFT-LabelMap']
             
@@ -329,16 +331,17 @@ class Easy_SparsePacket:
             #       However, in light of the fact that the fluctuation is generally very small (says, << 5%), 
             #       using a median level (here, FRESCAL) as approximation is good enough for our noise propagration.
             
-            warnings.warn('MeLOn WARNING: Post-Anomaly Check Process ONLY works when the GAIN values are correct !!!')
+            Fr = np.array(AstSEx_vSS['FLUX_AUTO_REF'])
+            Fs = np.array(AstSEx_vSS['FLUX_AUTO_SCI'])
             FERRr = np.array(AstSEx_vSS['FLUXERR_AUTO_REF'])
             FERRs = np.array(AstSEx_vSS['FLUXERR_AUTO_SCI'])
 
             if ConvdSide == 'REF':
-                FRESCAL = np.median(AstSEx_vSS['FLUX_AUTO_SCI'] / AstSEx_vSS['FLUX_AUTO_REF'])
+                FRESCAL = np.median(Fs / Fr)
                 FVARr = (FERRr * FRESCAL)**2
                 FVARs = FERRs**2
             if ConvdSide == 'SCI':
-                FRESCAL = np.median(AstSEx_vSS['FLUX_AUTO_REF'] / AstSEx_vSS['FLUX_AUTO_SCI'])
+                FRESCAL = np.median(Fr / Fs)
                 FVARr = FERRr**2
                 FVARs = (FERRs * FRESCAL)**2
             ExpDVAR_vSS = FVARr + FVARs
