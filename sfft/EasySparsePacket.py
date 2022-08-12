@@ -312,7 +312,7 @@ class Easy_SparsePacket:
         print('\nMeLOn Report: SFFT Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
 
         if CheckPostAnomaly:
-            warnings.warn('MeLOn WARNING: Post-Anomaly Check Process ONLY works when the GAIN values are correct !!!')
+            warnings.warn('MeLOn WARNING: Post-Anomaly Check Process ONLY works when the GAIN values are correct!')
             
             AstSEx_SS = SFFTPrepDict['SExCatalog-SubSource']
             SFFTLmap = SFFTPrepDict['SFFT-LabelMap']
