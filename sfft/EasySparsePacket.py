@@ -6,7 +6,7 @@ from astropy.io import fits
 import scipy.ndimage as ndimage
 from astropy.table import Column
 from sfft.AutoSparsePrep import Auto_SparsePrep
-# version: Jul 20, 2022
+# version: Aug 12, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.2"
@@ -185,9 +185,10 @@ class Easy_SparsePacket:
         -CheckPostAnomaly [False]   # our automatic source selecting (see sfft.Auto_SparsePrep) does not necessarily
                                     # guarantee a complete removal of the sources which cannot be well modeled by SFFT.
                                     # we could inspect the if such missed sources exist by a simple post check on the difference image. 
-                                    # for each selected source, we just count the residual flux on the difference image and 
-                                    # see if it can be explained by propagated Photon noise.
-                                    # NOTE: one can make use of the Post-Anomalies as the Prior-Ban-Sources in a re-subtraction for refinement.
+                                    # for each selected source, we just count the total residual flux on the difference image 
+                                    # and see if it can be explained by propagated Photon noise.
+                                    # NOTE: one can make use of the Post-Anomalies as the Prior-Ban-Sources 
+                                    #       to refine the subtraction (run second-time subtraction).
 
         -PARATIO_THRESH [3.0]       # the ratio as detection threshold of the post anomalies on the difference image.
                                     # NOTE: PARATIO = residual flux / expected Photon noise 
@@ -321,18 +322,26 @@ class Easy_SparsePacket:
             else: AstSEx_vSS = AstSEx_SS
             
             # ** Estimate expected variance of valid SubSources on the difference
-            #    NOTE assume that all of the valid SubSources are stationary.
-            Gr = np.array(AstSEx_vSS['FLUXERR_AUTO_REF'])
-            Gs = np.array(AstSEx_vSS['FLUXERR_AUTO_SCI'])
+            # NOTE: SExtractor FLUXERR is sensitive to GAIN values, especially at the bright end (Poission Noise Dominated).
+            #       Make sure if the (effective) GAIN values have already set in the input images header.
+            # NOTE: SFFT can accommondate variable photometric scaling across the field (i.e., when ConstPhotRatio=False).
+            #       Through the convolution, the Flux Rescale across the image may not be a constant.
+            #       However, in light of the fact that the fluctuation is generally very small (says, << 5%), 
+            #       using a median level (here, FRESCAL) as approximation is good enough for our noise propagration.
+            
+            warnings.warn('MeLOn WARNING: Post-Anomaly Check Process ONLY works when the GAIN values are correct !!!')
+            FERRr = np.array(AstSEx_vSS['FLUXERR_AUTO_REF'])
+            FERRs = np.array(AstSEx_vSS['FLUXERR_AUTO_SCI'])
+
             if ConvdSide == 'REF':
-                dm = np.median(AstSEx_vSS['MAG_AUTO_SCI'] - AstSEx_vSS['MAG_AUTO_REF'])
-                VARr = (Gr/(10**(dm/2.5)))**2
-                VARs = Gs**2
+                FRESCAL = np.median(AstSEx_vSS['FLUX_AUTO_SCI'] / AstSEx_vSS['FLUX_AUTO_REF'])
+                FVARr = (FERRr * FRESCAL)**2
+                FVARs = FERRs**2
             if ConvdSide == 'SCI':
-                dm = np.median(AstSEx_vSS['MAG_AUTO_REF'] - AstSEx_vSS['MAG_AUTO_SCI'])
-                VARr = Gr**2
-                VARs = (Gs/(10**(dm/2.5)))**2
-            ExpDVAR_vSS = VARr + VARs
+                FRESCAL = np.median(AstSEx_vSS['FLUX_AUTO_REF'] / AstSEx_vSS['FLUX_AUTO_SCI'])
+                FVARr = FERRr**2
+                FVARs = (FERRs * FRESCAL)**2
+            ExpDVAR_vSS = FVARr + FVARs
 
             # ** Measure the ratios of valid SubSources on the difference for detecting the PostAnomaly SubSources
             SEGL_vSS = np.array(AstSEx_vSS['SEGLABEL']).astype(int)
