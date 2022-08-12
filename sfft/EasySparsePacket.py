@@ -329,7 +329,7 @@ class Easy_SparsePacket:
             # NOTE: SFFT can accommondate variable photometric scaling across the field (i.e., when ConstPhotRatio=False).
             #       Through the convolution, the Flux Rescale across the image may not be a constant.
             #       However, in light of the fact that the fluctuation is generally very small (says, << 5%), 
-            #       using a median level (here, FRESCAL) as approximation is good enough for our noise propagration.
+            #       using a median level (here, CONV_FSCAL) as approximation is good enough for our noise propagration.
             
             Fr = np.array(AstSEx_vSS['FLUX_AUTO_REF'])
             Fs = np.array(AstSEx_vSS['FLUX_AUTO_SCI'])
@@ -337,13 +337,13 @@ class Easy_SparsePacket:
             FERRs = np.array(AstSEx_vSS['FLUXERR_AUTO_SCI'])
 
             if ConvdSide == 'REF':
-                FRESCAL = np.median(Fs / Fr)
-                FVARr = (FERRr * FRESCAL)**2
+                CONV_FSCAL = np.median(Fs / Fr)
+                FVARr = (FERRr * CONV_FSCAL)**2
                 FVARs = FERRs**2
             if ConvdSide == 'SCI':
-                FRESCAL = np.median(Fr / Fs)
+                CONV_FSCAL = np.median(Fr / Fs)
                 FVARr = FERRr**2
-                FVARs = (FERRs * FRESCAL)**2
+                FVARs = (FERRs * CONV_FSCAL)**2
             ExpDVAR_vSS = FVARr + FVARs
 
             # ** Measure the ratios of valid SubSources on the difference for detecting the PostAnomaly SubSources
