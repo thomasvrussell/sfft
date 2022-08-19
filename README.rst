@@ -121,6 +121,8 @@ We also present a decorrelation module to whiten the background noise of the dif
 What's new
 -----------
 
+- The preprocessing in sparse-flavor-sfft is refined using an additiaonl rejection of mild varaibles since version 1.3.0. [Lei, Aug 19, 2022]
+
 - The sfft is now optimized for multiple tasks since version 1.1.0. [Lei, May 24, 2022]
 
 - A few argument-names have been changed since version 1.1.0, please see the test scripts. [Lei, May 24, 2022]
