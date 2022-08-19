@@ -1398,7 +1398,7 @@ class GeneralSFFTSubtract:
                      ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░         
 
                     Saccadic Fast Fourier Transform (SFFT) algorithm
-                    sfft (1.1) supported by @LeiHu
+                    sfft (v1.*) supported by @LeiHu
 
                     GitHub: https://github.com/thomasvrussell/sfft
                     Related Paper: https://arxiv.org/abs/2109.09334

@@ -116,9 +116,9 @@ class Easy_CrowdedPacket:
                                             # KerHW is updated as np.clip(KerHW, KerHWLimit[0], KerHWLimit[1]) 
                                             # Remarks: this is useful for a survey since it can constrain the peak GPU memory usage.
 
-        -KerPolyOrder [2]                   # Polynomial degree of kernel spatial variation.
+        -KerPolyOrder [2]                   # Polynomial degree of kernel spatial variation, can be [0,1,2,3].
 
-        -BGPolyOrder [2]                    # Polynomial degree of background spatial variation.
+        -BGPolyOrder [2]                    # Polynomial degree of differential-background spatial variation, can be [0,1,2,3].
                                             # It is non-trivial for Crowded-Flavor SFFT, as the input images are usually not sky subtracted.
 
         -ConstPhotRatio [True]              # Constant photometric ratio between images ? can be True or False

@@ -1,16 +1,14 @@
-import os
 import sep
 import fastremap
 import numpy as np
-import os.path as pa
 from astropy.io import fits
 import scipy.ndimage as ndimage
-from astropy.stats import sigma_clipped_stats
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
-# version: Jul 19, 2022
+from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
+# version: Aug 17, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.2"
+__version__ = "v1.3"
 
 class Auto_CrowdedPrep:
     def __init__(self, FITS_REF, FITS_SCI, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', BACK_TYPE='AUTO', BACK_VALUE='0.0', \
@@ -67,7 +65,16 @@ class Auto_CrowdedPrep:
                 CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, \
                 XBoundary=self.BoundarySIZE, YBoundary=self.BoundarySIZE, MDIR=None)
             AstSEx, PixA_SEG = PYSEX_OP[0], PYSEX_OP[1][0].astype(int)
-            FWHM = sigma_clipped_stats(AstSEx['FWHM_IMAGE'], sigma=3.0, maxiters=5)[1]
+            
+            # *** Note on the crude estimate of FWHM ***
+            # our strategy is to calculate a median FWHM_IMAGE weighted by the source flux, meanwhile, 
+            # we modulate the weights by applying a penalty on the sources with large FWHM_IMAGE.
+
+            NTE_4FWHM = 30  # NUM_TOP_END for FWHM, default value used herein.
+            _values, _weights = np.array(AstSEx['FWHM_IMAGE']), np.array(AstSEx['FLUX_AUTO'])
+            _weights /= np.clip(_values, a_min=1.0, a_max=None)**2  
+            FWHM = TopFlatten_Weighted_Quantile.TFWQ(values=_values, weights=_weights, \
+                quantiles=[0.5], NUM_TOP_END=NTE_4FWHM)[0]
 
             # ** determine initial saturation region
             SATLEVEL = fits.getheader(FITS_obj, ext=0)[self.SATUR_KEY]
@@ -78,8 +85,9 @@ class Auto_CrowdedPrep:
             fastremap.remap(PixA_SEG, Mappings, preserve_missing_labels=True, in_place=True)
             SatMask = PixA_SEG < 0
             
-            # ** refine the saturation region
-            #     SExtractor tend to label some outskirt-islands as part of a saturated source.
+            # ** refine the saturation regions
+            #    NOTE: SExtractor tend to label some outskirt-islands as part of a saturated source.
+
             XY_SAT = np.array([AstSEx_SAT['X_IMAGE'], AstSEx_SAT['Y_IMAGE']]).T            
             Lmap = ndimage.measurements.label(SatMask)[0]
             SATL = Lmap[((XY_SAT[:, 0] - 0.5).astype(int), (XY_SAT[:, 1] - 0.5).astype(int))]
@@ -89,15 +97,22 @@ class Auto_CrowdedPrep:
             struct0 = ndimage.generate_binary_structure(2, 1)
             struct = ndimage.iterate_structure(struct0, StarExt_iter)
             SatMask = ndimage.grey_dilation(SatMask, footprint=struct)     # WARNING NOTE UPDATE
+            
+            NUM_SAT = len(AstSEx_SAT)
             SatPROP = np.sum(SatMask) / (SatMask.shape[0] * SatMask.shape[1])
-            print('MeLOn CheckPoint: FILE %s | NSAT [%d] & SATURATE-Proportion [%s]' \
-                   %(pa.basename(FITS_obj), len(AstSEx_SAT), '{:.2%}'.format(SatPROP)))
+            return SATLEVEL, FWHM, SatMask, NUM_SAT, SatPROP
 
-            return SATLEVEL, FWHM, SatMask
+        SATLEVEL_REF, FWHM_REF, SatMask_REF, NUM_SAT_REF, SatPROP_REF = GenSatMask(self.FITS_REF)
+        SATLEVEL_SCI, FWHM_SCI, SatMask_SCI, NUM_SAT_SCI, SatPROP_SCI = GenSatMask(self.FITS_SCI)
 
-        SATLEVEL_REF, FWHM_REF, SatMask_REF = GenSatMask(self.FITS_REF)
-        SATLEVEL_SCI, FWHM_SCI, SatMask_SCI = GenSatMask(self.FITS_SCI)
+        _message = 'Estimated [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI)
+        print('\nMeLOn CheckPoint: %s' %_message)
 
+        _message = 'The SATURATED Regions --- Number (Pixel Proportion) '
+        _message += '[REF = %d (%s)] & ' %(NUM_SAT_REF, '{:.2%}'.format(SatPROP_REF))
+        _message += '[SCI = %d (%s)]!' %(NUM_SAT_SCI, '{:.2%}'.format(SatPROP_SCI))
+        print('\nMeLOn CheckPoint: %s' %_message)
+        
         # * Define ProhibitedZone
         NaNmask_U = None
         if PriorBanMask is None:
@@ -119,7 +134,7 @@ class Auto_CrowdedPrep:
 
         # NOTE: The preparation can guarantee that mREF & mSCI are NaN-Free !
         ActivePROP = np.sum(ActiveMask) / (ActiveMask.shape[0] * ActiveMask.shape[1])
-        print('MeLOn CheckPoint: ActiveMask Pixel Proportion [%s]' %('{:.2%}'.format(ActivePROP)))
+        print('\nMeLOn CheckPoint: Active-Mask Pixel Proportion [%s]' %('{:.2%}'.format(ActivePROP)))
 
         # * Create sfft-prep master dictionary
         SFFTPrepDict = {}

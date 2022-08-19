@@ -144,3 +144,4 @@ def func_decorr():
 
 func_preproc()
 func_decorr()
+print('MeLOn CheckPoint: TEST FOR SFFT DECORRELATION DONE!\n')

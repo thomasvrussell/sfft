@@ -1,13 +1,12 @@
-import sys
 import warnings
 import numpy as np
-from tempfile import mkdtemp
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.HoughDetection import Hough_Detection
-# version: Jul 19, 2022
+from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
+# version: Aug 17, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.2"
+__version__ = "v1.3"
 
 class Hough_MorphClassifier:
     
@@ -32,28 +31,32 @@ class Hough_MorphClassifier:
     #
     #   B) 3 hierarchic groups                
     #      > Good Sources:
-    #            + NOT in FR-S region (union of FR-M & FR-L)
-    #              NOTE Good Sources is consist of the vertical & horizontal branches with their cross (not the tail), 
-    #                   which is roughly equivalent to the set of REAL Point-Sources & Extended Sources 
-    #                   with rejection the samples in the tail (at faint & small-radius end).
-    #              NOTE Good Sources are commonly used as FITTING Candidates in Image Subtraction.
-    #                   It is acceptable to lose the samples in the tail.
+    #        + NOT in FR-S region (union of FR-M & FR-L)
+    #          NOTE Good Sources is consist of the vertical & horizontal branches with their cross (not the tail), 
+    #               which is roughly equivalent to the set of REAL Point-Sources & Extended Sources 
+    #               with rejection the samples in the tail (at faint & small-radius end).
+    #          NOTE Good Sources are commonly used as FITTING Candidates in Image Subtraction.
+    #               It is acceptable to lose the samples in the tail.
     #         
-    #           >> {subgroup} Point Sources:
-    #                  + Restricted into FR-M Region   |||   Should be located around the Hough-Line
-    #                  + Basically Circular-Shape      |||   PsfEx-ELLIPTICITY = (A-B) / (A+B) < PS_ELLIPThresh
-    #                    NOTE At cross region, this identification criteria mis-include some extended source
-    #                         On the flip side, some REAL PointSource samples are missing in the tail.
-    #                    NOTE Point Sources are usually employed as FWHM Estimator.
-    #                    NOTE We may lossen PS_ELLIPThresh if psf itself is significantly asymmetric (e.g. tracking problem).
-    #                    WARNING: At the faint end, this subgroup would be contaminated by round extended sources 
-    #                             (meet PS_ELLIPThresh) which also lie in the cross region. When the field is galaxy-dominated, 
-    #                             especially, the contamination can be severe and you may over-estimated FWHM!
+    #        >> {subgroup} Point Sources:
+    #               + Restricted into FR-M Region   |||   Should be located around the Hough-Line
+    #               + Basically Circular-Shape      |||   PsfEx-ELLIPTICITY = (A-B) / (A+B) < PS_ELLIPThresh
+    #                 NOTE At cross region, this identification criteria mis-include some extended source
+    #                      On the flip side, some REAL PointSource samples are missing in the tail.
+    #                 NOTE Point Sources are usually employed as FWHM Estimator.
+    #                 NOTE We may lossen PS_ELLIPThresh if psf itself is significantly asymmetric (e.g. tracking problem).
     #
-    #                  >>> {sub-subgroup} High-SNR Point Sources
-    #                          + SNR_WIN > HPS_SNRThresh, then reject the bright end [typically, 15% (HPS_Reject)] point-sources.
-    #                          ++ If remaining sources are less than 30 (HPS_NumLowerLimit),
-    #                             Simply Use the point-sources with highest SNR_WIN.
+    #                 WARNING: At the faint end, this subgroup would be contaminated by round extended sources 
+    #                          (meet PS_ELLIPThresh) which also lie in the cross region. 
+    #                          When the field is galaxy-dominated, the contamination can be considerable.
+    #                          In light of the fact that cross region is located at the faint end in the belt,
+    #                          We calculate the median FWHM weighted by source flux, to suppress the over-estimate 
+    #                          trend driven by the extended sources.
+    #
+    #               >>> {sub-subgroup} High-SNR Point Sources
+    #                       + SNR_WIN > HPS_SNRThresh, then reject the bright end [typically, 15% (HPS_Reject)] point-sources.
+    #                       ++ If remaining sources are less than 30 (HPS_NumLowerLimit),
+    #                          Simply Use the point-sources with highest SNR_WIN.
     #                          NOTE Usually, this subset is for Flux-Calibration & Building PSF Model.
     #                          NOTE The defult HPS_SNRThresh = 100 might be too high, you may loosen it to
     #                               ~ 15 to make sure you have enough samples, especially for psf modeling.
@@ -104,12 +107,12 @@ class Hough_MorphClassifier:
     
     def Classifier(AstSEx, Hough_FRLowerLimit=0.1, Hough_res=0.05, Hough_count_thresh=1, Hough_peakclip=0.7, \
         LineTheta_thresh=0.2, BeltHW=0.2, PS_ELLIPThresh=0.3, Return_HPS=False, \
-        HPS_SNRThresh=100.0, HPS_Reject=0.15, HPS_NumLowerLimit=30):
+        HPS_SNRThresh=100.0, HPS_SNRTopReject=0.15, HPS_NumLowerLimit=30):
         
         A_IMAGE = np.array(AstSEx['A_IMAGE'])
         B_IMAGE = np.array(AstSEx['B_IMAGE'])
         MA_FR = np.array([AstSEx['MAG_AUTO'], AstSEx['FLUX_RADIUS']]).T
-        ELLIP = (A_IMAGE - B_IMAGE)/(A_IMAGE + B_IMAGE)
+        ELLIP = (A_IMAGE - B_IMAGE) / (A_IMAGE + B_IMAGE)
         MASK_ELLIP = ELLIP < PS_ELLIPThresh
 
         # * Trigger Hough Dectection 
@@ -131,56 +134,66 @@ class Hough_MorphClassifier:
         MA_MID = np.nanmedian(MA)
         Hmask = np.logical_and.reduce((FR > Hough_FRLowerLimit, FR < 10.0, MA > MA_MID-7.0, MA < MA_MID+7.0))
         
-        # FIXME USER-DEFINED
         HDOP = Hough_Detection.HD(XY_obj=MA_FR, Hmask=Hmask, res=Hough_res, \
             count_thresh=Hough_count_thresh, peakclip=Hough_peakclip)
         ThetaPeaks, RhoPeaks, ScaLineDIS = HDOP[1], HDOP[2], HDOP[4]
 
-        # NOTE: consider the strongest nearly-horizon peak as the one associated with the point source feature.
         Avmask = np.abs(ThetaPeaks) < LineTheta_thresh
         AvIDX = np.where(Avmask)[0]
+
         if len(AvIDX) == 0: 
             Horindex = None
-            warnings.warn('MeLOn WARNING: NO nearly-horizon peak as Point-Source-Line!')
+            warnings.warn('MeLOn WARNING: [NO] nearly-horizon peak as Point-Source-Belt!')
         if len(AvIDX) == 1:
             Horindex = AvIDX[0]
-            print('MeLOn CheckPoint: the UNIQUE nearly-horizon peak as Point-Source-Line!')
+            print('MeLOn CheckPoint: [UNIQUE] nearly-horizon peak as Point-Source-Belt!')
         if len(AvIDX) > 1:
             Horindex = np.min(AvIDX)
-            warnings.warn('MeLOn WARNING: there are MULTIPLE nearly-horizon peaks and use the STRONGEST as Point-Source-Line!')
+            warnings.warn('MeLOn WARNING: [MULTIPLE] nearly-horizon peaks, use the [STRONGEST] as Point-Source-Belt!')
         
         if Horindex is not None:
             HorThetaPeak = ThetaPeaks[Horindex]
             HorRhoPeak = RhoPeaks[Horindex]
             HorScaLineDIS = ScaLineDIS[:, Horindex]
-            print('MeLOn CheckPoint: the Hough-Detected Point-Source-Line is characterized by (%s, %s)' \
-                %(HorThetaPeak, HorRhoPeak))
 
-            # NOTE: Note that HorThetaPeak is around 0, thus cos(HorThetaPeak) around 1 then >> 0, 
-            #       thus above-line/FRL region is x_above * sin(HorThetaPeak) + y_above * cos(HorRhoPeak) > rho.
+            _message = 'The Point-Source-Belt detected by Hough Transform '
+            _message += 'is characterized by [%.6f, %.6f]!' %(HorThetaPeak, HorRhoPeak)
+            print('MeLOn CheckPoint: %s' %_message)
+
+            # *** Note on the FRL region *** 
+            # (1) HorThetaPeak is around 0, then cos(HorThetaPeak) around 1 thus >> 0.
+            # (2) FRL region (above the line) is x_above * sin(HorThetaPeak) + y_above * cos(HorRhoPeak) > rho.
+
             MASK_FRM = HorScaLineDIS < BeltHW
             MASK_FRL = MA_FR[:, 0] * np.sin(HorThetaPeak) + MA_FR[:, 1] * np.cos(HorThetaPeak) > HorRhoPeak
             MASK_FRL = np.logical_and(MASK_FRL, ~MASK_FRM)
-        
-        else:
-            # NOTE: If we have enough samples, using the bright & small-FR subgroup might be 
-            #       more appropriate for the estimate. However, it is quite tricky to find a generic
-            #       reliable way to find the point sources when the Hough Transformation doesn't work.
-            #       Here we give a simple emperical solution.
 
-            BPmask = AstSEx['MAGERR_AUTO'] < np.percentile(AstSEx['MAGERR_AUTO'], 75)
-            Rv = np.percentile(MA_FR[BPmask, 1], 25)
-            MASK_FRM = np.abs(MA_FR[:, 1]  - Rv) < BeltHW
-            MASK_FRL = MA_FR[:, 1]  - Rv >  BeltHW
-            warnings.warn('MeLOn WARNING: the STANDBY approach is actived to determine the FRM region!')
+        else:
+            warnings.warn('MeLOn WARNING: [STANDBY] approach is active to determine the FRM regions!')
+
+            # *** Note on the belt determination when Hough transform fails *** 
+            # (1) It is quite tricky to find a generic way to determine the point source belt when Hough transform fails.
+            #     Typically, the bright sources with moderate Flux Radius are likely point sources.
+            # (2) Our strategy is to calculate a median Flux Radius weighted by the source flux, meanwhile,
+            #     we modulate the weights by applying a penalty on the sources with large Flux Radius.
+
+            NTE_4FRM = 30  # NUM_TOP_END for FRM, default value used herein.
+            _values, _weights = MA_FR[:, 1], np.array(AstSEx['FLUX_AUTO'])
+            _weights /= np.clip(_values, a_min=0.5, a_max=None)**2  
+            FRM = TopFlatten_Weighted_Quantile.TFWQ(values=_values, weights=_weights, \
+                quantiles=[0.5], NUM_TOP_END=NTE_4FRM)[0]
+            
+            MASK_FRM = np.abs(MA_FR[:, 1]  - FRM) < BeltHW
+            MASK_FRL = MA_FR[:, 1]  - FRM > BeltHW
         
         MASK_FRS = ~np.logical_or(MASK_FRM, MASK_FRL)
         LABEL_FR = np.array(['FR-S'] * len(AstSEx))
         LABEL_FR[MASK_FRM] = 'FR-M'
         LABEL_FR[MASK_FRL] = 'FR-L'
 
-        print('MeLOn CheckPoint: count Lables from Hough Transformation [FR-S (%s) / FR-M (%s) / FR-L (%s)] !' \
-            %(np.sum(MASK_FRS), np.sum(MASK_FRM), np.sum(MASK_FRL)))
+        _message = 'Label Counts [FR-S (%s) / FR-M (%s) / FR-L (%s)]!' \
+            %(np.sum(MASK_FRS), np.sum(MASK_FRM), np.sum(MASK_FRL))
+        print('MeLOn CheckPoint: HoughMorphClassifier --- %s' %_message)
 
         # * Produce the 3 hierarchic groups
         # ** Good Sources
@@ -188,69 +201,41 @@ class Hough_MorphClassifier:
 
         # *** Point Sources 
         MASK_PS = np.logical_and(MASK_FRM, MASK_ELLIP)
-        assert np.sum(MASK_PS) > 0
-        FWHM = round(np.median(AstSEx[MASK_PS]['FWHM_IMAGE']), 6)
-
-        print('MeLOn CheckPoint: Good-Sources in the Image [%d] ' %np.sum(MASK_GS))
-        print('MeLOn CheckPoint: Point-Sources in the Image [%d] ' %np.sum(MASK_PS))
-        print('MeLOn CheckPoint: Estimated [FWHM = %.3f] pixel from Point-Sources' %FWHM)
+        print('MeLOn CheckPoint: [%d] Good-Sources on the Image!' %np.sum(MASK_GS))
+        print('MeLOn CheckPoint: [%d] Point-Sources on the Image!' %np.sum(MASK_PS))
+        
+        NTE_4FWHM = 30  # NUM_TOP_END for FWHM, default value used herein.
+        _values, _weights = np.array(AstSEx[MASK_PS]['FWHM_IMAGE']), np.array(AstSEx[MASK_PS]['FLUX_AUTO'])
+        FWHM = round(TopFlatten_Weighted_Quantile.TFWQ(values=_values, weights=_weights, \
+            quantiles=[0.5], NUM_TOP_END=NTE_4FWHM)[0], 6)
+        print('MeLOn CheckPoint: Estimated [FWHM = %.3f pix] From Point-Sources' %FWHM)
 
         # **** High-SNR Point Sources 
         MASK_HPS = None
         if Return_HPS:
             assert 'SNR_WIN' in AstSEx.colnames
+            # apply SNR threshold and reject top-SNR sources (security for inappropriate SATURATION)
             MASK_HPS = np.logical_and(MASK_PS, AstSEx['SNR_WIN'] >= HPS_SNRThresh)
-            if np.sum(MASK_HPS) > 0:
-                cutoff = np.quantile(AstSEx[MASK_HPS]['SNR_WIN'], 1.0 - HPS_Reject)
+            if np.sum(MASK_HPS) > 0 and HPS_SNRTopReject > 0:
+                cutoff = np.quantile(AstSEx[MASK_HPS]['SNR_WIN'], 1.0-HPS_SNRTopReject)
                 MASK_HPS = np.logical_and(MASK_HPS, AstSEx['SNR_WIN'] < cutoff)
             
+            # if there are insufficent number of HPS:
+            # abandon the SNR threshold and top-SNR rejection, simply use the point sources with largest SNR instead.
             if np.sum(MASK_HPS) < HPS_NumLowerLimit:
-                _IDX = np.where(MASK_PS)[0]
-                _IDX = _IDX[np.argsort(AstSEx[_IDX]['SNR_WIN'])[::-1][:HPS_NumLowerLimit]]
+                _warn_message = 'Insufficient Number of High-SNR Point-Sources ---- \n'
+                _warn_message += 'Give Up the SNR Threshold and Top-SNR Rejection, ' 
+                _warn_message += 'Use Point Sources with Largest SNR instead!'
+                warnings.warn('MeLOn WARNING: %s' %_warn_message)
+
+                _PSIDX = np.where(MASK_PS)[0]
+                _HPSIDX = _PSIDX[np.argsort(-1.0 * AstSEx[_PSIDX]['SNR_WIN'])[:HPS_NumLowerLimit]]
                 MASK_HPS = np.zeros(len(AstSEx)).astype(bool)
-                MASK_HPS[_IDX] = True
+                MASK_HPS[_HPSIDX] = True
                 if np.sum(MASK_HPS) < HPS_NumLowerLimit:
-                    warnings.warn('MeLOn WARNING: The number of High-SNR Point Sources still does not reach the lower limit !')    
-            print('MeLOn CheckPoint: High-SNR Point-Sources in the image [%d]' %np.sum(MASK_HPS))
-
-        """
-        # * SHOW THE CLASSIFICATION [Just for Check]
-
-        import matplotlib
-        import matplotlib.pyplot as plt
-        from astroML.plotting import setup_text_plots  # optional
-        setup_text_plots(fontsize=12, usetex=True)       # optional
-        matplotlib.rc('text', usetex=True)
-        matplotlib.rcParams['text.latex.preamble'] = [r'\boldmath']
-        plt.switch_backend('agg')
-
-        AstSEx_GS = AstSEx[MASK_GS]
-        AstSEx_PS = AstSEx[MASK_PS]
-        AstSEx_HPS = AstSEx[MASK_HPS]
-        MA_FR = np.array([AstSEx['MAG_AUTO'], AstSEx['FLUX_RADIUS']]).T
-
-        plt.figure()
-        print('MeLOn CheckPoint: Diagram Checking for HoughMorphClassifier (Natural Axes) !')
-        plt.scatter(MA_FR[:, 1], MA_FR[:, 0], s=0.3, color='gray', label='Sources FLAG=0')
-        plt.scatter(AstSEx_GS['FLUX_RADIUS'], AstSEx_GS['MAG_AUTO'], s=0.3, color='red', label='Good-Sources')
-        plt.scatter(AstSEx_PS['FLUX_RADIUS'], AstSEx_PS['MAG_AUTO'], s=0.3, color='blue', label='Point-Sources')
-        plt.scatter(AstSEx_HPS['FLUX_RADIUS'], AstSEx_HPS['MAG_AUTO'], s=3, color='green', label='High-SNR Point-Sources')
-
-        MA0, MA1 = np.min(MA_FR[:, 0]), np.max(MA_FR[:, 0])
-        if MA1 - MA0 > 50.0: MA0, MA1 = MA_mid - 25.0,  MA_mid + 25.0
-        MAG_PSL = np.arange(MA0, MA1, 0.02)
-        FLR_PSL = -np.tan(HorThetaPeak)*MAG_PSL + HorRhoPeak
-        plt.plot(FLR_PSL, MAG_PSL, linestyle='dashed', color='black', linewidth=1)
-
-        plt.legend()
-        plt.xlabel('FLUX RADIUS')
-        plt.ylabel('MAG AUTO')
-        plt.xlim(0, 10.0)
-        plt.ylim(MA1+1, MA0-1)
-
-        plt.savefig('HMC_Check.png', dpi=400)
-        plt.close()
-        
-        """
+                    _warn_message = 'Insufficient Number of High-SNR Point-Sources ---- \n'
+                    _warn_message += 'Use all Point Sources but STILL Insufficient!'
+                    warnings.warn('MeLOn WARNING: %s' %_warn_message)
+            print('MeLOn CheckPoint: [%d] High-SNR Point-Sources on the Image!' %np.sum(MASK_HPS))
 
         return FWHM, LABEL_FR, MASK_GS, MASK_PS, MASK_HPS

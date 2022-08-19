@@ -12,10 +12,10 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Aug 4, 2022
+# version: Aug 17, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.2"
+__version__ = "v1.3"
 
 class PY_SEx:
     @staticmethod
@@ -43,6 +43,13 @@ class PY_SEx:
         #       c. Give the criteria for SEx-Detection
         #       d. Clarify SEx-Photometry method
         #       e. Specify output Check-Images & output Table by column-name list.
+        #
+        #    TODO: Incorporate the Weight-Map Image as Input of PYSEx
+        #          SExtractor allows users to feed a weight-map image. It is very useful for mosaic image, which has
+        #          vairable effective GAIN and background noise level across the field due to different Num_Exposure.
+        #          A weight-map image would help SExtractor to calculate errors, such as, FLUXERR and MAGERR, more accurately. 
+        #          For current version, I would recommend users to set an average effective GAIN for mosaic image, 
+        #          and keep in mind it may cause inaccurate error estimation (to some extent) in SExtractor.
         #
         # * SExtractor Workflow (Background)
         #    ** Extract Global_Background_Map (GBMap) and its RMS (GBRMap) from Image4detect & Image4phot
@@ -258,7 +265,7 @@ class PY_SEx:
         #
         """
         
-        # * sex or sextractor ?
+        # * sex or sextractor?
         for cmd in ['sex', 'sextractor']:
             try:
                 p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -549,7 +556,7 @@ class PY_SEx:
                     128	a memory overflow occurred during extraction
                     # NOTE FLAGS == 0 is a typical constrain for getting isolated & non-saturated sources.
                     """
-
+                    
                     _OLEN = len(AstSEx)
                     AstSEx = AstSEx[np.in1d(AstSEx['FLAGS'], ONLY_FLAGS)]    
                     Modify_AstSEx = True
@@ -612,7 +619,7 @@ class PY_SEx:
                     
                     print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources by symmetric matching | [%s]!' \
                            %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
-            
+
             print('MeLOn CheckPoint: PYSEx output catalog contains [%d] sources | [%s]!' \
                    %(len(AstSEx), pa.basename(FITS_obj)))
 

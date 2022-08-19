@@ -1,33 +1,35 @@
 import os
+import time
+import numpy as np
 import os.path as pa
 from sfft.MultiEasyCrowdedPacket import MultiEasy_CrowdedPacket
 CDIR = pa.dirname(pa.abspath(__file__))
 
-"""
-* Updates in Version 1.1+ 
-
-this test was created!
-
-"""
-
-NUM_TASK = 16                      # FIXME Number of tasks
-NUM_THREADS_4PREPROC = 8           # FIXME Python threads for preprocesing
+# configuration: multiprocessing and computing resourse
+NUM_THREADS_4PREPROC = 16          # FIXME Python threads for preprocesing
 NUM_THREADS_4SUBTRACT = 1          # FIXME Python threads for sfft subtraction (= Number of GPU devices)
 CUDA_DEVICES_4SUBTRACT = ['0']     # FIXME List of GPU devices (see nvidia-smi to find the GPU indices)
 
-TIMEOUT_4PREPRO_EACHTASK = 120     # FIXME timeout (sec) of preprocessing for each task
-TIMEOUT_4SUBTRACT_EACHTASK = 120   # FIXME timeout (sec) of sfft subtraction for each task
+TIMEOUT_4PREPROC_EACHTASK = 300    # FIXME timeout (sec) of preprocessing for each task
+TIMEOUT_4SUBTRACT_EACHTASK = 300   # FIXME timeout (sec) of sfft subtraction for each task
 
-ForceConv = 'REF'                  # FIXME {None, 'REF', 'SCI'}, None mean AUTO mode that avoids deconvolution
-MaskSatContam = False              # FIXME {True, False}, mask the saturation-contaminated regions by NaN on the difference?
+# configuration: how to subtract
+ForceConv = 'REF'                  # FIXME {'AUTO', 'REF', 'SCI'}, where AUTO mode will avoid deconvolution
+KerHWRatio = 2.0                   # FIXME Ratio of kernel half-width to FWHM (typically, 1.5-2.5).
+KerPolyOrder = 2                   # FIXME {0, 1, 2, 3}, Polynomial degree of kernel spatial variation
+BGPolyOrder = 2                    # FIXME {0, 1, 2, 3}, Polynomial degree of differential background spatial variation.
+ConstPhotRatio = True              # FIXME Constant photometric ratio between images?
 
+# configuration: required info in FITS header
 GAIN_KEY = 'GAIN'                  # NOTE Keyword of Gain in FITS header
-SATUR_KEY = 'SATURATE'             # NOTE Keyword of Saturation in FITS header
+SATUR_KEY = 'SATURATE'               # NOTE Keyword of Saturation in FITS header
 
-# * Make multiple tasks (just copy the data in the crowded flavor test multiple times)
+print('\n---------------------------------- CREATE MULTI-TASKS --------------------------------------')
+# * create multiple tasks (just copy the data in subtract_test_crowded_flavor multiple times)
 origin_dir = pa.join(pa.dirname(CDIR), 'subtract_test_crowded_flavor', 'input_data')
 taskmdir = pa.join(CDIR, 'taskdirs_crowded_flavor')
 
+NUM_TASK = 16  
 FNAME_REF = 'ztf_001735_zg_c01_q2_refimg.resampled.mini.fits'
 FNAME_SCI = 'ztf_20180705481609_001735_zg_c01_o_q2_sciimg.mini.fits'
 for taskidx in range(NUM_TASK):
@@ -37,37 +39,52 @@ for taskidx in range(NUM_TASK):
         if pa.exists(taskdir): pass
     os.system('cp %s/%s %s/%s %s/' \
         %(origin_dir, FNAME_REF, origin_dir, FNAME_SCI, taskdir))
+print('---------------------------------- CREATE MULTI-TASKS --------------------------------------\n')
 
-# * Trigger sfft subtraction in multiprocessing mode (currently only Cupy backend is supported)
+# * run sfft subtraction in multiprocessing mode (currently only Cupy backend is supported)
 FITS_REF_Queue = [taskmdir + '/task-%d/%s' %(taskidx, FNAME_REF) for taskidx in range(NUM_TASK)]
 FITS_SCI_Queue = [taskmdir + '/task-%d/%s' %(taskidx, FNAME_SCI) for taskidx in range(NUM_TASK)]
-FITS_DIFF_Queue = [taskmdir + '/task-%d/my_sfft_diff.fits' %taskidx for taskidx in range(NUM_TASK)]
+FITS_DIFF_Queue = [taskmdir + '/task-%d/sfft_diff.fits' %taskidx for taskidx in range(NUM_TASK)]
 ForceConv_Queue = [ForceConv] * NUM_TASK
 
-# *************************** IMPORTANT NOTICE *************************** #
-#  I strongly recommend users to read the descriptions of the parameters 
-#  via help(sfft.MultiEasy_CrowdedPacket).
-# *************************** IMPORTANT NOTICE *************************** #
-
+T0 = time.time()
 _MECP = MultiEasy_CrowdedPacket(FITS_REF_Queue=FITS_REF_Queue, FITS_SCI_Queue=FITS_SCI_Queue, \
     FITS_DIFF_Queue=FITS_DIFF_Queue, FITS_Solution_Queue=[], ForceConv_Queue=ForceConv_Queue, \
-    GKerHW_Queue=[], KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
-    ConstPhotRatio=True, MaskSatContam=MaskSatContam, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
-    BACK_TYPE='AUTO', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, \
-    DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
+    GKerHW_Queue=[], KerHWRatio=KerHWRatio, KerHWLimit=(2, 20), KerPolyOrder=KerPolyOrder, \
+    BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, MaskSatContam=False, GAIN_KEY=GAIN_KEY, \
+    SATUR_KEY=SATUR_KEY, BACK_TYPE='AUTO', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, \
+    DETECT_THRESH=5.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
     ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask_Queue=[])
 
-res = _MECP.MESP_Cupy(NUM_THREADS_4PREPROC=NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT=NUM_THREADS_4SUBTRACT, \
-    CUDA_DEVICES_4SUBTRACT=CUDA_DEVICES_4SUBTRACT, TIMEOUT_4PREPRO_EACHTASK=TIMEOUT_4PREPRO_EACHTASK, \
-    TIMEOUT_4SUBTRACT_EACHTASK=TIMEOUT_4SUBTRACT_EACHTASK)
+DICT_STATUS_BAR = _MECP.MESP_Cupy(NUM_THREADS_4PREPROC=NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT=NUM_THREADS_4SUBTRACT, \
+    CUDA_DEVICES_4SUBTRACT=CUDA_DEVICES_4SUBTRACT, TIMEOUT_4PREPROC_EACHTASK=TIMEOUT_4PREPROC_EACHTASK, \
+    TIMEOUT_4SUBTRACT_EACHTASK=TIMEOUT_4SUBTRACT_EACHTASK)[0]
+
+NSUC = np.sum(np.array([DICT_STATUS_BAR[tn] for tn in DICT_STATUS_BAR]) == 2)
+_message = 'TASKS SUCCESSFUL [%d / %d]' %(NSUC, NUM_TASK)
+print('\nMeLOn CheckPoint: %s' %_message)
+
+_message = 'SFFT PROCESS [%d] TASKS (1K * 1K ZTF Cutout IMAGES) WITH ' %NUM_TASK
+_message += 'NUM_THREADS_4PREPROC [%d] & NUM_THREADS_4SUBTRACT [%d] ' %(NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT)
+_message += '---- TOTAL COMPUTING TIME [%.2fs]' %(time.time() - T0)
+print('\nMeLOn CheckPoint: %s\n' %_message)
 
 """
-# * it will produce a status-bar dictionary (indexed by task-index)
-#   status 0: initial state (NO Processing Finished Yet)
-#   status 1: Preprocessing Successed || status -1: Preprocessing Failed
-#   status 2: Subtraction Successed || status -2: Subtraction Failed
-#   NOTE: we would not trigger subtraction when the Preprocessing already fails.
-"""
+# **** **** **** **** PARAMETER CHANGE LOG **** **** **** **** #
 
-DICT_STATUS_BAR = res[0]
-print(DICT_STATUS_BAR)
+THE FUNCTION IS CREATED AT v1.1
+
+NEW PARAMETERS:
+  (1) more complete SExtractor (see sfft.utils.pyAstroMatic.PYSEx) configurations
+  >>>> -BACK_TYPE (v1.2+)
+  >>>> -BACK_VALUE (v1.2+)
+  >>>> -BACK_SIZE (v1.2+)
+  >>>> -BACK_FILTERSIZE (v1.2+)
+  >>>> -DETECT_MINAREA (v1.2+)
+  >>>> -DETECT_MAXAREA (v1.2+)
+  >>>> -DEBLEND_MINCONT (v1.2+)
+  >>>> -BACKPHOTO_TYPE (v1.2+)
+  >>>> -ONLY_FLAGS (v1.2+)
+  >>>> -BoundarySIZE (v1.2+)
+
+"""

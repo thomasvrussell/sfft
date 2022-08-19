@@ -7,10 +7,10 @@ import os.path as pa
 from astropy.io import fits
 from sfft.AutoCrowdedPrep import Auto_CrowdedPrep
 from sfft.utils.meta.TimeoutKit import TimeoutAfter
-# version: Jul 19, 2022
+# version: Aug 19, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.2"
+__version__ = "v1.3"
 
 class MultiEasy_CrowdedPacket:
     def __init__(self, FITS_REF_Queue, FITS_SCI_Queue, FITS_DIFF_Queue=[], FITS_Solution_Queue=[], \
@@ -30,6 +30,10 @@ class MultiEasy_CrowdedPacket:
         # ----------------------------- Computing Enviornment [Cupy backend ONLY] --------------------------------- #
 
         -NUM_THREADS_4PREPROC [8]           # the number of Python threads for preprocessing.
+                                            # WARNING: Empirically, the current code is only optimized for 
+                                            #          NUM_TASK / NUM_THREADS_4PREPROC in [1.0 - 4.0].
+                                            #          The computing effeciency goes down sharply as the ratio increases.
+                                            #          Too large number of tasks may even cause memory overflow.
 
         -NUM_THREADS_4SUBTRACT [1]          # the number of Python threads for sfft subtraction.
                                             # says, if you have four GPU cards, then set it to 4.
@@ -39,9 +43,9 @@ class MultiEasy_CrowdedPacket:
         -CUDA_DEVICES_4SUBTRACT [['0']]     # it specifies certain GPU devices (indices) to conduct the subtractions.
                                             # the GPU devices are usually numbered 0 to N-1 (you may use command nvidia-smi to check).
 
-        -TIMEOUT_4PREPRO_EACHTASK [120]     # timeout of each task during preprocessing.
+        -TIMEOUT_4PREPROC_EACHTASK [300]    # timeout of each task during preprocessing.
                                             
-        -TIMEOUT_4SUBTRACT_EACHTASK [120]   # timeout of each task during sfft subtraction.
+        -TIMEOUT_4SUBTRACT_EACHTASK [300]   # timeout of each task during sfft subtraction.
 
         # ----------------------------- Preprocessing with Saturation Rejection for Image-Masking --------------------------------- #
 
@@ -120,9 +124,9 @@ class MultiEasy_CrowdedPacket:
                                             # KerHW is updated as np.clip(KerHW, KerHWLimit[0], KerHWLimit[1]) 
                                             # Remarks: this is useful for a survey since it can constrain the peak GPU memory usage.
 
-        -KerPolyOrder [2]                   # Polynomial degree of kernel spatial variation.
+        -KerPolyOrder [2]                   # Polynomial degree of kernel spatial variation, can be [0,1,2,3].
 
-        -BGPolyOrder [2]                    # Polynomial degree of background spatial variation.
+        -BGPolyOrder [2]                    # Polynomial degree of differential-background spatial variation, can be [0,1,2,3].
                                             # It is non-trivial for Crowded-Flavor SFFT, as the input images are usually not sky subtracted.
         
         -ConstPhotRatio [True]              # Constant photometric ratio between images? can be True or False
@@ -194,110 +198,151 @@ class MultiEasy_CrowdedPacket:
         self.NUM_TASK = len(FITS_SCI_Queue)
 
         if FITS_DIFF_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument FITS_DIFF_Queue is Empty then Use default [...None...] instead!')
+            _warn_message = 'Argument FITS_DIFF_Queue is EMPTY then Use default [...None...] instead!'
+            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.FITS_DIFF_Queue = [None] * self.NUM_TASK
         else: self.FITS_DIFF_Queue = FITS_DIFF_Queue
         
         if FITS_Solution_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument FITS_Solution_Queue is Empty then Use default [...None...] instead!')
+            _warn_message = 'Argument FITS_Solution_Queue is EMPTY then Use default [...None...] instead!'
+            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.FITS_Solution_Queue = [None] * self.NUM_TASK
         else: self.FITS_Solution_Queue = FITS_Solution_Queue
         
         if ForceConv_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument ForceConv_Queue is Empty then Use default [...AUTO...] instead!')
+            _warn_message = 'Argument ForceConv_Queue is EMPTY then Use default [...AUTO...] instead!'
+            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.ForceConv_Queue = ['AUTO'] * self.NUM_TASK
         else: self.ForceConv_Queue = ForceConv_Queue
 
         if GKerHW_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument GKerHW_Queue is Empty then Use default [...None...] instead!')
+            _warn_message = 'Argument GKerHW_Queue is EMPTY then Use default [...None...] instead!'
+            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.GKerHW_Queue = [None] * self.NUM_TASK
         else: self.GKerHW_Queue = GKerHW_Queue
 
         if PriorBanMask_Queue == []:
-            warnings.warn('MeLOn WARNING: Argument PriorBanMask_Queue is Empty then Use default [...None...] instead!')
+            _warn_message = 'Argument PriorBanMask_Queue is EMPTY then Use default [...None...] instead!'
+            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.PriorBanMask_Queue = [None] * self.NUM_TASK
         else: self.PriorBanMask_Queue = PriorBanMask_Queue
-
+    
     def MESP_Cupy(self, NUM_THREADS_4PREPROC=8, NUM_THREADS_4SUBTRACT=1, CUDA_DEVICES_4SUBTRACT=['0'], \
-        TIMEOUT_4PREPRO_EACHTASK=120, TIMEOUT_4SUBTRACT_EACHTASK=120):
+        TIMEOUT_4PREPROC_EACHTASK=300, TIMEOUT_4SUBTRACT_EACHTASK=300):
 
         # * define task-oriented dictionaries of status-bar and products
-        #   status 0: initial state (NO Processing Finished Yet)
-        #   status 1: Preprocessing Successed || status -1: Preprocessing Failed
-        #   status 2: Subtraction Successed || status -2: Subtraction Failed
-        #   NOTE: we would not trigger subtraction when the Preprocessing already fails.
+        #   status 0: Initial State
+        #   status 1: Preprocessing SUCCESS || status -1: Preprocessing FAIL
+        #   status 2: Subtraction SUCCESS || status -2: Subtraction FAIL
+        #   status 32: Preprocessing is IN-PROGRESS ...
+        #   status 64: Subtraction is IN-PROGRESS ...
+        #   NOTE: Subtraction would not be triggered when Preprocessing fails
+        
+        _RATIO = self.NUM_TASK / NUM_THREADS_4PREPROC
+        if _RATIO > 4.0:
+            _warn_message = 'THIS FUNCTION IS NOT OPTIMIZED FOR RATIO OF '
+            _warn_message += 'NUM_TASK / NUM_THREADS_4PREPROC BEING TO HIGH [%.1f > 4.0]!' %_RATIO
+            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
 
         BACKEND_4SUBTRACT = 'Cupy'
         taskidx_lst = np.arange(self.NUM_TASK)
+        assert NUM_THREADS_4SUBTRACT == len(CUDA_DEVICES_4SUBTRACT)
+        
         DICT_STATUS_BAR = {'task-[%d]' %taskidx: 0 for taskidx in taskidx_lst}
         DICT_PRODUCTS = {'task-[%d]' %taskidx: {} for taskidx in taskidx_lst}
-
-        # * calculate chunksize for each thread
-        assert NUM_THREADS_4SUBTRACT == len(CUDA_DEVICES_4SUBTRACT)
-        CHUNKSIZE_THREAD_4PREPROC = int(math.ceil(self.NUM_TASK / float(NUM_THREADS_4PREPROC)))
-        CHUNKSIZE_THREAD_4SUBTRACT = int(math.ceil(self.NUM_TASK / float(NUM_THREADS_4SUBTRACT)))
+        lock = threading.RLock()
 
         # * define the function for preprocessing (see sfft.EasyCrowdedPacket)
-        def FUNC_4PREPROC(INDEX_THREAD_4PREPROC, DICT_STATUS_BAR, DICT_PRODUCTS):
+        def FUNC_4PREPROC(INDEX_THREAD_4PREPROC):
 
-            taskidx_tlst = taskidx_lst[CHUNKSIZE_THREAD_4PREPROC * INDEX_THREAD_4PREPROC: \
-                                       CHUNKSIZE_THREAD_4PREPROC * (INDEX_THREAD_4PREPROC + 1)]
+            THREAD_ALIVE_4PREPROC = True
+            while THREAD_ALIVE_4PREPROC:
+                with lock:
+                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['task-[%d]' %taskidx] for taskidx in taskidx_lst])
+                    OPEN_MASK_4PREPROC = STATUS_SNAPSHOT == 0
+                    if np.sum(OPEN_MASK_4PREPROC) > 0:
+                        taskidx_acquired = taskidx_lst[OPEN_MASK_4PREPROC][0]
+                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = 32
+                        _message = 'Preprocessing thread-[%d] ACQUIRED task-[%d]!' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                        print('\nMeLOn CheckPoint: %s' %_message)
+                    else: 
+                        THREAD_ALIVE_4PREPROC = False
+                        taskidx_acquired = None
+                        _message = 'TERMINATE Preprocessing thread-[%d] AS NO TASK WILL BE ALLOCATED!' %INDEX_THREAD_4PREPROC
+                        print('\nMeLOn CheckPoint: %s' %_message)
 
-            for taskidx in taskidx_tlst:
-                FITS_REF = self.FITS_REF_Queue[taskidx]
-                FITS_SCI = self.FITS_SCI_Queue[taskidx]
-                PriorBanMask = self.PriorBanMask_Queue[taskidx]
-                try:
-                    with TimeoutAfter(timeout=TIMEOUT_4PREPRO_EACHTASK, exception=TimeoutError):
-                        _ACP = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=self.GAIN_KEY, \
-                            SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
-                            BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, \
-                            DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, \
-                            BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE)
-                        SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=self.BACK_SIZE_SUPER, StarExt_iter=self.StarExt_iter, \
-                            PriorBanMask=PriorBanMask)
+                if taskidx_acquired is not None:
+                    FITS_REF = self.FITS_REF_Queue[taskidx_acquired]
+                    FITS_SCI = self.FITS_SCI_Queue[taskidx_acquired]
+                    PriorBanMask = self.PriorBanMask_Queue[taskidx_acquired]
+                    try:
+                        with TimeoutAfter(timeout=TIMEOUT_4PREPROC_EACHTASK, exception=TimeoutError):
+                            _ACP = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=self.GAIN_KEY, \
+                                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
+                                BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, \
+                                DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, \
+                                BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE)
+                            SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=self.BACK_SIZE_SUPER, StarExt_iter=self.StarExt_iter, \
+                                PriorBanMask=PriorBanMask)
                         
-                        DICT_STATUS_BAR['task-[%d]' %taskidx] = 1    # NOTE Preprocessing Successed
-                        DICT_PRODUCTS['task-[%d]' %taskidx]['SFFTPrepDict'] = SFFTPrepDict
-                        print('\nMeLOn CheckPoint: Successful Preprocessing for task-[%d] in thread-[%d]!' \
-                               %(taskidx, INDEX_THREAD_4PREPROC))
-                except:
-                    DICT_STATUS_BAR['task-[%d]' %taskidx] = -1      # NOTE Preprocessing Failed
-                    DICT_PRODUCTS['task-[%d]' %taskidx]['SFFTPrepDict'] = None
-                    print('\nMeLOn ERROR: UnSuccessful Preprocessing for task-[%d] in thread-[%d]!' \
-                           %(taskidx, INDEX_THREAD_4PREPROC))
-            
-            print('\nMeLOn Report: Preprocessing thread-[%d] comes to end!' %INDEX_THREAD_4PREPROC)
+                        NEW_STATUS = 1
+                        _message = 'Successulf Preprocessing for task-[%d] ' %taskidx_acquired
+                        _message += 'in Preprocessing thread-[%d]!' %INDEX_THREAD_4PREPROC
+                        print('\nMeLOn CheckPoint: %s' %_message)
+                    except:
+                        NEW_STATUS = -1
+                        _error_message = 'UnSuccessful Preprocessing for task-[%d] ' %taskidx_acquired
+                        _error_message += 'in Preprocessing thread-[%d]!' %INDEX_THREAD_4PREPROC
+                        print('\nMeLOn ERROR: %s' %_error_message)
+                        SFFTPrepDict = None
+                    
+                    with lock:
+                        # NOTE: IN FACT, THERE IS NO RISK HERE EVEN WITHOUT LOCK.
+                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = NEW_STATUS
+                        DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['SFFTPrepDict'] = SFFTPrepDict
 
             return None
         
         # * define the function for sfft subtraction (see sfft.EasyCrowdedPacket)
-        def FUNC_4SUBTRCT(INDEX_THREAD_4SUBTRACT, DICT_STATUS_BAR, DICT_PRODUCTS):
+        def FUNC_4SUBTRCT(INDEX_THREAD_4SUBTRACT):
             
             CUDA_DEVICE_4SUBTRACT = CUDA_DEVICES_4SUBTRACT[INDEX_THREAD_4SUBTRACT]
-            taskidx_tlst = taskidx_lst[CHUNKSIZE_THREAD_4SUBTRACT * INDEX_THREAD_4SUBTRACT: \
-                                       CHUNKSIZE_THREAD_4SUBTRACT * (INDEX_THREAD_4SUBTRACT + 1)]
+            THREAD_ALIVE_4SUBTRCT = True
+            while THREAD_ALIVE_4SUBTRCT:
+                SHORT_PAUSE = False
+                with lock:
+                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['task-[%d]' %taskidx] for taskidx in taskidx_lst])
+                    OPEN_MASK_4SUBTRACT = STATUS_SNAPSHOT == 1
+                    WAIT_MASK_4SUBTRACT = np.in1d(STATUS_SNAPSHOT, [0, 32])
+                    if np.sum(OPEN_MASK_4SUBTRACT) > 0:
+                        taskidx_acquired = taskidx_lst[OPEN_MASK_4SUBTRACT][0]
+                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = 64
+                        _message = 'Subtraction thread-[%d] ACQUIRED task-[%d]!' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                        print('\nMeLOn CheckPoint: %s' %_message)
+                    elif np.sum(WAIT_MASK_4SUBTRACT) > 0:
+                        SHORT_PAUSE = True
+                        taskidx_acquired = None
+                    else:
+                        THREAD_ALIVE_4SUBTRCT = False
+                        taskidx_acquired = None
+                        _message = 'TERMINATE Subtraction thread-[%d] AS NO TASK WILL BE ALLOCATED!' %INDEX_THREAD_4SUBTRACT
+                        print('\nMeLOn CheckPoint: %s' %_message)
 
-            while True:
-                STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['task-[%d]' %taskidx] for taskidx in taskidx_tlst])
-                OPEN_MASK = STATUS_SNAPSHOT == 1                     # tasks come to a successful preprocessing
-                CLOSED_MASK = np.in1d(STATUS_SNAPSHOT, [-1, 2, -2])  # terminated tasks 
+                if SHORT_PAUSE:
+                    # run a short sleep, otherwise this thread may always hold the lock by the while loop
+                    time.sleep(0.01)
                 
-                if np.sum(CLOSED_MASK) == len(STATUS_SNAPSHOT):
-                    print('\nMeLOn Report: Subtraction thread-[%d] comes to end!' %INDEX_THREAD_4SUBTRACT)
-                    break
-                
-                if np.sum(OPEN_MASK) > 0:
-                    taskidx = taskidx_tlst[OPEN_MASK][0]
+                if taskidx_acquired is not None:
+                    FITS_REF = self.FITS_REF_Queue[taskidx_acquired]
+                    FITS_SCI = self.FITS_SCI_Queue[taskidx_acquired]
+                    FITS_DIFF = self.FITS_DIFF_Queue[taskidx_acquired]
+                    FITS_Solution = self.FITS_Solution_Queue[taskidx_acquired]
+                    ForceConv = self.ForceConv_Queue[taskidx_acquired]
+                    GKerHW = self.GKerHW_Queue[taskidx_acquired]
 
-                    FITS_REF = self.FITS_REF_Queue[taskidx]
-                    FITS_SCI = self.FITS_SCI_Queue[taskidx]
-                    FITS_DIFF = self.FITS_DIFF_Queue[taskidx]
-                    FITS_Solution = self.FITS_Solution_Queue[taskidx]
-                    ForceConv = self.ForceConv_Queue[taskidx]
-                    GKerHW = self.GKerHW_Queue[taskidx]
-
-                    SFFTPrepDict = DICT_PRODUCTS['task-[%d]' %taskidx]['SFFTPrepDict']
+                    with lock:
+                        # NOTE: IN FACT, THERE IS NO RISK HERE EVEN WITHOUT LOCK.
+                        SFFTPrepDict = DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['SFFTPrepDict']
 
                     try:
                         with TimeoutAfter(timeout=TIMEOUT_4SUBTRACT_EACHTASK, exception=TimeoutError):
@@ -422,11 +467,11 @@ class MultiEasy_CrowdedPacket:
                                 phdu.data = PixA_Solution.T
                                 fits.HDUList([phdu]).writeto(FITS_Solution, overwrite=True)
 
-                            DICT_STATUS_BAR['task-[%d]' %taskidx] = 2   # NOTE Subtraction Successed
-                            DICT_PRODUCTS['task-[%d]' %taskidx]['Solution'] = Solution
-                            DICT_PRODUCTS['task-[%d]' %taskidx]['PixA_DIFF'] = PixA_DIFF
-                            print('\nMeLOn CheckPoint: Successful Subtraction for task-[%d] in thread-[%d]!' \
-                                %(taskidx, INDEX_THREAD_4SUBTRACT))
+                        NEW_STATUS = 2
+                        _message = 'Successulf Subtraction for task-[%d] ' %taskidx_acquired
+                        _message += 'in Subtraction thread-[%d]!' %INDEX_THREAD_4SUBTRACT
+                        print('\nMeLOn CheckPoint: %s' %_message)
+
                     except:
                         # ** free GPU memory when the subtraction fails
                         import cupy as cp
@@ -436,23 +481,29 @@ class MultiEasy_CrowdedPacket:
                             mempool.free_all_blocks()
                             pinned_mempool.free_all_blocks()
 
-                        DICT_STATUS_BAR['task-[%d]' %taskidx] = -2      # NOTE Subtraction Failed  
-                        DICT_PRODUCTS['task-[%d]' %taskidx]['Solution'] = None
-                        DICT_PRODUCTS['task-[%d]' %taskidx]['PixA_DIFF'] = None
-                        print('\nMeLOn ERROR: UnSuccessful Subtraction for task-[%d] in thread-[%d]!' \
-                            %(taskidx, INDEX_THREAD_4SUBTRACT))
+                        NEW_STATUS = -2
+                        _error_message = 'UnSuccessulf Subtraction for task-[%d] ' %taskidx_acquired
+                        _error_message += 'in Subtraction thread-[%d]!' %INDEX_THREAD_4SUBTRACT
+                        print('\nMeLOn ERROR: %s' %_error_message)
+                        Solution = None
+                        PixA_DIFF = None
+
+                    with lock:
+                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = NEW_STATUS
+                        DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['Solution'] = Solution
+                        DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['PixA_DIFF'] = PixA_DIFF
 
             return None
 
         # * trigger the threads for the preprocessing and subtraction
         MyThreadQueue = []
         for INDEX_THREAD_4PREPROC in range(NUM_THREADS_4PREPROC):
-            MyThread = threading.Thread(target=FUNC_4PREPROC, args=(INDEX_THREAD_4PREPROC, DICT_STATUS_BAR, DICT_PRODUCTS,))
+            MyThread = threading.Thread(target=FUNC_4PREPROC, args=(INDEX_THREAD_4PREPROC,))
             MyThreadQueue.append(MyThread)
             MyThread.start()
 
         for INDEX_THREAD_4SUBTRACT in range(NUM_THREADS_4SUBTRACT):
-            MyThread = threading.Thread(target=FUNC_4SUBTRCT, args=(INDEX_THREAD_4SUBTRACT, DICT_STATUS_BAR, DICT_PRODUCTS,))
+            MyThread = threading.Thread(target=FUNC_4SUBTRCT, args=(INDEX_THREAD_4SUBTRACT,))
             MyThreadQueue.append(MyThread)
             MyThread.start()
   

@@ -4,6 +4,7 @@ Remarks on Internal Packages Imports:
     from sfft.AutoCrowdedPrep import Auto_CrowdedPrep
     from sfft.utils.SymmetricMatch import Symmetric_Match
     from sfft.utils.HoughMorphClassifier import Hough_MorphClassifier
+    from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
     from sfft.utils.meta.TimeoutKit import TimeoutAfter
     from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
     from sfft.sfftcore.SFFTConfigure import SFFTConfigure
