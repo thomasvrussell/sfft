@@ -128,11 +128,14 @@ class Hough_MorphClassifier:
         #        which are not contributed from point sources but resides in the small-FLUX_RATIO region.
         #        NOTE: One need to choose a proper Hough_FRLowerLimit according to the fact if the image is 
         #              under/well/over-sampling (depending on the instrumental configuration and typical seeing conditions)
-        #              recommended values of Hough_FRLowerLimit range from 0.1 to 1.0
+        #              recommended values of Hough_FRLowerLimit range from 0.1 to 1.0.
+        #        NOTE: When the Point-Source-Line is not very pronounced, e.g., for the galaxy dominated fields. 
+        #              you may reduce Hough_peakclip from 0.7 to, says, ~0.4.
         
         MA, FR = MA_FR[:, 0], MA_FR[:, 1]
         MA_MID = np.nanmedian(MA)
-        Hmask = np.logical_and.reduce((FR > Hough_FRLowerLimit, FR < 10.0, MA > MA_MID-7.0, MA < MA_MID+7.0))
+        Hmask = np.logical_and.reduce((FR > Hough_FRLowerLimit, FR < 10.0, \
+            MA > MA_MID-7.0, MA < MA_MID+7.0))
         
         HDOP = Hough_Detection.HD(XY_obj=MA_FR, Hmask=Hmask, res=Hough_res, \
             count_thresh=Hough_count_thresh, peakclip=Hough_peakclip)
