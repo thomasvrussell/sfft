@@ -3,7 +3,7 @@ import numpy as np
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.HoughDetection import Hough_Detection
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-# version: Aug 17, 2022
+# version: Aug 21, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -105,9 +105,8 @@ class Hough_MorphClassifier:
         
         return PYSEX_OP
     
-    def Classifier(AstSEx, Hough_FRLowerLimit=0.1, Hough_res=0.05, Hough_count_thresh=1, Hough_peakclip=0.7, \
-        LineTheta_thresh=0.2, BeltHW=0.2, PS_ELLIPThresh=0.3, Return_HPS=False, \
-        HPS_SNRThresh=100.0, HPS_SNRTopReject=0.15, HPS_NumLowerLimit=30):
+    def Classifier(AstSEx, Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
+        Return_HPS=False, HPS_SNRThresh=100.0, HPS_SNRTopReject=0.15, HPS_NumLowerLimit=30):
         
         A_IMAGE = np.array(AstSEx['A_IMAGE'])
         B_IMAGE = np.array(AstSEx['B_IMAGE'])
@@ -129,19 +128,21 @@ class Hough_MorphClassifier:
         #        NOTE: One need to choose a proper Hough_FRLowerLimit according to the fact if the image is 
         #              under/well/over-sampling (depending on the instrumental configuration and typical seeing conditions)
         #              recommended values of Hough_FRLowerLimit range from 0.1 to 1.0.
-        #        NOTE: When the Point-Source-Line is not very pronounced, e.g., for the galaxy dominated fields. 
-        #              you may reduce Hough_peakclip from 0.7 to, says, ~0.4.
+        #        NOTE: When the point-source-belt is not very pronounced (e.g., in galaxy dominated fields),
+        #              one may consider to reduce the parameter from default 0.7 to, says, ~ 0.4.
         
         MA, FR = MA_FR[:, 0], MA_FR[:, 1]
         MA_MID = np.nanmedian(MA)
         Hmask = np.logical_and.reduce((FR > Hough_FRLowerLimit, FR < 10.0, \
             MA > MA_MID-7.0, MA < MA_MID+7.0))
         
-        HDOP = Hough_Detection.HD(XY_obj=MA_FR, Hmask=Hmask, res=Hough_res, \
-            count_thresh=Hough_count_thresh, peakclip=Hough_peakclip)
-        ThetaPeaks, RhoPeaks, ScaLineDIS = HDOP[1], HDOP[2], HDOP[4]
-
-        Avmask = np.abs(ThetaPeaks) < LineTheta_thresh
+        Hough_grid_pixsize, Hough_count_thresh = 0.05, 1   # Emperical
+        HDOP = Hough_Detection.HD(XY_obj=MA_FR, Hmask=Hmask, grid_pixsize=Hough_grid_pixsize, \
+            count_thresh=Hough_count_thresh, peak_clip=Hough_peak_clip)
+        ThetaPeaks, RhoPeaks, ScaLineDIST = HDOP[2:]
+        
+        Belt_theta_thresh = 0.2   # Emperical
+        Avmask = np.abs(ThetaPeaks) < Belt_theta_thresh
         AvIDX = np.where(Avmask)[0]
 
         if len(AvIDX) == 0: 
@@ -157,7 +158,7 @@ class Hough_MorphClassifier:
         if Horindex is not None:
             HorThetaPeak = ThetaPeaks[Horindex]
             HorRhoPeak = RhoPeaks[Horindex]
-            HorScaLineDIS = ScaLineDIS[:, Horindex]
+            HorScaLineDIST = ScaLineDIST[:, Horindex]
 
             _message = 'The Point-Source-Belt detected by Hough Transform '
             _message += 'is characterized by [%.6f, %.6f]!' %(HorThetaPeak, HorRhoPeak)
@@ -167,7 +168,7 @@ class Hough_MorphClassifier:
             # (1) HorThetaPeak is around 0, then cos(HorThetaPeak) around 1 thus >> 0.
             # (2) FRL region (above the line) is x_above * sin(HorThetaPeak) + y_above * cos(HorRhoPeak) > rho.
 
-            MASK_FRM = HorScaLineDIS < BeltHW
+            MASK_FRM = HorScaLineDIST < BeltHW
             MASK_FRL = MA_FR[:, 0] * np.sin(HorThetaPeak) + MA_FR[:, 1] * np.cos(HorThetaPeak) > HorRhoPeak
             MASK_FRL = np.logical_and(MASK_FRL, ~MASK_FRM)
 

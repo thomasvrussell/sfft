@@ -6,7 +6,7 @@ from astropy.io import fits
 import scipy.ndimage as ndimage
 from astropy.table import Column
 from sfft.AutoSparsePrep import Auto_SparsePrep
-# version: Aug 17, 2022
+# version: Aug 21, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -18,7 +18,7 @@ class Easy_SparsePacket:
         MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='ESATUR', BACK_TYPE='MANUAL', BACK_VALUE='0.0', \
         BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
         DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30, \
-        XY_PriorSelect=None, Hough_FRLowerLimit=0.1, BeltHW=0.2, PS_ELLIPThresh=0.3, \
+        XY_PriorSelect=None, Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
         MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, CVREJ_MAGD_THRESH=0.12, \
         ELABO_VAR_REJECTION=True, EVREJ_RATIO_THREH=5.0, EVREJ_SAFE_MAGDEV=0.04, StarExt_iter=4, \
         XY_PriorBan=None, PostAnomalyCheck=False, PAC_RATIO_THRESH=5.0, BACKEND_4SUBTRACT='Cupy', \
@@ -106,7 +106,12 @@ class Easy_SparsePacket:
         -Hough_FRLowerLimit [0.1]      # The lower bound of FLUX_RATIO for line feature detection using Hough transformation.
                                        # Setting a proper lower bound can avoid to detect some line features by chance,
                                        # which are not contributed from point sources but resides in the small-FLUX_RATIO region.
-                                       # recommended values of Hough_FRLowerLimit: 0.1 ~ 1.0
+                                       # NOTE: Recommended values of Hough_FRLowerLimit: 0.1 ~ 1.0
+                                       # NOTE: ONLY WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE
+
+        -Hough_peak_clip [0.7]         # It determines the lower bound of the sensitivity of the line feature detection.
+                                       # NOTE: When the point-source-belt is not very pronounced (e.g., in galaxy dominated fields),
+                                       #       one may consider to reduce the parameter from default 0.7 to, says, ~ 0.4.
                                        # NOTE: ONLY WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE
     
         -BeltHW [0.2]                  # The half-width of point-source-belt detected by Hough Transformation.
@@ -262,8 +267,8 @@ class Easy_SparsePacket:
         if XY_PriorSelect is None:
             IMAGE_MASK_METHOD = 'HOUGH-AUTO'
             print('MeLOn CheckPoint: TRIGGER Auto-Sparse-Prep [%s] MODE!' %IMAGE_MASK_METHOD)
-            SFFTPrepDict = _ASP.HoughAutoMask(Hough_FRLowerLimit=Hough_FRLowerLimit, BeltHW=BeltHW, \
-                PS_ELLIPThresh=PS_ELLIPThresh, MatchTol=MatchTol, MatchTolFactor=MatchTolFactor, \
+            SFFTPrepDict = _ASP.HoughAutoMask(Hough_FRLowerLimit=Hough_FRLowerLimit, Hough_peak_clip=Hough_peak_clip, \
+                BeltHW=BeltHW, PS_ELLIPThresh=PS_ELLIPThresh, MatchTol=MatchTol, MatchTolFactor=MatchTolFactor, \
                 COARSE_VAR_REJECTION=COARSE_VAR_REJECTION, CVREJ_MAGD_THRESH=CVREJ_MAGD_THRESH, \
                 ELABO_VAR_REJECTION=ELABO_VAR_REJECTION, EVREJ_RATIO_THREH=EVREJ_RATIO_THREH, \
                 EVREJ_SAFE_MAGDEV=EVREJ_SAFE_MAGDEV, StarExt_iter=StarExt_iter, XY_PriorBan=XY_PriorBan)

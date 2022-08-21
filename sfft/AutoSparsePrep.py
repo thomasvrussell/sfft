@@ -8,7 +8,7 @@ from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.SymmetricMatch import Symmetric_Match
 from sfft.utils.HoughMorphClassifier import Hough_MorphClassifier
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-# version: Aug 17, 2022
+# version: Aug 21, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -144,7 +144,7 @@ class Auto_SparsePrep:
 
         return SFFTPrepDict
 
-    def HoughAutoMask(self, Hough_FRLowerLimit=0.1, BeltHW=0.2, PS_ELLIPThresh=0.3, \
+    def HoughAutoMask(self, Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
         MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, CVREJ_MAGD_THRESH=0.12, \
         ELABO_VAR_REJECTION=False, EVREJ_RATIO_THREH=5.0, EVREJ_SAFE_MAGDEV=0.04, StarExt_iter=4, XY_PriorBan=None):
         # - Hough Transform is used to determine subtraction-sources
@@ -160,7 +160,7 @@ class Auto_SparsePrep:
                 BoundarySIZE=self.BoundarySIZE, AddSNR=False)
 
             Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], Hough_FRLowerLimit=Hough_FRLowerLimit, \
-                BeltHW=BeltHW, PS_ELLIPThresh=PS_ELLIPThresh, Return_HPS=False)
+                Hough_peak_clip=Hough_peak_clip, BeltHW=BeltHW, PS_ELLIPThresh=PS_ELLIPThresh, Return_HPS=False)
             AstSEx_GS, FHWM, PixA_SEG = Hmc[0][Hc[2]], Hc[0], Hmc[1][0].astype(int)
             return AstSEx_GS, FHWM, PixA_SEG
 
@@ -279,7 +279,7 @@ class Auto_SparsePrep:
             EVREJ_MASK = np.logical_and(_OUTMASK, ~_SAFEMASK)
             AstSEx_SSr = AstSEx_iSSr[~EVREJ_MASK]
             AstSEx_SSs = AstSEx_iSSs[~EVREJ_MASK]
-            
+
             EVREJ_PERC = np.sum(EVREJ_MASK) / NUM_MGS
             _message = 'Elaborate Variable Rejection [flux deviation > %.2f sigma] & ' %EVREJ_RATIO_THREH
             _message += '[magnitude deviation > %.3f mag] ' %EVREJ_SAFE_MAGDEV
