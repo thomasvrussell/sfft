@@ -5,38 +5,40 @@ from copy import deepcopy
 from astropy.io import fits
 from astropy.convolution import convolve
 from sfft.utils.meta.MultiProc import Multi_Proc
+# version: Aug 22, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.1"
+__version__ = "v1.3"
 
-# * Symbol Convention NOTE
-#    X (x) / Y (y) ----- ScaledFortranCoor
-#    e.g. pixel (3, 5) center corresponds (x, y) = (4.0/N0, 6.0/N1)
-#    NOTE: Without special definition, MeLOn convention refers to X (x) / Y (y) as FortranCoor.
+# * How to express a spatially-varying kernel
+#   a. SFFT DictForm
+#      SVK_xy = sum_ab (A_xyab * K_ab), where
+#      A_xyab = sum_ij (a_ijab * x^i * y^j)
+#      NOTE K_ab is sfft-delta basis
+#      NOTE dictionary is given in a form a[(i, j)][a, b] = a_ijab
+#      NOTE here a is literally sfft_å, keep in mind that sfft_a = N0*N1*sfft_å = N0*N1*a
+#      NOTE this formula is slightly modified from that in sfft paper, so that the new form (with decimal subscripts xy) 
+#           allows us to derive the kernel at any given ScaledFortranCoor, not just confined to pixel centers. 
 #
-# * Express spatial-varying kernel 
-#    a. SFFT DictForm
-#        SVK_xy = sum_ab (A_xyab * K_ab), where
-#        A_xyab = sum_ij (a_ijab * x^i * y^j)
-#        NOTE K_ab is sfft-delta basis
-#        NOTE dictionary is given in a form a[(i, j)][a, b] = a_ijab
-#        NOTE here a is literally sfft_å, keep in mind that sfft_a = N0*N1*sfft_å = N0*N1*a
-#        NOTE this formula is slightly modified from that in sfft paper, so that the new form (with decimal subscripts xy) 
-#             allows us to derive the kernel at any given ScaledFortranCoor, not just confined to pixel centers. 
+#   b. Standard DictForm
+#      SVK_xy = sum_ab (B_xyab * D_ab), where 
+#      B_xyab = sum_ij (b_ijab * x^i * y^j)
+#      NOTE D_ab is Cartesian-delta basis
+#      NOTE dictionary is given in a form b[(i, j)][a, b] = b_ijab
 #
-#    b. Standard DictForm
-#        SVK_xy = sum_ab (B_xyab * D_ab), where 
-#        B_xyab = sum_ij (b_ijab * x^i * y^j)
-#        NOTE D_ab is Cartesian-delta basis
-#        NOTE dictionary is given in a form b[(i, j)][a, b] = b_ijab
+#   c. PSFEx DictForm
+#      SVK_xy = sum_ab (B_xyab * D_ab), where 
+#      B_xyab = sum_ij (c_ijab * ((N0*x - refx)/scax)^i * ((N1*y - refy)/scay)^j)
+#      NOTE D_ab is Cartesian-delta basis
+#      NOTE dictionary is given in a form c[(i, j)][a, b] = c_ijab with 
+#           parameters scax, scay, refx, refy, which all are capsulated in PSFMODEL.
+#           where scax & scay are scale factors, while refx & refy are FortranCoor of reference point.
+#   
+#   Remarks on coordinates
+#   E.g., Pixel Location (3, 5) in an image of size [1024, 2048]
+#         > FortranCoor (4.0, 6.0) 
+#         > ScaledFortranCoor (4.0/1024, 6.0/2048)
 #
-#    c. PSFEx DictForm
-#        SVK_xy = sum_ab (B_xyab * D_ab), where 
-#        B_xyab = sum_ij (c_ijab * ((N0*x - refx)/scax)^i * ((N1*y - refy)/scay)^j)
-#        NOTE D_ab is Cartesian-delta basis
-#        NOTE dictionary is given in a form c[(i, j)][a, b] = c_ijab with 
-#        parameters scax, scay, refx, refy, which all are capsulated in PSFMODEL.
-#        where scax & scay are scale factors, while refx & refy are FortranCoor of reference point.
 
 class ReadPSFMODEL:
     @staticmethod
@@ -61,24 +63,24 @@ class ReadPSFMODEL:
         hdl = fits.open(PSFMODEL)
         hdr = hdl[1].header
         pd = int(hdr['POLDEG1'])
-        
-        DKx, DKy = pd, pd
-        print('MeLOn CheckPoint: POLDEG = %d !' %pd)
         refx, refy = float(hdr['POLZERO1']), float(hdr['POLZERO2'])
         scax, scay = float(hdr['POLSCAL1']), float(hdr['POLSCAL2'])
-        PSF_Array = hdl[1].data['PSF_MASK'][0]
-        L0, L1 = PSF_Array[0].shape
-        PParams = (pd, refx, refy, scax, scay)
-        hdl.close()
+        PSFEx_meta = (pd, refx, refy, scax, scay)
+        print('MeLOn CheckPoint: PSFEx POLDEG = %d !' %pd)
+        print('MeLOn CheckPoint: PSFEx POLZERO = [%.2f, %.2f] !' %(refx, refy))
+        print('MeLOn CheckPoint: PSFEx POLSCAL = [%.2f, %.2f] !' %(scax, scay))
 
-        L_ = 0
+        _layer = 0
         PSFEx_dict = {}
+        DKx, DKy = pd, pd
+        PSFMODEL_DATA = hdl[1].data['PSF_MASK'][0]
         for j in range(DKy+1):
             for i in range(DKx+1-j):
-                PSFEx_dict[(i, j)] = PSF_Array[L_].copy() 
-                L_ += 1
+                PSFEx_dict[(i, j)] = PSFMODEL_DATA[_layer].T.copy()
+                _layer += 1
+        hdl.close()
 
-        return PSFEx_dict, PParams
+        return PSFEx_dict, PSFEx_meta
 
 
 class SVKDictConverter:
@@ -86,10 +88,10 @@ class SVKDictConverter:
         self.DKx = DKx
         self.DKy = DKy
     
-    def PSF2ST(self, N0, N1, PSFEx_dict, PParams):
+    def PSF2ST(self, N0, N1, PSFEx_dict, PSFEx_meta):
 
         L0, L1 = PSFEx_dict[(0, 0)].shape
-        pd, refx, refy, scax, scay = PParams
+        pd, refx, refy, scax, scay = PSFEx_meta
         if self.DKx != pd or self.DKy != pd:
             sys.exit('MeLOn ERROR: POLDEG is inconsistent with given DKx & DKy !')
 
@@ -108,7 +110,8 @@ class SVKDictConverter:
             Standard_dict[(0, 1)] = (-N1 * refx * c11ab * scay - 2 * N1 * refy * c02ab * scax + \
                 N1 * c01ab * scax * scay)/(scax * scay**2)
             Standard_dict[(0, 2)] = N1**2 * c02ab / scay**2
-            Standard_dict[(1, 0)] = (-2 * N0 * refx * c20ab * scay - N0 * refy * c11ab * scax + N0 * c10ab * scax * scay) / (scax**2 * scay)
+            Standard_dict[(1, 0)] = (-2 * N0 * refx * c20ab * scay - \
+                N0 * refy * c11ab * scax + N0 * c10ab * scax * scay) / (scax**2 * scay)
             Standard_dict[(1, 1)] = N0 * N1 * c11ab / (scax * scay)
             Standard_dict[(2, 0)] = N0**2 * c20ab / scax**2
 
@@ -126,7 +129,8 @@ class SVKDictConverter:
                     x, y = symbols('x, y')
                     for ip in range(self.DKx+1):
                         for jp in range(self.DKy+1-ip):
-                            Eq += PSFEx_dict[(ip, jp)][aa, bb] * (((N0*x-refx)/scax)**ip) * (((N1*y-refy)/scay)**jp)
+                            Eq += PSFEx_dict[(ip, jp)][aa, bb] * \
+                                (((N0*x-refx)/scax)**ip) * (((N1*y-refy)/scay)**jp)
                     
                     CoDict = {}
                     a = Poly(Eq, x, y)
@@ -160,7 +164,8 @@ class SVKDictConverter:
         Standard_dict = deepcopy(Sfft_dict)
         for i in range(self.DKx+1):
             for j in range(self.DKy+1-i):
-                Standard_dict[(i, j)][0+w0, 0+w1] = 2 * Sfft_dict[(i, j)][0+w0, 0+w1] - np.sum(Sfft_dict[(i, j)])
+                Standard_dict[(i, j)][0+w0, 0+w1] = 2 * Sfft_dict[(i, j)][0+w0, 0+w1] - \
+                    np.sum(Sfft_dict[(i, j)])
         return Standard_dict
 
 
@@ -236,8 +241,8 @@ class SVKRealization:
         KStack = np.tensordot(B, SSS, (0, 0))
         return KStack 
 
-    def PSF(self, PSFEx_dict, PParams):
-        pd, refx, refy, scax, scay = PParams
+    def PSF(self, PSFEx_dict, PSFEx_meta):
+        pd, refx, refy, scax, scay = PSFEx_meta
         if self.DKx != pd or self.DKy != pd:
             sys.exit('MeLOn ERROR: POLDEG is inconsistent with given DKx & DKy !')
         
@@ -269,11 +274,11 @@ class SVKRealization:
 #   [PSFEx] convolve with PSFEx-PSF by given psf-model directly
 #
 # * Bias of SFFT-SVConv
-#    SFFT-SVConv is slightly biased (towards overestimate) due to the approaximation: 
-#    the bias can be trivial for most cases as it is typically ~ 0.01-0.5 mmag.
-#    The bias is the error of relative flux zeropoint estimated by sfft.
-#    REF: Hartung (2012) developed a CUDA approach to precisely calculate SVConv. 
-#    Frankly, our scenario is deprecated, it is just an alternative.
+#   SFFT-SVConv is slightly biased (towards overestimate) due to the approaximation: 
+#   the bias can be trivial for most cases as it is typically ~ 0.01-0.5 mmag.
+#   The bias is the error of relative flux zeropoint estimated by sfft.
+#   REF: Hartung (2012) developed a CUDA approach to calculate SVConv. 
+#        Here I provided an alternative way to make it.
    
 class SFFT_SVConv:
     @staticmethod
@@ -296,13 +301,13 @@ class SFFT_SVConv:
         
         if mode == 'PSFEx-MODEL':
             # Read PSFMODEL, then Convert PSFEx-dict into Standard-dict
-            PSFEx_dict, PParams = ReadPSFMODEL.RP(PSFMODEL=PSFMODEL)
-            if DK != PParams[0]: sys.exit('MeLOn ERROR: POLDEG is inconsistent with given DK !')
-            Standard_dict = SVKDictConverter(DKx=DK, DKy=DK).PSF2ST(N0=N0, N1=N1, PSFEx_dict=PSFEx_dict, PParams=PParams)
+            PSFEx_dict, PSFEx_meta = ReadPSFMODEL.RP(PSFMODEL=PSFMODEL)
+            if DK != PSFEx_meta[0]: sys.exit('MeLOn ERROR: POLDEG is inconsistent with given DK !')
+            Standard_dict = SVKDictConverter(DKx=DK, DKy=DK).PSF2ST(N0=N0, N1=N1, PSFEx_dict=PSFEx_dict, PSFEx_meta=PSFEx_meta)
             L0, L1 = PSFEx_dict[(0, 0)].shape
         
-        assert L0 == L1   # FIXME Slightly Modify SFFTConfigure if you want to allow L0 != L1
-        KerHW = int((L0-1)/2)
+        assert L0 == L1
+        KerHW = int((L0-1)/2) # FIXME you can modify SFFTConfigure to allow L0 != L1
         print('MeLOn CheckPoint: Convolution Kernel-HalfWidth [%d]' %KerHW)
         
         if mode in ['ST-DICT', 'PSFEx-MODEL']:
@@ -333,32 +338,6 @@ class SFFT_SVConv:
             CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[1]
         PixA_SFFT_SVConv = _PixA_J - _PixA_DIFF
 
-        """
-        #  THIS IS WARONG !!!!    [FYI]
-        #  Emperically, we can calculate bias correction map BCMap = SVConv(1) / SFFT-SVConv(1), 
-        #  then BCMap * SFFT-SVConv(IMG) is basically unbiased.
-
-        PixA_1 = np.ones(PixA_obj.shape).astype(np.float64)
-        _PixA_J = np.zeros(PixA_obj.shape).astype(np.float64)
-        _PixA_DIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_1, PixA_J=_PixA_J, SFFTConfig=SFFTConfig, \
-            SFFTSolution=Solution, Subtract=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[1]
-        RHS1 = _PixA_J - _PixA_DIFF
-
-        LHS1 = np.zeros(PixA_obj.shape).astype(np.float64)
-        PixA_X, PixA_Y = np.mgrid[:N0, :N1]
-        PixA_CX = ((PixA_X+1.0) / N0).astype(np.float64)
-        PixA_CY = ((PixA_Y+1.0) / N1).astype(np.float64)
-        for i in range(DK+1):
-            for j in range(DK+1-i):
-                a_ij00 = Sfft_dict[(i, j)][w0, w1]
-                LHS1 += a_ij00 * PixA_CX**i * PixA_CY**j
-
-        PixA_BCMap = LHS1 / RHS1
-        PixA_SFFT_SVConv =  PixA_BCMap * PixA_SFFT_SVConv
-        
-        """
-
         return PixA_SFFT_SVConv
 
 
@@ -374,18 +353,16 @@ class GRID_SVConv:
         lab = 0
         TiN = 2*TiHW+1
         XY_TiC = []
-        
         AllocatedL = np.zeros((N0, N1))
         for xs in np.arange(0, N0, TiN):
             xe = np.min([xs+TiN, N0])
             for ys in np.arange(0, N1, TiN):
                 ye = np.min([ys+TiN, N1])
                 AllocatedL[xs: xe, ys: ye] = lab
-                x_q = 0.5 + xs + (xe - xs) / 2.0   # tile-center (x)
-                y_q = 0.5 + ys + (ye - ys) / 2.0   # tile-center (y)
+                x_q = 0.5 + xs + (xe - xs)/2.0   # tile-center (x)
+                y_q = 0.5 + ys + (ye - ys)/2.0   # tile-center (y)
                 XY_TiC.append([x_q, y_q])
                 lab += 1
-
         XY_TiC = np.array(XY_TiC)
         
         """
