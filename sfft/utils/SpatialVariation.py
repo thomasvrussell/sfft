@@ -58,7 +58,7 @@ class ReadPSFMODEL:
         # @ PSFEx order is a reversed standard i-j order !
         #     Standard-Order: [(i, j) for i in range(DKx+1) for j in range(DKy+1-i)] 
         #     PSFEx-Order:    [(i, j) for j in range(DKy+1) for i in range(DKx+1-j)]
-        #                     say, DKx=DKy= 2, that is [1, rx, rx^2, ry, rx*ry, ry^2]
+        #                     says, DKx=DKy=2, that is [1, rx, rx^2, ry, rx*ry, ry^2]
 
         hdl = fits.open(PSFMODEL)
         hdr = hdl[1].header
