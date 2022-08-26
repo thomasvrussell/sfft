@@ -118,6 +118,12 @@ We also present a decorrelation module to whiten the background noise of the dif
 
 .. [*] **difference noise decorrelation** : The example in subdirectory named difference_noise_decorrelation. We use noise-decorrelation toolkit (module ``sfft.utils.DeCorrelationCalculator``) to whiten the background noise on difference image. In this test, the difference image is generated from image subtraction (by sfft) between a coadded reference image and a coadded science image, each stacked from 5 DECam individual observations with PSF homogenization (by sfft). The toolkit can be also applied to whiten a coadded image as long as convolution is involved in the stacking process.
 
+
+Comments on Backward Compatiablity
+-----------
+
+We have tried our best to ensure the backward compatiablity, however, the rule was sometimes overrided in the development of sfft. E.g., some arguments might be deprecated in higher version of sfft. Users might get errors when they use old scripts but update sfft to a higher version. To solve the problem, I have been maintaining the test scripts on Github to make sure they can always work for the lastest version of sfft. You can also find the change log of arguments in the test scripts. 
+
 What's new
 -----------
 
