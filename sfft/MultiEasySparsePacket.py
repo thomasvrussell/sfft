@@ -430,7 +430,7 @@ class MultiEasy_SparsePacket:
                                     MatchTolFactor=self.MatchTolFactor, StarExt_iter=self.StarExt_iter)
 
                         NEW_STATUS = 1
-                        _message = 'Successulf Preprocessing for task-[%d] ' %taskidx_acquired
+                        _message = 'Successful Preprocessing for task-[%d] ' %taskidx_acquired
                         _message += 'in Preprocessing thread-[%d]!' %INDEX_THREAD_4PREPROC
                         print('\nMeLOn CheckPoint: %s' %_message)
                     except:
@@ -690,7 +690,7 @@ class MultiEasy_SparsePacket:
                                 fits.HDUList([phdu]).writeto(FITS_Solution, overwrite=True)
 
                         NEW_STATUS = 2
-                        _message = 'Successulf Subtraction for task-[%d] ' %taskidx_acquired
+                        _message = 'Successful Subtraction for task-[%d] ' %taskidx_acquired
                         _message += 'in Subtraction thread-[%d]!' %INDEX_THREAD_4SUBTRACT
                         print('\nMeLOn CheckPoint: %s' %_message)
 
@@ -704,7 +704,7 @@ class MultiEasy_SparsePacket:
                             pinned_mempool.free_all_blocks()
 
                         NEW_STATUS = -2
-                        _error_message = 'UnSuccessulf Subtraction for task-[%d] ' %taskidx_acquired
+                        _error_message = 'UnSuccessful Subtraction for task-[%d] ' %taskidx_acquired
                         _error_message += 'in Subtraction thread-[%d]!' %INDEX_THREAD_4SUBTRACT
                         print('\nMeLOn ERROR: %s' %_error_message)
                         Solution = None
