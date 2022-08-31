@@ -12,7 +12,7 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Aug 17, 2022
+# version: Aug 31, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -21,7 +21,7 @@ class PY_SEx:
     @staticmethod
     def PS(FITS_obj=None, PSF_obj=None, FITS_ref=None, PL=None, CATALOG_TYPE='FITS_LDAC', \
         GAIN_KEY='GAIN', SATUR_KEY='SATURATE', PIXEL_SCALE=1.0, SEEING_FWHM=1.2, BACK_TYPE='AUTO', \
-        BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, DETECT_THRESH=1.5, \
+        BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, DETECT_THRESH=1.5, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_NTHRESH=32, DEBLEND_MINCONT=0.005, CLEAN='Y', \
         BACKPHOTO_TYPE='LOCAL', PHOT_APERTURES=5.0, NegativeCorr=True, CHECKIMAGE_TYPE='NONE', \
         VIGNET=None, StampImgSize=None, AddRD=False, ONLY_FLAGS=None, XBoundary=0.0, YBoundary=0.0, \
@@ -55,7 +55,7 @@ class PY_SEx:
         #    ** Extract Global_Background_Map (GBMap) and its RMS (GBRMap) from Image4detect & Image4phot
         #       Control Parameters: BACK_TYPE, BACK_VALUE, BACK_SIZE and BACK_FILTERSIZE.
         #       @ Produce GBMap 
-        #         a. Manual-FLAT (e.g. BACK_TYPE='MANUAL', BACK_VALUE='100.0')
+        #         a. Manual-FLAT (e.g. BACK_TYPE='MANUAL', BACK_VALUE=100.0)
         #            SEx directly define GBMap as a FLAT image with given constant BACK_VALUE.
         #         b. Auto (e.g. BACK_TYPE='AUTO', BACK_SIZE=64, BACK_FILTERSIZE=3)
         #            SEx defines a mesh of a grid that covers the whole frame by [BACK_SIZE].
@@ -236,7 +236,7 @@ class PY_SEx:
         #      ** When this mode is called, please read above comments very carefully.
         #    @ Single-Image Mode: FITS_obj is Image4detect & Image4phot.
         #      ** When sky background has been well subtracted. 
-        #         Typically Set: BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, BACKPHOTO_TYPE='LOCAL'
+        #         Typically Set: BACK_TYPE='MANUAL', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, BACKPHOTO_TYPE='LOCAL'
         #         a. BACK_TYPE & BACK_VALUE: Use Flat-Zero as Global_Background_Map
         #         b. BACK_SIZE & BACK_FILTERSIZE: Produce RMS of Global_Background_Map [AUTO]
         #         c. BACKPHOTO_TYPE: Use LOCAL / GLOBAL (zero) background to count sky flux contribution in photometry.

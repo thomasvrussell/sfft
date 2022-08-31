@@ -9,7 +9,7 @@ import scipy.ndimage as ndimage
 from astropy.table import Column
 from sfft.AutoSparsePrep import Auto_SparsePrep
 from sfft.utils.meta.TimeoutKit import TimeoutAfter
-# version: Aug 21, 2022
+# version: Aug 31, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -18,7 +18,7 @@ class MultiEasy_SparsePacket:
     def __init__(self, FITS_REF_Queue, FITS_SCI_Queue, FITS_DIFF_Queue=[], FITS_Solution_Queue=[], \
         ForceConv_Queue=[], GKerHW_Queue=[], KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=0, \
         ConstPhotRatio=True, MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='ESATUR', BACK_TYPE='MANUAL', \
-        BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, DETECT_MINAREA=5, \
+        BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, DETECT_MINAREA=5, \
         DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30, \
         XY_PriorSelect_Queue=[], Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
         MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, CVREJ_MAGD_THRESH=0.12, \
@@ -68,13 +68,13 @@ class MultiEasy_SparsePacket:
 
         -BACK_TYPE ['MANUAL']               # SExtractor Parameter BACK_TYPE = [AUTO or MANUAL].
                                             # As Sparse-Flavor-SFFT requires the input images being sky-subtracted,
-                                            # the default setting uses zero-background (i.e., BACK_TYPE='MANUAL' & BACK_VALUE='0.0').
+                                            # the default setting uses zero-background (i.e., BACK_TYPE='MANUAL' & BACK_VALUE=0.0).
                                             # However, one may also use BACK_TYPE='AUTO' for some specific cases
                                             # E.g., point sources located at the outskirts of a bright galaxy will have a relatively
                                             #       high local background. Even if the image has been sky-subtracted properly, 
                                             #       SExtractor can only detect it when you set BACK_TYPE='AUTO'.
          
-        -BACK_VALUE [0]                     # SExtractor Parameter BACK_VALUE (only work for BACK_TYPE='MANUAL')
+        -BACK_VALUE [0.0]                   # SExtractor Parameter BACK_VALUE (only work for BACK_TYPE='MANUAL')
 
         -BACK_SIZE [64]                     # SExtractor Parameter BACK_SIZE
 

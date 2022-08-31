@@ -3,7 +3,7 @@ import numpy as np
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.HoughDetection import Hough_Detection
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-# version: Aug 21, 2022
+# version: Aug 31, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -83,7 +83,7 @@ class Hough_MorphClassifier:
     """
 
     def MakeCatalog(FITS_obj, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
-        BACK_TYPE='AUTO', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, \
+        BACK_TYPE='AUTO', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, \
         DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, \
         BACKPHOTO_TYPE='LOCAL', CHECKIMAGE_TYPE='NONE', AddRD=False, ONLY_FLAGS=[0], \
         BoundarySIZE=30, AddSNR=True):

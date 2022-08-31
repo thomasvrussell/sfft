@@ -11,7 +11,7 @@ __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
 
 class Auto_CrowdedPrep:
-    def __init__(self, FITS_REF, FITS_SCI, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', BACK_TYPE='AUTO', BACK_VALUE='0.0', \
+    def __init__(self, FITS_REF, FITS_SCI, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', BACK_TYPE='AUTO', BACK_VALUE=0.0, \
         BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
         DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=None, BoundarySIZE=0.0):
 
