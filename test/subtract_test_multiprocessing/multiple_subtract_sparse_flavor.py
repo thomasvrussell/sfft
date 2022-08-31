@@ -53,7 +53,7 @@ _MESP = MultiEasy_SparsePacket(FITS_REF_Queue=FITS_REF_Queue, FITS_SCI_Queue=FIT
     FITS_DIFF_Queue=FITS_DIFF_Queue, FITS_Solution_Queue=[], ForceConv_Queue=ForceConv_Queue, \
     GKerHW_Queue=[], KerHWRatio=KerHWRatio, KerHWLimit=(2, 20), KerPolyOrder=KerPolyOrder, \
     BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, MaskSatContam=False, GAIN_KEY=GAIN_KEY, \
-    SATUR_KEY=SATUR_KEY, BACK_TYPE='MANUAL', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, \
+    SATUR_KEY=SATUR_KEY, BACK_TYPE='MANUAL', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, \
     DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
     ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect_Queue=[], Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, \
     BeltHW=0.2, PS_ELLIPThresh=0.3, MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, \
