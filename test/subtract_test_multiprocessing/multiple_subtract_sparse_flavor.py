@@ -4,6 +4,7 @@ import numpy as np
 import os.path as pa
 from sfft.MultiEasySparsePacket import MultiEasy_SparsePacket
 CDIR = pa.dirname(pa.abspath(__file__))
+# sfft version: 1.3.2+
 
 # configuration: multiprocessing and computing resourse
 NUM_THREADS_4PREPROC = 16          # FIXME Python threads for preprocesing

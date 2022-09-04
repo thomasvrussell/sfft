@@ -6,6 +6,7 @@ from astropy.convolution import convolve
 from sfft.utils.SkyLevelEstimator import SkyLevel_Estimator
 from sfft.utils.DeCorrelationCalculator import DeCorrelation_Calculator
 CDIR = pa.dirname(pa.abspath(__file__))
+# sfft version: 1.3.2+
 
 # ** Science Group
 FITS_04a = CDIR + '/input_data/DEC-OBS04a.mini.fits'

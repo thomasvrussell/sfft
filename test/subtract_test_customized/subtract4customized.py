@@ -6,6 +6,7 @@ from astropy.io import fits
 from tempfile import mkdtemp
 from sfft.CustomizedPacket import Customized_Packet
 CDIR = pa.dirname(pa.abspath(__file__))
+# sfft version: 1.3.2+
 
 # configuration: computing backend and resourse
 BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs

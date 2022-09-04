@@ -1,5 +1,6 @@
 import os.path as pa
 from sfft.EasyCrowdedPacket import Easy_CrowdedPacket
+# sfft version: 1.3.2+
 
 # configuration: computing backend and resourse 
 BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use 'Numpy' if you only have CPUs
