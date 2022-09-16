@@ -228,7 +228,16 @@ class PY_SEx:
         #       ii. SExtractor do not support string > 256 as argument in command line.
         #           Use 'cd dir && sex ...' to avoid segmentation fault.
         #       iii. FITS_LDAC --- TABLE-HDU 2    |   FITS_1.0 ---  TABLE-HDU 1
-        #       iv. In Debian operation system, please correct 'sex' as 'sextractor'`
+        #       iv. In Debian operation system, please correct 'sex' as 'sextractor'
+        # 
+        #    d. A coarse look-up table between DETECT_THRESH and MINIMAL SNR_WIN
+        #       DETECT_THRESH = 1.0 ---> minimal SNR_WIN = 3-4
+        #       DETECT_THRESH = 1.2 ---> minimal SNR_WIN = 4-5
+        #       DETECT_THRESH = 1.5 ---> minimal SNR_WIN = 5.5-6.5
+        #       DETECT_THRESH = 2.0 ---> minimal SNR_WIN = 8-9
+        #       DETECT_THRESH = 3.0 ---> minimal SNR_WIN ~ 12
+        #       DETECT_THRESH = 4.0 ---> minimal SNR_WIN ~ 15
+        #       DETECT_THRESH = 5.0 ---> minimal SNR_WIN ~ 20
         #
         # README
         # * 2 models for input image*

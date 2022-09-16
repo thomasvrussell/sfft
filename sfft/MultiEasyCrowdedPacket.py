@@ -69,8 +69,9 @@ class MultiEasy_CrowdedPacket:
 
         -DETECT_THRESH [5.0]                # SExtractor Parameter DETECT_THRESH
                                             # NOTE: One may notice that the default DETECT_THRESH in SExtractor is 1.5.
-                                            #       For masking the saturation regions, however, it is generally acceptable
-                                            #       to use a 'very cold' detection threshold to speed up SExtractor.
+                                            #       Using a 'very cold' detection threshold here is to speed up SExtractor.
+                                            #       Although DETECT_THRESH = 5.0 means we will miss the faint-end sources with 
+                                            #       SNR < 20 (approximately), the cost is generally acceptable for saturation mask.
 
         -DETECT_MINAREA [5]                 # SExtractor Parameter DETECT_MINAREA
         
