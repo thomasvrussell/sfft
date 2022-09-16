@@ -47,20 +47,10 @@ class Hough_MorphClassifier:
     #                 NOTE We may lossen PS_ELLIPThresh if psf itself is significantly asymmetric (e.g. tracking problem).
     #
     #                 WARNING: At the faint end, this subgroup would be contaminated by round extended sources 
-    #                          (meet PS_ELLIPThresh) which also lie in the cross region. 
-    #                          When the field is galaxy-dominated, the contamination can be considerable.
-    #                          In light of the fact that cross region is located at the faint end in the belt,
-    #                          We calculate the median FWHM weighted by source flux, to suppress the over-estimate 
-    #                          trend driven by the extended sources.
-    #
-    #               >>> {sub-subgroup} High-SNR Point Sources
-    #                       + SNR_WIN > HPS_SNRThresh 
-    #                         NOTE: If the remaining sources < HPS_NumLowerLimit, simply use the point-sources with highest SNR_WIN.
-    #                         NOTE: Generally, this subset can serve for Flux Calibration & Building PSF Model
-    #                         TIPS: For galaxy-dominated fields, the faint end of PS can be severely contaminated by extended 
-    #                               sources, HPS becomes a significantly more pure set (though incomplete) for point sources.
-    #                         WARNING: As SNR is GAIN-sensitive, please ensure the correctness of the GAIN keyword.
-    #                         WARNING: The most brightest HPS may suffer from the undesired CCD response near the saturation level.
+    #                          (meet PS_ELLIPThresh) which also lie in the cross region. Especially when the field 
+    #                          is galaxy-dominated, the contamination can be considerable. In light of the fact that 
+    #                          cross region is located at the faint end in the belt, we calculate the median FWHM 
+    #                          weighted by source flux, to suppress the over-estimate trend driven by the extended sources.
     #
     #   C) Additional WARNINGS
     #      a. This extracor is ONLY designed for sparse field (isolated sources dominated cases).
@@ -97,8 +87,7 @@ class Hough_MorphClassifier:
         
         return PYSEX_OP
     
-    def Classifier(AstSEx, Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
-        Return_HPS=False, HPS_SNRThresh=20.0, HPS_NumLowerLimit=30):
+    def Classifier(AstSEx, Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3):
         
         A_IMAGE = np.array(AstSEx['A_IMAGE'])
         B_IMAGE = np.array(AstSEx['B_IMAGE'])
@@ -206,28 +195,4 @@ class Hough_MorphClassifier:
             quantiles=[0.5], NUM_TOP_END=NTE_4FWHM)[0], 6)
         print('MeLOn CheckPoint: Estimated [FWHM = %.3f pix] From Point-Sources' %FWHM)
 
-        # **** High-SNR Point Sources 
-        MASK_HPS = None
-        if Return_HPS:
-            assert 'SNR_WIN' in AstSEx.colnames
-            # apply the threshold on SNR for HPS.
-            MASK_HPS = np.logical_and(MASK_PS, AstSEx['SNR_WIN'] >= HPS_SNRThresh)
-            
-            # if HPS are insufficent, then simply use the point sources with largest SNR instead.
-            if np.sum(MASK_HPS) < HPS_NumLowerLimit:
-                _warn_message = 'Insufficient Number of High-SNR Point-Sources ---- \n'
-                _warn_message += 'Give Up the SNR Threshold and Use Point Sources with Largest SNR instead!'
-                warnings.warn('MeLOn WARNING: %s' %_warn_message)
-
-                _PSIDX = np.where(MASK_PS)[0]
-                _HPSIDX = _PSIDX[np.argsort(-1.0 * AstSEx[_PSIDX]['SNR_WIN'])[:HPS_NumLowerLimit]]
-                MASK_HPS = np.zeros(len(AstSEx)).astype(bool)
-                MASK_HPS[_HPSIDX] = True
-
-                if np.sum(MASK_HPS) < HPS_NumLowerLimit:
-                    _warn_message = 'Insufficient Number of High-SNR Point-Sources ---- \n'
-                    _warn_message += 'Use all Point Sources but STILL Insufficient!'
-                    warnings.warn('MeLOn WARNING: %s' %_warn_message)
-            print('MeLOn CheckPoint: [%d] High-SNR Point-Sources on the Image!' %np.sum(MASK_HPS))
-
-        return FWHM, LABEL_FR, MASK_GS, MASK_PS, MASK_HPS
+        return FWHM, LABEL_FR, MASK_GS, MASK_PS

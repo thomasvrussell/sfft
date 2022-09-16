@@ -8,7 +8,7 @@ from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.SymmetricMatch import Symmetric_Match
 from sfft.utils.HoughMorphClassifier import Hough_MorphClassifier
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-# version: Aug 31, 2022
+# version: Sep 16, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -160,10 +160,10 @@ class Auto_SparsePrep:
                 BoundarySIZE=self.BoundarySIZE, AddSNR=False)
 
             Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], Hough_FRLowerLimit=Hough_FRLowerLimit, \
-                Hough_peak_clip=Hough_peak_clip, BeltHW=BeltHW, PS_ELLIPThresh=PS_ELLIPThresh, Return_HPS=False)
+                Hough_peak_clip=Hough_peak_clip, BeltHW=BeltHW, PS_ELLIPThresh=PS_ELLIPThresh)    
             AstSEx_GS, FHWM, PixA_SEG = Hmc[0][Hc[2]], Hc[0], Hmc[1][0].astype(int)
             return AstSEx_GS, FHWM, PixA_SEG
-
+        
         AstSEx_GSr, FWHM_REF, PixA_SEGr = main_hough(self.FITS_REF)
         AstSEx_GSs, FWHM_SCI, PixA_SEGs = main_hough(self.FITS_SCI)
         _message = 'Estimated [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI)
