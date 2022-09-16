@@ -57,8 +57,8 @@ class Hough_MorphClassifier:
     #                       + SNR_WIN > HPS_SNRThresh 
     #                         NOTE: If the remaining sources < HPS_NumLowerLimit, simply use the point-sources with highest SNR_WIN.
     #                         NOTE: Generally, this subset can serve for Flux Calibration & Building PSF Model
-    #                         TIPS: For galaxy-dominated fields, using HPS to estimate FWHM can be more reliable than PS
-    #                               as HPS is less contaminated by the faint extended sources.
+    #                         TIPS: For galaxy-dominated fields, the faint end of PS can be severely contaminated by extended 
+    #                               sources, HPS becomes a significantly more pure set (though incomplete) for point sources.
     #                         WARNING: As SNR is GAIN-sensitive, please ensure the correctness of the GAIN keyword.
     #                         WARNING: The most brightest HPS may suffer from the undesired CCD response near the saturation level.
     #
