@@ -12,7 +12,7 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Aug 31, 2022
+# version: Sep 16, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -608,15 +608,23 @@ class PY_SEx:
             if Symm is not None:
                 Modify_AstSEx = True
                 if Preserve_NoMatch:
-                    QuestIDX = -1 * np.ones(len(AstSEx))
-                    QuestIDX[Symm[:, 1]] = Symm[:, 0]
-                    AstSEx.add_column(Column(QuestIDX, name='QuestIndex'))
+                    QuestMATCH = np.zeros(len(AstSEx)).astype(bool)        
+                    QuestMATCH[Symm[:, 1]] = True
+                    AstSEx.add_column(Column(QuestMATCH, name='QuestMATCH'))
+
+                    QuestINDEX = -1 * np.ones(len(AstSEx)).astype(int)
+                    QuestINDEX[Symm[:, 1]] = Symm[:, 0]
+                    AstSEx.add_column(Column(QuestINDEX, name='QuestINDEX'))
                 else:
                     _OLEN = len(AstSEx)
                     AstSEx = AstSEx[Symm[:, 1]]
-                    QuestIDX = Symm[:, 0]
-                    AstSEx.add_column(Column(QuestIDX, name='QuestIndex'))
                     
+                    QuestMATCH = np.ones(len(AstSEx)).astype(bool)
+                    AstSEx.add_column(Column(QuestMATCH, name='QuestMATCH'))
+                    
+                    QuestINDEX = Symm[:, 0]
+                    AstSEx.add_column(Column(QuestINDEX, name='QuestINDEX'))
+
                     print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources by symmetric matching | [%s]!' \
                            %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
 
