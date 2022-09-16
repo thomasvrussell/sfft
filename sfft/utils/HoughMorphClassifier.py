@@ -3,7 +3,7 @@ import numpy as np
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.HoughDetection import Hough_Detection
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-# version: Aug 31, 2022
+# version: Sep 16, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -40,7 +40,7 @@ class Hough_MorphClassifier:
     #         
     #        >> {subgroup} Point Sources:
     #               + Restricted into FR-M Region   |||   Should be located around the Hough-Line
-    #               + Basically Circular-Shape      |||   PsfEx-ELLIPTICITY = (A-B) / (A+B) < PS_ELLIPThresh
+    #               + Basically Circular-Shape      |||   PSFEx-ELLIPTICITY = (A-B) / (A+B) < PS_ELLIPThresh
     #                 NOTE At cross region, this identification criteria mis-include some extended source
     #                      On the flip side, some REAL PointSource samples are missing in the tail.
     #                 NOTE Point Sources are usually employed as FWHM Estimator.
@@ -54,21 +54,13 @@ class Hough_MorphClassifier:
     #                          trend driven by the extended sources.
     #
     #               >>> {sub-subgroup} High-SNR Point Sources
-    #                       + SNR_WIN > HPS_SNRThresh, then reject the bright end [typically, 15% (HPS_Reject)] point-sources.
-    #                       ++ If remaining sources are less than 30 (HPS_NumLowerLimit),
-    #                          Simply Use the point-sources with highest SNR_WIN.
-    #                          NOTE Usually, this subset is for Flux-Calibration & Building PSF Model.
-    #                          NOTE The defult HPS_SNRThresh = 100 might be too high, you may loosen it to
-    #                               ~ 15 to make sure you have enough samples, especially for psf modeling.
-    #                          WARNING: For galaxy-dominated field, it would be better to estimate FWHM by this set.
-    #                                   As SNR is GAIN-sensitive, please ensure the correctness of the GAIN keyword.
-    # 
-    #      @ Remarks on the HPS BrightEnd-Cutoff 
-    #        Assume SExtractor received precise SATURATE, saturated sources should be fully rejected via FLAG constrain. 
-    #        However, in practice, it's hard to fullfill this condition strictly, that is why we design a simple BrightEnd-Cutoff
-    #        to prevent the set from such contaminations. Compared with mentioned usage of GS & PS, that of HPS is more 
-    #        vulnerable to such situation. FLUX-Calibtation and Building PSF-Model do not require sample completeness, but 
-    #        likely to be sensitive to the sources with appreiable non-linear response.
+    #                       + SNR_WIN > HPS_SNRThresh 
+    #                         NOTE: If the remaining sources < HPS_NumLowerLimit, simply use the point-sources with highest SNR_WIN.
+    #                         NOTE: Generally, this subset can serve for Flux Calibration & Building PSF Model
+    #                         TIPS: For galaxy-dominated fields, using HPS to estimate FWHM can be more reliable than PS
+    #                               as HPS is less contaminated by the faint extended sources.
+    #                         WARNING: As SNR is GAIN-sensitive, please ensure the correctness of the GAIN keyword.
+    #                         WARNING: The most brightest HPS may suffer from the undesired CCD response near the saturation level.
     #
     #   C) Additional WARNINGS
     #      a. This extracor is ONLY designed for sparse field (isolated sources dominated cases).
@@ -106,7 +98,7 @@ class Hough_MorphClassifier:
         return PYSEX_OP
     
     def Classifier(AstSEx, Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
-        Return_HPS=False, HPS_SNRThresh=100.0, HPS_SNRTopReject=0.15, HPS_NumLowerLimit=30):
+        Return_HPS=False, HPS_SNRThresh=20.0, HPS_NumLowerLimit=30):
         
         A_IMAGE = np.array(AstSEx['A_IMAGE'])
         B_IMAGE = np.array(AstSEx['B_IMAGE'])
@@ -218,24 +210,20 @@ class Hough_MorphClassifier:
         MASK_HPS = None
         if Return_HPS:
             assert 'SNR_WIN' in AstSEx.colnames
-            # apply SNR threshold and reject top-SNR sources (security for inappropriate SATURATION)
+            # apply the threshold on SNR for HPS.
             MASK_HPS = np.logical_and(MASK_PS, AstSEx['SNR_WIN'] >= HPS_SNRThresh)
-            if np.sum(MASK_HPS) > 0 and HPS_SNRTopReject > 0:
-                cutoff = np.quantile(AstSEx[MASK_HPS]['SNR_WIN'], 1.0-HPS_SNRTopReject)
-                MASK_HPS = np.logical_and(MASK_HPS, AstSEx['SNR_WIN'] < cutoff)
             
-            # if there are insufficent number of HPS:
-            # abandon the SNR threshold and top-SNR rejection, simply use the point sources with largest SNR instead.
+            # if HPS are insufficent, then simply use the point sources with largest SNR instead.
             if np.sum(MASK_HPS) < HPS_NumLowerLimit:
                 _warn_message = 'Insufficient Number of High-SNR Point-Sources ---- \n'
-                _warn_message += 'Give Up the SNR Threshold and Top-SNR Rejection, ' 
-                _warn_message += 'Use Point Sources with Largest SNR instead!'
+                _warn_message += 'Give Up the SNR Threshold and Use Point Sources with Largest SNR instead!'
                 warnings.warn('MeLOn WARNING: %s' %_warn_message)
 
                 _PSIDX = np.where(MASK_PS)[0]
                 _HPSIDX = _PSIDX[np.argsort(-1.0 * AstSEx[_PSIDX]['SNR_WIN'])[:HPS_NumLowerLimit]]
                 MASK_HPS = np.zeros(len(AstSEx)).astype(bool)
                 MASK_HPS[_HPSIDX] = True
+
                 if np.sum(MASK_HPS) < HPS_NumLowerLimit:
                     _warn_message = 'Insufficient Number of High-SNR Point-Sources ---- \n'
                     _warn_message += 'Use all Point Sources but STILL Insufficient!'
