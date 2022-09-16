@@ -78,6 +78,10 @@ class Easy_SparsePacket:
         -BACK_FILTERSIZE [3]           # SExtractor Parameter BACK_FILTERSIZE
 
         -DETECT_THRESH [2.0]           # SExtractor Parameter DETECT_THRESH
+                                       # NOTE: One may notice that the default DETECT_THRESH in SExtractor is 1.5,
+                                       #       Using a 'cold' detection threshold here is to speed up SExtractor.
+                                       #       Although DETECT_THRESH = 2.0 means we will miss the faint-end sources with 
+                                       #       SNR < 12 (approximately), the cost is generally acceptable for image subtraction.
 
         -DETECT_MINAREA [5]            # SExtractor Parameter DETECT_MINAREA
         

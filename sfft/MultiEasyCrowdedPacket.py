@@ -7,7 +7,7 @@ import os.path as pa
 from astropy.io import fits
 from sfft.AutoCrowdedPrep import Auto_CrowdedPrep
 from sfft.utils.meta.TimeoutKit import TimeoutAfter
-# version: Aug 31, 2022
+# version: Sep 16, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -68,6 +68,9 @@ class MultiEasy_CrowdedPacket:
         -BACK_FILTERSIZE [3]                # SExtractor Parameter BACK_FILTERSIZE
 
         -DETECT_THRESH [5.0]                # SExtractor Parameter DETECT_THRESH
+                                            # NOTE: One may notice that the default DETECT_THRESH in SExtractor is 1.5.
+                                            #       For masking the saturation regions, however, it is generally acceptable
+                                            #       to use a 'very cold' detection threshold to speed up SExtractor.
 
         -DETECT_MINAREA [5]                 # SExtractor Parameter DETECT_MINAREA
         
