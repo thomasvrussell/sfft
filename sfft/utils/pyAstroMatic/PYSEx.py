@@ -12,7 +12,7 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Sep 16, 2022
+# version: Sep 18, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -644,7 +644,7 @@ class PY_SEx:
             if StampImgSize is not None:
                 _XY = np.array([AstSEx['X_IMAGE'], AstSEx['Y_IMAGE']]).T
                 PixA_StpLst = Stamp_Generator.SG(FITS_obj=FITS_obj, StampImgSize=StampImgSize, \
-                    Coordinates=_XY, CoorType='Image', AutoFill='Nan', MDIR=None)[0]
+                    Coordinates=_XY, CoorType='Image', AutoFill='NaN', MDIR=None)[0]
                 AstSEx.add_column(Column(PixA_StpLst, name='Stamp'))
                 Modify_AstSEx = True
             

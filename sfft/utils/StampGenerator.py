@@ -4,14 +4,15 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from tempfile import mkdtemp
 from astropy.nddata.utils import Cutout2D
+# version: Sep 18, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
+__version__ = "v1.3"
 
 class Stamp_Generator:
     @staticmethod
     def SG(FITS_obj=None, StampImgSize=None, Coordinates=None, \
-        CoorType='Image', AutoFill='Nan', MDIR=None):
+        CoorType='Image', AutoFill='NaN', MDIR=None):
 
         """
         # MeLOn Notes
@@ -106,9 +107,9 @@ class Stamp_Generator:
 
         # * Determin the auto fill value for boundary case
         fill_value = AutoFill
-        if AutoFill == 'Median':
+        if AutoFill == 'MEDIAN':
             fill_value = np.nanmedian(data)
-        if AutoFill == 'Nan':
+        if AutoFill == 'NaN':
             fill_value = -65536    # FIXME In most cases, It works
         
         # * Make stamps with function Cutout2D
@@ -118,7 +119,7 @@ class Stamp_Generator:
         for i in range(NCoors):
             try: PixA_Stp = Cutout2D(data, positions[i], Rsize, mode='partial', fill_value=fill_value).data.T.astype(float)
             except: PixA_Stp = fill_value * np.ones((StampImgSize[0], StampImgSize[1])).astype(float)
-            if AutoFill == 'Nan': PixA_Stp[PixA_Stp == -65536] = np.nan
+            if AutoFill == 'NaN': PixA_Stp[PixA_Stp == -65536] = np.nan
             PixA_StpLst.append(PixA_Stp)
         
         # * Make header for the stamps with modification of CRPIX1 CRPIX2 offset then save them
