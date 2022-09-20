@@ -12,7 +12,7 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Sep 18, 2022
+# version: Sep 20, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -295,17 +295,17 @@ class PY_SEx:
         phr_obj = fits.getheader(FITS_obj, ext=0)       
         if GAIN_KEY in phr_obj:
             GAIN = phr_obj[GAIN_KEY]
-            print('MeLOn CheckPoint: SEx use GAIN=%s [READ from FITS header]' %GAIN)
+            print('MeLOn CheckPoint: SEx use GAIN=%s [READ from FITS header %s]' %(GAIN, GAIN_KEY))
         else: 
-            GAIN = 0.0 
-            warnings.warn('MeLOn WARNING: SEx use GAIN=%s [SEx DEFAULT]' %GAIN)
+            GAIN = 0.0
+            warnings.warn('MeLOn WARNING: SEx use GAIN=%s [SExtractor default value]' %GAIN)
         
         if SATUR_KEY in phr_obj:
             SATURATION = phr_obj[SATUR_KEY]
-            print('MeLOn CheckPoint: SEx use SATURATION=%s [READ from FITS header]' %SATURATION)
+            print('MeLOn CheckPoint: SEx use SATURATION=%s [READ from FITS header %s]' %(SATURATION, SATUR_KEY))
         else: 
             SATURATION = 50000.0
-            warnings.warn('MeLOn WARNING: SEx use SATURATION=%s [SEx DEFAULT]' %SATURATION)
+            warnings.warn('MeLOn WARNING: SEx use SATURATION=%s [SExtractor default value]' %SATURATION)
         
         """
         # some additional remarks
