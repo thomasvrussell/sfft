@@ -12,7 +12,7 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Sep 20, 2022
+# version: Sep 22, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -33,16 +33,23 @@ class PY_SEx:
         # * SExtractor Inputs
         #    ** Array-Inputs:
         #       SEx works on one image for signal detection and another image for photometry 
-        #       @Individual Mode (Common): Image4detect and Image4phot are the same image.
-        #       @Dual Mode: Image4detect and Image4phot are different images.
+        #       @Individual Mode (Common): Image4detect and Image4phot are the same image (-FITS_obj).
+        #       @Dual Mode: Image4detect (-FITS_ref) and Image4phot (-FITS_obj) are different images .
         #    ** PSF-Input:
-        #       SEx can accept given PSF model for PSF-Photometry.
+        #       SEx can accept given PSF model for PSF-Photometry (-PSF_obj).
         #    ** Parameter-Inputs: 
-        #       a. Basic keywords in FITS header of Image4detect
-        #       b. How to generate Global Background Map
-        #       c. Give the criteria for SEx-Detection
-        #       d. Clarify SEx-Photometry method
-        #       e. Specify output Check-Images & output Table by column-name list.
+        #       a. Basic keywords in FITS header of Image4detect:
+        #          (-GAIN_KEY, -SATUR_KEY).
+        #       b. How to generate Global Background Map:
+        #          (-BACK_TYPE, -BACK_VALUE, -BACK_SIZE, -BACK_FILTERSIZE).
+        #       c. Give the criteria for SExtractor Source Detection
+        #          (-DETECT_THRESH, -DETECT_MINAREA, -DETECT_MAXAREA, -DEBLEND_NTHRESH, -DEBLEND_MINCONT, -CLEAN).
+        #       d. Which photometry method(s) used by SExtractor: 
+        #          (parameters in -PL, e.g., FLUX_AUTO, FLUX_APER, FLUX_PSF).
+        #       e. Specify output Check-Images: 
+        #          (-CHECKIMAGE_TYPE).
+        #       f. Specify output columns in output SExtractor photometry table: 
+        #          (-PL).
         #
         #    TODO: Incorporate the Weight-Map Image as Input of PYSEx
         #          SExtractor allows users to feed a weight-map image. It is very useful for mosaic image, which has
@@ -187,7 +194,7 @@ class PY_SEx:
         #    @SEGMENTATION: ISOIsland Label Map
         #    @OBJECTS: ISOIslands use flux in -BACKGROUND, zero otherwise
         #    @APERTURES: -BACKGROUND with brighten apertures to show the isophotal ellipses. 
-
+        #
         # * SExtractor Workflow (Formula)
         #    a. MAG = -2.5 * log10(FLUX) + MAG_ZEROPOINT
         #    b. MAGERR = 1.0857 * FLUXERR / FLUX = 1.0857 / SNR 
@@ -199,7 +206,8 @@ class PY_SEx:
         # * Additional Clarification
         #    a. SExtractor can read GAIN & SATURATION & MAGZERO from FITS header of Image4phot by their keys.
         #    b. If SExtractor is configured with FITS_LDAC, the FITS header of Image4phot will be delivered 
-        #       into output FITS file saved at output-FITS[1].data in table format (only one element: a long integrated header text). 
+        #       into output FITS file saved at output-FITS[1].data in table format 
+        #       (only one element: a long integrated header text).
         #    c. If some ISOIsland has saturated pixel value on Image4phot, you can still find it 
         #       on SEGMENTATION / OBJECTS, and it will be marked by FLAGS=4 in output catalog.
         #    d. Windowed Coordinate has higher priority in the function
@@ -243,6 +251,7 @@ class PY_SEx:
         # * 2 models for input image*
         #    @ Dual-Image Mode: FITS_ref is Image4detect, FITS_obj is Image4phot.
         #      ** When this mode is called, please read above comments very carefully.
+        #
         #    @ Single-Image Mode: FITS_obj is Image4detect & Image4phot.
         #      ** When sky background has been well subtracted. 
         #         Typically Set: BACK_TYPE='MANUAL', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, BACKPHOTO_TYPE='LOCAL'
@@ -252,25 +261,33 @@ class PY_SEx:
         #
         # * Additional Remarks on Background
         #   @ well-subtracted sky just means it probably outperforms SEx GLOBAL-Sky, 
-        #       we should not presume the underlying true sky is really subtracted, therefore, 
-        #       BACKPHOTO_TYPE = 'LOCAL' is in general necessary !
-        #   @ Just like sky subtraction, the sky term in image subtraction can only handle the low-spatial-frequency trend of background.
-        #       The image has flat zero background as an ideal expectation, we still need set BACKPHOTO_TYPE = 'LOCAL' on difference photometry.
-        #   @ 'LOCAL' method itself can be biased too. We get the conclusion when we try to perform aperture photometry on two psf-homogenized DECam images.
-        #       Recall any error on matched kernel is some linear effect for aperture photometry, however, we found a bias in FLUX_APER which is independent 
-        #       with the target birghtness. E.g. FLUX_APER_SCI is always smaller than FLUX_APER_REF with a nearly constant value, say 10.0 ADU, 
-        #       no matter the target is 19.0 mag or 22.0 mag, as if there is some constant leaked light when we measure on SCI. 
-        #       Equivalently, DMAG = MAG_APER_SCI - MAG_APER_REF deviate zero-baseline, and it becomes increasingly serious (towards to the faint end).
-        #       ------------------------------------ 
-        #       We guess the problem is caused by the fact: the background value calculated from the annulus around target might be a biased 
-        #       (over/under-) estimation. One observation supports our argument: the flux bias is much more evident when we increase the aperture size.
-        #       NOTE:  As we have found the flux bias is basically a constant, we can do relative-calibration by calculate the compensation 
-        #              offset FLUX_APER_REF - FLUX_APER_SCI for a collection of sationary stars. It is 'relative' since we have just assumed 
-        #              background estimation of REF is correct, which is proper if we are going to derive the variability (light curve).
+        #     we should not presume the underlying true sky is really subtracted, therefore, 
+        #     BACKPHOTO_TYPE = 'LOCAL' is in general necessary !
+        #
+        #   @ Just like sky subtraction, the sky term in image subtraction can only handle the 
+        #     low-spatial-frequency trend of background. The image has flat zero background as an ideal expectation, 
+        #     we still need set BACKPHOTO_TYPE = 'LOCAL' on difference photometry.
+        #
+        #   @ 'LOCAL' method itself can be biased too. We get the conclusion when we try to perform 
+        #     aperture photometry on two psf-homogenized DECam images. Recall any error on matched kernel is some 
+        #     linear effect for aperture photometry, however, we found a bias in FLUX_APER which is independent 
+        #     with the target birghtness. E.g. FLUX_APER_SCI is always smaller than FLUX_APER_REF with 
+        #     a nearly constant value, say 10.0 ADU, no matter the target is 19.0 mag or 22.0 mag, as if there is 
+        #     some constant leaked light when we measure on SCI. Equivalently, DMAG = MAG_APER_SCI - MAG_APER_REF 
+        #     deviate zero-baseline, and it becomes increasingly serious (towards to the faint end).
+        #
+        #     ------------------------------------ 
+        #     We guess the problem is caused by the fact: the background value calculated from the annulus 
+        #     around target might be a biased (over/under-) estimation. One observation supports our argument: 
+        #     the flux bias is much more evident when we increase the aperture size.
+        #     NOTE:  As we have found the flux bias is basically a constant, we can do relative-calibration by calculate the compensation 
+        #            offset FLUX_APER_REF - FLUX_APER_SCI for a collection of sationary stars. It is 'relative' since we have just assumed 
+        #            background estimation of REF is correct, which is proper if we are going to derive the variability (light curve).
+        #
         #   @ In which cases, Re-Run SExtractor can get the same coordinate list ?
-        #       a. Same configurations but only change photometric method, e.g. from AUTO to APER 
-        #       b. Same configurations but from Single-Image Mode to Dual-Image Mode
-        #       NOTE: FLAGS is correlated to object image, if we add constraint FLAG=0 then we fail to get the same coordinate list.
+        #     a. Same configurations but only change photometric method, e.g. from AUTO to APER 
+        #     b. Same configurations but from Single-Image Mode to Dual-Image Mode
+        #     NOTE: FLAGS is correlated to object image, if we add constraint FLAG=0 then we fail to get the same coordinate list.
         #
         """
         
@@ -551,7 +568,7 @@ class PY_SEx:
             # ** d. Restriction on FLAGS
             if ONLY_FLAGS is not None:
                 if 'FLAGS' not in PL:
-                    sys.exit('MeLOn ERROR: Restriction of FLAGS required column FLAGS !')
+                    sys.exit('MeLOn ERROR: Restriction of FLAGS required column FLAGS!')
                 else: 
                     """
                     FLAGS description
@@ -601,10 +618,10 @@ class PY_SEx:
 
             if XY_Quest is not None:
                 if RD_Quest is not None:
-                    sys.exit('MeLOn ERROR: Please feed only one type XY_Quest / RD_Quest !')
+                    sys.exit('MeLOn ERROR: Please feed only one type XY_Quest / RD_Quest!')
             if RD_Quest is not None:
                 if not AddRD:
-                    sys.exit('MeLOn ERROR: RD_Quest requires AddRD !')
+                    sys.exit('MeLOn ERROR: RD_Quest requires AddRD!')
 
             Symm = None
             if XY_Quest is not None:

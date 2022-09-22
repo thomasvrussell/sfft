@@ -1,4 +1,3 @@
-import re
 import os
 import sys
 import warnings
@@ -9,16 +8,16 @@ from astropy.wcs import WCS
 from tempfile import mkdtemp
 from sfft.utils.CombineHeader import Combine_Header
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Jul 19, 2022
+# version: Sep 22, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.1"
+__version__ = "v1.3"
 
 class PY_SWarp:
     @staticmethod
-    def PS(FITS_obj, FITS_ref, FITS_Re=None, FITS_WRe=None, \
+    def PS(FITS_obj, FITS_ref, FITS_resamp=None, FITS_resamp_weight=None, \
         GAIN_KEY='GAIN', SATUR_KEY='SATURATE', EXPTIME_KEY='EXPTIME', \
-        oversampling=1, method='LANCZOS3', SUBTRACT_BACK='N', Fillvalue=None, \
+        OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', FILL_VALUE=None, \
         WEIGHT_SUFFIX='.weight.fits', WRITE_XML='N', VERBOSE_TYPE='NORMAL'):
 
         """
@@ -33,7 +32,7 @@ class PY_SWarp:
         #       NOTE this mode is not supported in our function.
         #     @ Given-REF Mode
         #       The output WCS-frame (including image size) is determined by the given FITS_ref, 
-        #       we ganna to prepare a .head file, coincident name with FITS_Re, to store REF-WCS-Frame.
+        #       we ganna to prepare a .head file, coincident name with FITS_resamp, to store REF-WCS-Frame.
         # 
         #  c) SWarp resulting header 
         #     a. SWarp will automatically calculate Maximum equivalent Gain (to GAIN) & Exposure (to EXPTIME)
@@ -44,9 +43,9 @@ class PY_SWarp:
         #        we will record the SWarp parameters used in the function.
         #     c. SWarp will automatically record the processing time in resulting header.
         #
-        #  d) Tips on resampling
+        #  d) Tips on resampling method
         #     NOTE: LANCZOS4 is relatively time-consuming
-        #     NOTE: oversampling may cause higher pixel correlation
+        #     NOTE: large OVERSAMPLING may cause higher pixel correlation
         #
         """
 
@@ -65,10 +64,10 @@ class PY_SWarp:
         ConfigDict['GAIN_KEYWORD'] = '%s' %GAIN_KEY
         ConfigDict['SATLEV_KEYWORD'] = '%s' %SATUR_KEY
 
-        ConfigDict['OVERSAMPLING'] = '%d' %oversampling
-        ConfigDict['RESAMPLING_TYPE'] = '%s' %method
+        ConfigDict['OVERSAMPLING'] = '%d' %OVERSAMPLING
+        ConfigDict['RESAMPLING_TYPE'] = '%s' %RESAMPLING_TYPE
         ConfigDict['SUBTRACT_BACK'] = '%s' %SUBTRACT_BACK
-        ConfigDict['COMBINE_TYPE'] = 'MEDIAN'  # FIXME
+        ConfigDict['COMBINE_TYPE'] = 'MEDIAN'  # trivial here
 
         ConfigDict['WEIGHT_SUFFIX'] = '%s' %WEIGHT_SUFFIX
         ConfigDict['WRITE_XML'] = '%s' %WRITE_XML
@@ -77,17 +76,16 @@ class PY_SWarp:
         swarpconfig_path = AMConfig_Maker.AMCM(MDIR=TDIR, \
             AstroMatic_KEY='swarp', ConfigDict=ConfigDict, tag='PYSWarp')
 
-        # * Make temporary FITS_tRe & FIT_tWRe in DIR
-        FITS_tRe = TDIR + '/%s.tmp_resamp.fits' %pa.basename(FITS_obj)[:-5]
-        FITS_tWRe = TDIR + '/%s.tmp_wresamp.fits' %pa.basename(FITS_obj)[:-5]
+        # * Make temporary FITS_resamp & FIT_resamp_weight in TDIR
+        tFITS_resamp = TDIR + '/%s.tmp_resamp.fits' %pa.basename(FITS_obj)[:-5]
+        tFITS_resamp_weight = TDIR + '/%s.tmp_resamp_weight.fits' %pa.basename(FITS_obj)[:-5]
 
         # * Build .head file from FITS_ref
-        #   NOTE: SIP distorsion terms require w.to_header(relax=True)
-
         phr_ref = fits.getheader(FITS_ref, ext=0)
         w_ref = WCS(phr_ref)            
-        _headfile = FITS_tRe[:-5] + '.head'
-        wcshdr_ref = w_ref.to_header(relax=True)
+        _headfile = tFITS_resamp[:-5] + '.head'
+        wcshdr_ref = w_ref.to_header(relax=True)   # SIP distorsion requires relax=True
+
         wcshdr_ref['BITPIX'] = phr_ref['BITPIX']
         wcshdr_ref['NAXIS'] = phr_ref['NAXIS']            
         wcshdr_ref['NAXIS1'] = phr_ref['NAXIS1']
@@ -96,7 +94,7 @@ class PY_SWarp:
 
         # * Trigger SWarp 
         os.system('cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s' \
-            %(TDIR, FITS_obj, FITS_tRe, FITS_tWRe, swarpconfig_path))
+            %(TDIR, FITS_obj, tFITS_resamp, tFITS_resamp_weight, swarpconfig_path))
 
         # * Make a combined header for resulting products
         hdr_base = fits.getheader(FITS_obj, ext=0)
@@ -112,22 +110,24 @@ class PY_SWarp:
             hdr_op.add_history(pack)
 
         # * Fill the missing data in resampled image [SWarp default 0]
-        PixA_Re, PixA_WRe = None, None
-        MissingMask = None
+        PixA_resamp, PixA_resamp_weight = None, None
+        MISSING_MASK = None
         try: 
-            PixA_Re = fits.getdata(FITS_tRe, ext=0).T
-            PixA_WRe = fits.getdata(FITS_tWRe, ext=0).T
-            MissingMask = PixA_WRe == 0
-            if Fillvalue is not None:
-                PixA_Re[MissingMask] = Fillvalue
+            PixA_resamp = fits.getdata(tFITS_resamp, ext=0).T
+            PixA_resamp_weight = fits.getdata(tFITS_resamp_weight, ext=0).T
+            MISSING_MASK = PixA_resamp_weight == 0
 
-            # * Save Products
-            if FITS_Re is not None:
-                fits.HDUList(fits.PrimaryHDU(PixA_Re.T, header=hdr_op)).writeto(FITS_Re, overwrite=True)
-            if FITS_WRe is not None:
-                fits.HDUList(fits.PrimaryHDU(PixA_WRe.T, header=hdr_op)).writeto(FITS_WRe, overwrite=True)
+            if FILL_VALUE is not None:
+                PixA_resamp[MISSING_MASK] = FILL_VALUE
+            if FITS_resamp is not None:
+                hdl_op = fits.HDUList(fits.PrimaryHDU(PixA_resamp.T, header=hdr_op))
+                hdl_op.writeto(FITS_resamp, overwrite=True)
+            if FITS_resamp_weight is not None:
+                hdl_op = fits.HDUList(fits.PrimaryHDU(PixA_resamp_weight.T, header=hdr_op))
+                hdl_op.writeto(FITS_resamp_weight, overwrite=True)
+        
         except: 
-            warnings.warn('MeLOn WARNING: SWarp [FAIL] at ', pa.basename(FITS_obj))
+            warnings.warn('MeLOn WARNING: SWarp FAILS at [%s]' %(pa.basename(FITS_obj)))
         os.system('rm -rf %s'%TDIR)
 
-        return PixA_Re, PixA_WRe, MissingMask
+        return PixA_resamp, PixA_resamp_weight, MISSING_MASK
