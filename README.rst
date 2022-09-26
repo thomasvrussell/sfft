@@ -111,6 +111,19 @@ We have also developed modules to optimize the overall computing performance of 
 
 - Since version 1.1, sfft has allowed for multiple tasks without conflicting GPU usage, by using the modules ``sfft.MultiEasySparsePacket`` for sparse-flavor-sfft and ``sfft.MultiEasyCrowdedPacket`` for crowded-flavor-sfft, respectively. Please see the directory test/subtract_test_multiprocessing to find the examples. Note that ONLY the CuPy backend is supported in multiprocessing mode.
 
+Remarks on the direction of image subtraction
+-----------
+
+There is a universal argument named -ForceConv to control the direction of image subtraction, which works on all image subtraction modules in sfft (``sfft.EasySparsePacket``, ``sfft.EasyCrowdedPacket``, ``sfft.CustomizedPacket``, ``sfft.MultiEasySparsePacket`` and ``sfft.MultiEasyCrowdedPacket``). The argument -ForceConv can be 'AUTO', 'REF' or 'SCI', except for ``sfft.CustomizedPacket`` where 'AUTO' is not available. 
+
+- 'AUTO' means sfft will determine the direction of image subtraction automatically according to the estimated FWHM of reference image and science image. The image which has smaller FWHM will be convolved in the image subtraction to avoid deconvolution. After comparing the FWHM, 'AUTO' becomes 'REF' or 'SCI' (see below). One can get to know which image is eventually convolved in image subtraction from the primary header of the difference image (see the keyword 'CONVD').
+
+- 'REF' means sfft will convolve the reference image and DIFF = SCI - Convolved_REF. As a result, the psf and flux zero-point of difference image is consistent with the unconvolved image, i.e., the science image. One can perform PSF / Aperture photometry on the transients on difference image as if it is an object living in the science image: using the same psf model / aperture and magnitude zeropoint.
+
+- 'SCI' means sfft will convolve the reference image and DIFF = Convolved_SCI - REF. Consequently, the psf and flux zero-point of difference image is consistent with the unconvolved image, i.e., the reference image. One can perform PSF / Aperture photometry on the transients on difference image as if it is an object living in the reference image: using the same psf model / aperture and magnitude zeropoint (but of course, not including the observed date!).
+
+Note that a transient on SCI is always a positive signal on DIFF whatever -ForceConv is.
+
 Additional Function
 -----------
 
@@ -174,8 +187,10 @@ information:
 Citing
 ------
 
-*Image Subtraction in Fourier Space. Hu, L., Wang, L., Chen, X. and Yang, J. 2021*
+*Image Subtraction in Fourier Space. Hu, L., Wang, L., Chen, X., & Yang, J. 2022, The Astrophysical Journal, 936, 157*
 
 Arxiv link: `<https://arxiv.org/abs/2109.09334>`_.
 
-Related DOI: TBD (Accepted by ApJ, waiting for DOI)
+ApJ Publication link: `<https://doi.org/10.3847/1538-4357/ac7394>`_.
+
+Related DOI: 10.3847/1538-4357/ac7394
