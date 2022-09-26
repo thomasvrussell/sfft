@@ -7,10 +7,14 @@ BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy i
 CUDA_DEVICE_4SUBTRACT = '0'     # FIXME ONLY work for backend Pycuda / Cupy
 NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy   
 
-# configuration: how to subtract
-ForceConv = 'REF'               # FIXME {'AUTO', 'REF', 'SCI'}, where AUTO mode will avoid deconvolution
+# configuration: how to subtract 
+ForceConv = 'REF'               # FIXME {'AUTO', 'REF', 'SCI'}
+                                # 'AUTO': convolve the image with smaller FWHM to avoid deconvolution.
+                                # 'REF': convolve the reference image, DIFF = SCI - Convolved_REF.
+                                # 'SCI': convolve the science image, DIFF = Convolved_SCI - REF.
+
 KerHWRatio = 2.0                # FIXME Ratio of kernel half-width to FWHM (typically, 1.5-2.5).
-KerPolyOrder = 2                # FIXME {0, 1, 2, 3}, Polynomial degree of kernel spatial variation
+KerPolyOrder = 2                # FIXME {0, 1, 2, 3}, Polynomial degree of kernel spatial variation.
 BGPolyOrder = 0                 # FIXME {0, 1, 2, 3}, Polynomial degree of differential background spatial variation.
                                 #       it is trivial here, as sparse-flavor-sfft requires sky subtraction in advance.
 ConstPhotRatio = True           # FIXME Constant photometric ratio between images?

@@ -15,6 +15,9 @@ NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy
 
 # configuration: how to subtract
 ForceConv = 'REF'               # FIXME {'REF', 'SCI'}
+                                # 'REF': convolve the reference image, DIFF = SCI - Convolved_REF.
+                                # 'SCI': convolve the science image, DIFF = Convolved_SCI - REF.
+
 GKerHW = 4                      # FIXME given kernel half-width
 KerPolyOrder = 2                # FIXME {0, 1, 2, 3}, Polynomial degree of kernel spatial variation
 BGPolyOrder = 2                 # FIXME {0, 1, 2, 3}, Polynomial degree of differential background spatial variation
