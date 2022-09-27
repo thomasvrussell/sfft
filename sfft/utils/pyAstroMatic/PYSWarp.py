@@ -8,7 +8,7 @@ from astropy.wcs import WCS
 from tempfile import mkdtemp
 from sfft.utils.CombineHeader import Combine_Header
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Sep 22, 2022
+# version: Sep 27, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
@@ -57,7 +57,7 @@ class PY_SWarp:
                 sys.exit('MeLOn ERROR: Some SWarp required keywords are NOT FOUND !')
 
         # * Make Directory as workplace of PYSwarp operation
-        TDIR = mkdtemp(suffix=None, prefix=None, dir=None)
+        TDIR = mkdtemp(suffix=None, prefix='PYSWarp_', dir=None)
 
         # * Make Swarp configuration file in TDIR.
         ConfigDict = {}
