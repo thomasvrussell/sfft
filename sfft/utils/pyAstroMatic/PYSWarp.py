@@ -1,7 +1,6 @@
 import os
 import sys
 import warnings
-import numpy as np
 import os.path as pa
 from astropy.io import fits
 from astropy.wcs import WCS
@@ -16,12 +15,70 @@ __version__ = "v1.3"
 class PY_SWarp:
     @staticmethod
     def PS(FITS_obj, FITS_ref, FITS_resamp=None, FITS_resamp_weight=None, \
-        GAIN_KEY='GAIN', SATUR_KEY='SATURATE', EXPTIME_KEY='EXPTIME', \
-        OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', FILL_VALUE=None, \
-        WEIGHT_SUFFIX='.weight.fits', WRITE_XML='N', VERBOSE_TYPE='NORMAL'):
+        GAIN_KEY='GAIN', SATUR_KEY='SATURATE', OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', \
+        SUBTRACT_BACK='N', FILL_VALUE=None, WEIGHT_SUFFIX='.weight.fits', WRITE_XML='N', VERBOSE_TYPE='NORMAL'):
 
         """
-        # @ Python Version of SWarp
+        # Inputs & Outputs:
+
+        -FITS_obj []                        # FITS file path of the input image to be resampled
+
+        -FITS_ref []                        # FITS file path of the input image as resampling reference
+
+        -FITS_resamp [None]                 # FITS file path of the output image of resampled -FITS_obj
+
+        -FITS_resamp_weight [None]          # FITS file path of the output weight image for resampled -FITS_obj
+
+        # SWarp parameters:
+
+        -GAIN_KEY ['GAIN']                  # SWarp Parameter GAIN_KEYWORD
+                                            # i.e., keyword of GAIN in FITS image header
+
+        -SATUR_KEY ['SATURATE']             # SWarp Parameter SATLEV_KEYWORD
+                                            # i.e., keyword of the saturation level in the FITS image header
+
+        -OVERSAMPLING [1]                   # SWarp Parameter OVERSAMPLING
+                                            # Oversampling in each dimension
+                                            # (0 = automatic)
+                                            # P.S. Here I changed the default value from 0 to 1
+
+        -RESAMPLING_TYPE ['LANCZOS3']       # SWarp Parameter RESAMPLING_TYPE
+                                            # NEAREST,BILINEAR,LANCZOS2,LANCZOS3
+                                            # LANCZOS4 (1 per axis) or FLAGS
+
+        -SUBTRACT_BACK ['N']                # SWarp Parameter SUBTRACT_BACK 
+                                            # Subtraction sky background (Y/N)? (all or for each image)
+                                            # P.S. Here I changed the default value from 'Y' to 'N'
+
+        -WEIGHT_SUFFIX ['.weight.fits']     # SWarp Parameter WEIGHT_SUFFIX
+                                            # Suffix to use for weight-maps
+                                            # Weightmap filename if suffix not used (all or for each weight-map)
+
+        -WRITE_XML ['N']                    # SWarp Parameter WRITE_XML
+                                            # Write XML file (Y/N)?
+                                            # P.S. Here I changed the default value from 'Y' to 'N'
+                                       
+        -VERBOSE_TYPE ['NORMAL']            # SWarp Parameter VERBOSE_TYPE
+                                            # QUIET,LOG,NORMAL, or FULL
+
+        # Other parameters:
+
+        -FILL_VALUE [None]                  # How to fill the invalid (boundary) pixels in -FITS_resamp and -FITS_resamp_weight
+                                            # e.g., -FILL_VALUE = 0.0, -FILL_VALUE = np.nan
+
+        # Returns:
+
+            PixA_resamp                     # Pixel array of the resampled image
+                                            # P.S. PixA_resamp = fits.getdata(FITS_resamp, ext=0).T
+            
+            PixA_resamp_weight              # Pixel array of the weight image for resampled image
+                                            # P.S. PixA_resamp_weight = fits.getdata(FITS_resamp_weight, ext=0).T
+            
+            MISSING_MASK                    # Pixel array of the invalid pixels
+                                            # P.S. -FILL_VALUE will fill the pixels where MISSING_MASK is True  
+        
+        # ---------------- MORE REMARKS ON PYSWarp ----------------  
+        #
         #  a) PYSWarp Purpose
         #     1. The current python version only implement Resampling of single SEF-FITS image.
         #     2. Note SWarp can also do the simple combination procedure after Resampling.
@@ -43,18 +100,19 @@ class PY_SWarp:
         #        we will record the SWarp parameters used in the function.
         #     c. SWarp will automatically record the processing time in resulting header.
         #
-        #  d) Tips on resampling method
+        #  d) Tips on resampling method -RESAMPLING_TYPE
         #     NOTE: LANCZOS4 is relatively time-consuming
         #     NOTE: large OVERSAMPLING may cause higher pixel correlation
         #
         """
 
         # * Check Process for FITS_obj header
-        phr_obj = fits.getheader(FITS_obj, ext=0)
-        BASICKeys = [GAIN_KEY, SATUR_KEY, EXPTIME_KEY]
-        for key in BASICKeys:
-            if key not in phr_obj: 
-                sys.exit('MeLOn ERROR: Some SWarp required keywords are NOT FOUND !')
+        phr_obj = fits.getheader(FITS_obj, ext=0)        
+        assert GAIN_KEY in phr_obj and SATUR_KEY in phr_obj
+        if 'EXPTIME' not in phr_obj:
+            warnings.warn('MeLOn WARNING: SWarp does not find EXPTIME in header at [%s]' %(pa.basename(FITS_obj)))
+        if 'MJD-OBS' not in phr_obj:
+            warnings.warn('MeLOn WARNING: SWarp does not find MJD-OBS in header at [%s]' %(pa.basename(FITS_obj)))
 
         # * Make Directory as workplace of PYSwarp operation
         TDIR = mkdtemp(suffix=None, prefix='PYSWarp_', dir=None)

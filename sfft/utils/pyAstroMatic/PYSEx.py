@@ -12,14 +12,14 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Sep 22, 2022
+# version: Sep 28, 2022
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.3"
 
 class PY_SEx:
     @staticmethod
-    def PS(FITS_obj=None, PSF_obj=None, FITS_ref=None, PL=None, CATALOG_TYPE='FITS_LDAC', \
+    def PS(FITS_obj, PSF_obj=None, FITS_ref=None, PL=None, CATALOG_TYPE='FITS_LDAC', \
         GAIN_KEY='GAIN', SATUR_KEY='SATURATE', PIXEL_SCALE=1.0, SEEING_FWHM=1.2, BACK_TYPE='AUTO', \
         BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, DETECT_THRESH=1.5, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_NTHRESH=32, DEBLEND_MINCONT=0.005, CLEAN='Y', \
@@ -29,7 +29,155 @@ class PY_SEx:
         Preserve_NoMatch=False, MDIR=None, verbose='QUIET'):
 
         """
-        # @Python Version of SExtractor
+        # Inputs & Outputs:
+
+        -FITS_obj []                    # FITS file path of the input image for photometry
+ 
+        -PSF_obj [None]                 # PSFEx .psf file path for PSF photometry
+
+        -FITS_ref [None]                # FITS file path of the input image for detection 
+                                        # (a) -FITS_ref = None means single image mode:  
+                                        #     SEx detection & SEx photometry on same image -FITS_obj.
+                                        # (b) -FITS_ref != None mean dual image mode:
+                                        #     SEx detection on -FITS_ref & SEx photometry on -FITS_obj
+
+        -PL [None]                      # Parameter List (Python list here) of SExtractor output catalog
+                                        # one can use command line 'sex -dp' to find all available parameters
+
+        # Configurations for SExtractor:
+
+        -CATALOG_TYPE ['FITS_LDAC']     # SExtractor Parameter CATALOG_TYPE
+                                        # NONE,ASCII,ASCII_HEAD, ASCII_SKYCAT,
+                                        # ASCII_VOTABLE, FITS_1.0 or FITS_LDAC
+
+        -GAIN_KEY ['GAIN']              # SExtractor Parameter GAIN_KEY
+                                        # i.e., keyword of GAIN in FITS image header
+
+        -SATUR_KEY ['SATURATE']         # SExtractor Parameter SATUR_KEY
+                                        # i.e., keyword of the saturation level in the FITS image header
+
+        -PIXEL_SCALE [1.0]              # SExtractor Parameter PIXEL_SCALE
+                                        # size of pixel in arcsec (0=use FITS WCS info)
+                                        # P.S. it only works for surface brightness parameters, 
+                                        #      FWHM_WORLD and star/galaxy separation.
+
+        -SEEING_FWHM [1.2]              # SExtractor Parameter SEEING_FWHM
+                                        # stellar FWHM in arcsec
+                                        # P.S. it only works for star/galaxy separation.
+
+        -BACK_TYPE ['AUTO']             # SExtractor Parameter BACK_TYPE = [AUTO or MANUAL].
+         
+        -BACK_VALUE [0.0]               # SExtractor Parameter BACK_VALUE (only work for BACK_TYPE='MANUAL')
+
+        -BACK_SIZE [64]                 # SExtractor Parameter BACK_SIZE
+
+        -BACK_FILTERSIZE [3]            # SExtractor Parameter BACK_FILTERSIZE
+
+        -DETECT_THRESH [1.5]            # SExtractor Parameter DETECT_THRESH
+                                        # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+
+        -DETECT_MINAREA [5]             # SExtractor Parameter DETECT_MINAREA
+                                        # min. # of pixels above threshold
+        
+        -DETECT_MAXAREA [0]             # SExtractor Parameter DETECT_MAXAREA
+                                        # max. # of pixels above threshold (0=unlimited)
+
+        -DEBLEND_MINCONT [0.005]        # SExtractor Parameter DEBLEND_MINCONT (typically, 0.001 - 0.005)
+                                        # Minimum contrast parameter for deblending 
+
+        -CLEAN ['Y]                     # SExtractor Parameter CLEAN
+                                        # Clean spurious detections? (Y or N)?
+
+        -BACKPHOTO_TYPE ['LOCAL']       # SExtractor Parameter BACKPHOTO_TYPE
+                                        # can be GLOBAL or LOCAL
+                                        # P.S. I have changed to the default value to more common 'LOCAL'
+
+        -PHOT_APERTURES [5.0]           # SExtractor Parameter PHOT_APERTURES
+                                        # MAG_APER aperture diameter(s) in pixels
+                                        # P.S. Here it can be a Python list of apertures
+
+        -CHECKIMAGE_TYPE ['NONE']       # SExtractor Parameter CHECKIMAGE_TYPE
+                                        # can be NONE, BACKGROUND, BACKGROUND_RMS, MINIBACKGROUND, MINIBACK_RMS, 
+                                        # -BACKGROUND, FILTERED, OBJECTS, -OBJECTS, SEGMENTATION, or APERTURES
+
+        -verbose ['QUIET']              # SExtractor Parameter VERBOSE_TYPE
+                                        # can be QUIET, NORMAL or FULL
+
+        # Other parameters
+
+        -NegativeCorr [True]            # In SExtractor, MAG_* = 99. and MAGERR_* = 99. for FLUX_* < 0.0 
+                                        # If -NegativeCorr = True, PYSEx will correct MAG_* and MAGERR_* 
+                                        # to be a valid values using abs(FLUX_*) and FLUXERR_*.
+
+        -VIGNET [None]                  # VIGNET for generating PSFEx input catalog
+                                        # e.g., set -VIGNET = (51, 51), PYSEx will add 'VIGNET(51, 51)' into 
+                                        #       the SExtractor output parameter list.
+
+        -StampImgSize [None]            # PYSEx allows for making a stamp for each detected source on -FITS_obj,
+                                        # the stamps will be saved in a new column named 'Stamp' in the output catalog.
+                                        # -StampImgSize is the stamp size, e.g., -StampImgSize = (31, 31)
+
+        -AddRD [False]                  # Add columns for Ra. and Decl. in the output catalog?
+                                        # P.S. The columns are X_WORLD, Y_WORLD or XWIN_WORLD, YWIN_WORLD.
+                                        #      Although SExtractor itself can generate these columns, here we use 
+                                        #      astropy.wcs to convert image coordinates to world coordinates instead.
+                                        #      (Because I feel like that astropy has better WCS compatibility than SExtractor)
+
+        -ONLY_FLAGS [None]              # Do you put any constrain on the SExtractor output parameter FLAGS
+                                        #
+                                        # FLAGS description
+                                        # 1   aperture photometry is likely to be biased by neighboring sources 
+                                        #     or by more than 10% of bad pixels in any aperture
+                                        # 2	  the object has been deblended
+                                        # 4	  at least one object pixel is saturated
+                                        # 8	  the isophotal footprint of the detected object is truncated (too close to an image boundary)
+                                        # 16  at least one photometric aperture is incomplete or corrupted (hitting buffer or memory limits)
+                                        # 32  the isophotal footprint is incomplete or corrupted (hitting buffer or memory limits)
+                                        # 64  a memory overflow occurred during deblending
+                                        # 128 a memory overflow occurred during extraction
+                                        #
+                                        # P.S. popular constrain like -ONLY_FLAGS = [0] or -ONLY_FLAGS = [0,2]
+
+        -XBoundary [0.0]                # The image boundary size for X axis
+                                        # Sources detected within the boundary will be rejected in the output catalog
+
+        -YBoundary [0.0]                # The image boundary size for Y axis
+                                        # ~
+
+        -Coor4Match ['XY_']             # Can be 'XY_' or 'XYWIN_'
+                                        # 'XY_': cross match using coordinates X_IMAGE, Y_IMAGE, X_WORLD, Y_WORLD
+                                        # 'XYWIN_': cross match using coordinates XWIN_IMAGE, YWIN_IMAGE, XWIN_WORLD, YWIN_WORLD
+
+        -XY_Quest [None]                # The image coordinates you would like to cross match with photometry SExtractor catalog.
+                                        # P.S. it is a Python array with shape (2, NUM_SOURCE), a collection of (x, y)
+
+        -Match_xytol [2.0]              # The cross match tolerance (pix)
+
+        -RD_Quest [None]                # The world coordinates you would like to cross match with SExtractor photometry catalog.
+                                        # P.S. it is a Python array with shape (2, NUM_SOURCE), a collection of (ra, dec)
+
+        -Match_rdtol [1.0]              # The cross match tolerance (arcsec)
+
+        -Preserve_NoMatch [False]       # Preserve the detected sources in SExtractor photometry catalog without cross match counterpart
+
+        -MDIR [None]                    # Directory for output files
+        
+        # Returns:
+
+            AstSEx                      # astropy Table of SExtractor photometry catalog
+
+            PixA_SExCheckLst            # List of Pixel arrays for SExtractor check images
+                                        # P.S. PixA = fits.getdata(FITS, ext=0).T
+            
+            FITS_SExCat                 # File path of SExtractor photometry catalog
+                                        # P.S. only for -MDIR is not None
+
+            FITS_SExCheckLst            # List of file path of SExtractor check images
+                                        # P.S. only for -MDIR is not None
+
+        
+        # ---------------- MORE DESCRIPTION ON HOW SEXTRACTOR WORK ---------------- 
+        #
         # * SExtractor Inputs
         #    ** Array-Inputs:
         #       SEx works on one image for signal detection and another image for photometry 
@@ -290,7 +438,7 @@ class PY_SEx:
         #     NOTE: FLAGS is correlated to object image, if we add constraint FLAG=0 then we fail to get the same coordinate list.
         #
         """
-        
+
         # * sex or sextractor?
         for cmd in ['sex', 'sextractor']:
             try:
@@ -569,20 +717,7 @@ class PY_SEx:
             if ONLY_FLAGS is not None:
                 if 'FLAGS' not in PL:
                     sys.exit('MeLOn ERROR: Restriction of FLAGS required column FLAGS!')
-                else: 
-                    """
-                    FLAGS description
-                    1	aperture photometry is likely to be biased by neighboring sources or by more than 10% of bad pixels in any aperture
-                    2	the object has been deblended
-                    4	at least one object pixel is saturated
-                    8	the isophotal footprint of the detected object is truncated (too close to an image boundary)
-                    16	at least one photometric aperture is incomplete or corrupted (hitting buffer or memory limits)
-                    32	the isophotal footprint is incomplete or corrupted (hitting buffer or memory limits)
-                    64	a memory overflow occurred during deblending
-                    128	a memory overflow occurred during extraction
-                    # NOTE FLAGS == 0 is a typical constrain for getting isolated & non-saturated sources.
-                    """
-                    
+                else:
                     _OLEN = len(AstSEx)
                     AstSEx = AstSEx[np.in1d(AstSEx['FLAGS'], ONLY_FLAGS)]    
                     Modify_AstSEx = True
