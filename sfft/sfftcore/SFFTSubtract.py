@@ -429,6 +429,7 @@ class ElementalSFFTSubtract_Pycuda:
             _module = SFFTModule_dict['FillLS_DEL']
             _func = _module.get_function('kmain')
             _func(PreDEL_GPU, RHb_GPU, block=TpB_DEL, grid=BpG_DEL)
+            
             PreDEL_GPU.gpudata.free()
             dt7 = time.time() - t7
 
@@ -910,6 +911,7 @@ class ElementalSFFTSubtract_Cupy:
             _module = SFFTModule_dict['FillLS_DEL']
             _func = _module.get_function('kmain')
             _func(args=(PreDEL_GPU, RHb_GPU), block=TpB_DEL, grid=BpG_DEL)
+            
             del PreDEL_GPU
             dt7 = time.time() - t7
 
