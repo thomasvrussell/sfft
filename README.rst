@@ -73,8 +73,7 @@ We have prepared several examples in the test directory so that you can familar 
 
 .. [*] **sfft subtraction for sparse field** : The example in subdirectory named subtract_test_sparse_flavor. We use sparse-flavor-sfft (module ``sfft.EasySparsePacket``) to perform image subtraction for CTIO-4m DECam observations. More detailed explanations of this module, see help(``sfft.EasySparsePacket``).
 
-- **IMPORTANT NOTICE: the input images of sparse-flavor-sfft should be SKY-SUBTRACTED!** 
-One can make use of SExtractor to subtract the sky background, which has been also wrapped in this package, please use the module ``sfft.utils.SExSkySubtract`` and type help(``sfft.utils.SExSkySubtract``) to find its usage.
+- **IMPORTANT NOTICE: the input images of sparse-flavor-sfft should be SKY-SUBTRACTED!** One can make use of SExtractor to subtract the sky background, which has been also wrapped in this package, please use the module ``sfft.utils.SExSkySubtract`` and type help(``sfft.utils.SExSkySubtract``) to find its usage.
 
 - Our software provides two flavors for image subtraction, crowded-flavor-sfft and sparse-flavor-sfft, to accommodate the situations for the crowded and sparse fields, respectively. The two flavors actually follow the same routine for image subtraction and differ only in ways of masking the data. 
 
