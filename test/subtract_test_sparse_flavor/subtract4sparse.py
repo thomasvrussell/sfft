@@ -22,6 +22,10 @@ ConstPhotRatio = True           # FIXME Constant photometric ratio between image
 # configuration: required info in FITS header
 GAIN_KEY = 'GAIN'               # NOTE Keyword of Gain in FITS header
 SATUR_KEY = 'ESATUR'            # NOTE Keyword of Effective Saturation in FITS header
+                                # Remarks: one may think 'SATURATE' is a more common keyword name for saturation level.
+                                #          However, note that Sparse-Flavor SFFT requires sky-subtracted images as inputs, 
+                                #          we need to use the 'effective' saturation level after the sky-subtraction. 
+                                #          e.g., set ESATURA = SATURATE - (SKY + 10*SKYSIG)
 
 # run sfft subtraction
 CDIR = pa.dirname(pa.abspath(__file__))

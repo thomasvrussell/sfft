@@ -29,6 +29,10 @@ ConstPhotRatio = True              # FIXME Constant photometric ratio between im
 # configuration: required info in FITS header
 GAIN_KEY = 'GAIN'                  # NOTE Keyword of Gain in FITS header
 SATUR_KEY = 'ESATUR'               # NOTE Keyword of Saturation in FITS header
+                                   # Remarks: one may think 'SATURATE' is a more common keyword name for saturation level.
+                                   #          However, note that Sparse-Flavor SFFT requires sky-subtracted images as inputs, 
+                                   #          we need to use the 'effective' saturation level after the sky-subtraction. 
+                                   #          e.g., set ESATURA = SATURATE - (SKY + 10*SKYSIG)
 
 print('\n---------------------------------- CREATE MULTI-TASKS --------------------------------------')
 # * create multiple tasks (just copy the data in subtract_test_sparse_flavor multiple times)

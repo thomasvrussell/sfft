@@ -63,7 +63,7 @@ class MultiEasy_SparsePacket:
                                             # i.e., keyword of effective saturation in FITS header (of reference & science)
                                             # Remarks: one may think 'SATURATE' is a more common keyword name for saturation level.
                                             #          However, note that Sparse-Flavor SFFT requires sky-subtracted images as inputs, 
-                                            #          we need deliever the 'effective' saturation level after the sky-subtraction.
+                                            #          we need to use the 'effective' saturation level after the sky-subtraction.
                                             #          e.g., set ESATURA = SATURATE - (SKY + 10*SKYSIG)
 
         -BACK_TYPE ['MANUAL']               # SExtractor Parameter BACK_TYPE = [AUTO or MANUAL].
