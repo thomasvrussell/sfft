@@ -6,6 +6,14 @@ from sfft.MultiEasySparsePacket import MultiEasy_SparsePacket
 CDIR = pa.dirname(pa.abspath(__file__))
 # sfft version: 1.3.2+
 
+# * AN IMPORTANT WARNING (Oct 25, 2022)
+#   Please do not put the function MultiEasy_SparsePacket in a Python loop,
+#   since the uncleaned GPU memory in each run can accumulate and exceed your GPU limit.
+#   Instead, if one want to process a sequence of exposures using this function
+#   (I assume that each exposure has multiple ccd images, e.g., DECam, HSC, ...),
+#   I suggest users to run a separate .py for each exposure (like the example here) 
+#   and trigger them one by one in a shell script, that will avoid the undesired GPU memory issue.
+
 # configuration: multiprocessing and computing resourse
 NUM_THREADS_4PREPROC = 16          # FIXME Python threads for preprocesing
 NUM_THREADS_4SUBTRACT = 1          # FIXME Python threads for sfft subtraction (= Number of GPU devices)

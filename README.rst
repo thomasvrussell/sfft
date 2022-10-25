@@ -142,6 +142,8 @@ We have tried our best to ensure the backward compatiablity, however, the rule w
 What's new
 -----------
 
+- A warning message about the usage of ``sfft.MultiEasySparsePacket`` and ``sfft.MultiEasyCrowdedPacket`` is added in the related test scripts. [Lei, Oct 25, 2022]
+
 - The preprocessing in sparse-flavor-sfft is refined using an additional rejection of mild varaibles since version 1.3.0. [Lei, Aug 19, 2022]
 
 - The sfft is now optimized for multiple tasks since version 1.1.0. [Lei, May 24, 2022]
