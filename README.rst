@@ -157,6 +157,12 @@ What's new
 Todo list
 -----------
 
+- As scikit-image has changed something in its function of hough detection since version 0.19.0, I recently found that the source selection in sfft will be affected by this upgrade. I have not checked the new function yet, for the time being, I would recommend users to install a scikit-image >= 0.16.2 but <= 0.18.3. I may add a constrain on scikit-image version in sfft 1.3.5. [Lei, Nov 9, 2022]
+
+- Add a verbose argument for sfft so that users can get more clean printed messages. [Lei, Nov 9, 2022]
+
+- Test if we can use sep to replace SExtractor in preprocessing to make sfft more Pythonic. [Lei, Nov 9, 2022] 
+
 - Incorporate the separate functions (in the folder beta4spline) for spline form sfft into the unified sfft functions. Note that only Numpy backend is currently available and the spline form is very memory-consuming. [Lei, July 6, 2022]
 
 - Write a detailed documentation for sfft! [Lei, May 24, 2022]
