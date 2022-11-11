@@ -161,7 +161,7 @@ Todo list
 
 - The total GPU memory usage is only optimized for KerPolyOrder = 2 & BGPolyOrder = 2, I will extend the optimization to other cases ASAP! [Lei, Nov 11, 2022]
 
-- I will allows users to disable the hough detection for preprocessing when there are too few sources in the field in next version sfft v1.3.5. [Lei, Nov 11, 2022]
+- I will allows users to disable the hough detection for preprocessing when there are too few sources in the field in the next version sfft v1.3.5. [Lei, Nov 11, 2022]
 
 - Add a verbose argument for sfft so that users can get more clean printed messages. [Lei, Nov 9, 2022]
 
