@@ -24,7 +24,7 @@ TIMEOUT_4SUBTRACT_EACHTASK = 300   # FIXME timeout (sec) of sfft subtraction for
 
 # configuration: how to subtract
 ForceConv = 'REF'                  # FIXME {'AUTO', 'REF', 'SCI'}
-                                   # 'AUTO': convolve the image with smaller FWHM to avoid deconvolution.
+                                   # 'AUTO': convolve the image with smaller FWHM to avoid deconvolution. [default & recommended]
                                    # 'REF': convolve the reference image, DIFF = SCI - Convolved_REF.
                                    # 'SCI': convolve the science image, DIFF = Convolved_SCI - REF.
 

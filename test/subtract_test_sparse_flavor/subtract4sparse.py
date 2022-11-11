@@ -9,7 +9,7 @@ NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy
 
 # configuration: how to subtract 
 ForceConv = 'REF'               # FIXME {'AUTO', 'REF', 'SCI'}
-                                # 'AUTO': convolve the image with smaller FWHM to avoid deconvolution.
+                                # 'AUTO': convolve the image with smaller FWHM to avoid deconvolution. [default & recommended]
                                 # 'REF': convolve the reference image, DIFF = SCI - Convolved_REF.
                                 # 'SCI': convolve the science image, DIFF = Convolved_SCI - REF.
 
