@@ -15,8 +15,9 @@ ForceConv = 'REF'               # FIXME {'AUTO', 'REF', 'SCI'}
 
 KerHWRatio = 2.0                # FIXME Ratio of kernel half-width to FWHM (typically, 1.5-2.5).
 KerPolyOrder = 2                # FIXME {0, 1, 2, 3}, Polynomial degree of kernel spatial variation.
-BGPolyOrder = 0                 # FIXME {0, 1, 2, 3}, Polynomial degree of differential background spatial variation.
+BGPolyOrder = 2                 # FIXME {0, 1, 2, 3}, Polynomial degree of differential background spatial variation.
                                 #       it is trivial here, as sparse-flavor-sfft requires sky subtraction in advance.
+                                # WARNING: I temporarily change it from 0 back to 2, as 0 is not optimized for GPU memory usage yet (22, Nov 16).
 ConstPhotRatio = True           # FIXME Constant photometric ratio between images?
 
 # configuration: required info in FITS header
