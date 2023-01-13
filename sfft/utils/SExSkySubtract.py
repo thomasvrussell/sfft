@@ -1,12 +1,13 @@
 import sep
+import warnings
 import numpy as np
 from astropy.io import fits
 from scipy.stats import iqr
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
-# version: Sep 28, 2022
+# version: Jan 1, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.3"
+__version__ = "v1.4"
 
 class SEx_SkySubtract:
     @staticmethod
@@ -29,39 +30,41 @@ class SEx_SkySubtract:
 
         # Configurations for SExtractor:
         
-        -SATUR_KEY ['SATURATE']        # SExtractor Parameter SATUR_KEY
-                                       # i.e., keyword of the saturation level in the input image header
+        -SATUR_KEY ['SATURATE']         # SExtractor Parameter SATUR_KEY
+                                        # i.e., keyword of the saturation level in the input image header
 
-        -BACK_SIZE [64]                # SExtractor Parameter BACK_SIZE
+        -BACK_SIZE [64]                 # SExtractor Parameter BACK_SIZE
 
-        -BACK_FILTERSIZE [3]           # SExtractor Parameter BACK_FILTERSIZE
+        -BACK_FILTERSIZE [3]            # SExtractor Parameter BACK_FILTERSIZE
 
-        -DETECT_THRESH [1.5]           # SExtractor Parameter DETECT_THRESH
+        -DETECT_THRESH [1.5]            # SExtractor Parameter DETECT_THRESH
 
-        -DETECT_MINAREA [5]            # SExtractor Parameter DETECT_MINAREA
+        -DETECT_MINAREA [5]             # SExtractor Parameter DETECT_MINAREA
         
-        -DETECT_MAXAREA [0]            # SExtractor Parameter DETECT_MAXAREA
+        -DETECT_MAXAREA [0]             # SExtractor Parameter DETECT_MAXAREA
 
         # Returns:
 
-            SKYDIP                     # The flux peak of the sky image (outliers rejected)
+            SKYDIP                      # The flux peak of the sky image (outliers rejected)
 
-            SKYPEAK                    # The flux dip of the sky image (outliers rejected)
+            SKYPEAK                     # The flux dip of the sky image (outliers rejected)
             
-            PixA_skysub                # Pixel Array of the sky-subtracted image 
+            PixA_skysub                 # Pixel Array of the sky-subtracted image 
             
-            PixA_sky                   # Pixel Array of the sky image 
+            PixA_sky                    # Pixel Array of the sky image 
             
-            PixA_skyrms                # Pixel Array of the sky RMS image 
+            PixA_skyrms                 # Pixel Array of the sky RMS image 
 
         """
 
         # * Generate SExtractor OBJECT-MASK
-        #   NOTE: GAIN, DEBLEND_MINCONT, BACKPHOTO_TYPE do not matter in the determination of detection mask.
-        DETECT_MASK = PY_SEx.PS(FITS_obj=FITS_obj, PL=['X_IMAGE', 'Y_IMAGE'], GAIN_KEY='GAIN', SATUR_KEY=SATUR_KEY, \
-            BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, DETECT_THRESH=DETECT_THRESH, \
-            DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=0.005, \
-            BACKPHOTO_TYPE='GLOBAL', CHECKIMAGE_TYPE='OBJECTS')[1][0].astype(bool)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            # NOTE: GAIN, SATURATE, ANALYSIS_THRESH, DEBLEND_MINCONT, BACKPHOTO_TYPE do not affect the detection mask.
+            DETECT_MASK = PY_SEx.PS(FITS_obj=FITS_obj, PL=['X_IMAGE', 'Y_IMAGE'], GAIN_KEY='PHGAIN', SATUR_KEY=SATUR_KEY, \
+                BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, DETECT_THRESH=DETECT_THRESH, \
+                ANALYSIS_THRESH=1.5, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=0.005, \
+                BACKPHOTO_TYPE='GLOBAL', CHECKIMAGE_TYPE='OBJECTS')[1][0].astype(bool)
 
         # * Extract SExtractor SKY-MAP from the Unmasked Image
         PixA_obj = fits.getdata(FITS_obj, ext=0).T

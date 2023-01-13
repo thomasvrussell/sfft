@@ -8,16 +8,15 @@ from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.SymmetricMatch import Symmetric_Match
 from sfft.utils.HoughMorphClassifier import Hough_MorphClassifier
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-# version: Sep 18, 2022
+# version: Jan 1, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.3"
+__version__ = "v1.4"
 
 class Auto_SparsePrep:
-    def __init__(self, FITS_REF, FITS_SCI, GAIN_KEY='GAIN', SATUR_KEY='ESATUR', \
-        BACK_TYPE='MANUAL', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, \
-        DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, \
-        BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30):
+    def __init__(self, FITS_REF, FITS_SCI, GAIN_KEY='GAIN', SATUR_KEY='ESATUR', BACK_TYPE='MANUAL', \
+        BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, ANALYSIS_THRESH=2.0, DETECT_MINAREA=5, \
+        DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30):
 
         self.FITS_REF = FITS_REF
         self.FITS_SCI = FITS_SCI
@@ -31,6 +30,7 @@ class Auto_SparsePrep:
         self.BACK_FILTERSIZE = BACK_FILTERSIZE
 
         self.DETECT_THRESH = DETECT_THRESH
+        self.ANALYSIS_THRESH = ANALYSIS_THRESH
         self.DETECT_MINAREA = DETECT_MINAREA
         self.DETECT_MAXAREA = DETECT_MAXAREA
         self.DEBLEND_MINCONT = DEBLEND_MINCONT
@@ -152,15 +152,14 @@ class Auto_SparsePrep:
         # * Use Hough-MorphClassifer to identify GoodSources in REF & SCI
         def main_hough(FITS_obj):
             # NOTE: SEGMENTATION map is sensitive to DETECT_THRESH
-            Hmc = Hough_MorphClassifier.MakeCatalog(FITS_obj=FITS_obj, GAIN_KEY=self.GAIN_KEY, \
-                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, \
-                BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
+            Hmc = Hough_MorphClassifier.MakeCatalog(FITS_obj=FITS_obj, GAIN_KEY=self.GAIN_KEY, SATUR_KEY=self.SATUR_KEY, \
+                BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, \
+                DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
                 DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, \
-                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, \
-                BoundarySIZE=self.BoundarySIZE, AddSNR=False)
-
+                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE, AddSNR=False)
+            
             Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], Hough_FRLowerLimit=Hough_FRLowerLimit, \
-                Hough_peak_clip=Hough_peak_clip, BeltHW=BeltHW, PS_ELLIPThresh=PS_ELLIPThresh)    
+                Hough_peak_clip=Hough_peak_clip, BeltHW=BeltHW, PS_ELLIPThresh=PS_ELLIPThresh)
             AstSEx_GS, FHWM, PixA_SEG = Hmc[0][Hc[2]], Hc[0], Hmc[1][0].astype(int)
             return AstSEx_GS, FHWM, PixA_SEG
         
@@ -324,11 +323,11 @@ class Auto_SparsePrep:
             PL = ['X_IMAGE', 'Y_IMAGE', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_AUTO', 'MAGERR_AUTO', \
                   'FLAGS', 'FLUX_RADIUS', 'FWHM_IMAGE', 'A_IMAGE', 'B_IMAGE']
             PYSEX_OP = PY_SEx.PS(FITS_obj=FITS_obj, PL=PL, GAIN_KEY=self.GAIN_KEY, SATUR_KEY=self.SATUR_KEY, \
-                BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, \
-                BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
+                BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, \
+                DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
                 DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, \
-                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, \
-                XBoundary=self.BoundarySIZE, YBoundary=self.BoundarySIZE, MDIR=None)
+                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, XBoundary=self.BoundarySIZE, \
+                YBoundary=self.BoundarySIZE, MDIR=None)
             AstSEx, PixA_SEG = PYSEX_OP[0], PYSEX_OP[1][0].astype(int)
             
             # *** Note on the crude estimate of FWHM ***

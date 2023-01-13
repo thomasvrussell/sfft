@@ -3,21 +3,21 @@ import numpy as np
 import os.path as pa
 from astropy.io import fits
 from sfft.AutoCrowdedPrep import Auto_CrowdedPrep
-# version: Sep 16, 2022
+# version: Jan 1, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.2"
+__version__ = "v1.4"
 
 class Easy_CrowdedPacket:
     @staticmethod
-    def ECP(FITS_REF, FITS_SCI, FITS_DIFF=None, FITS_Solution=None, ForceConv='AUTO', \
-        GKerHW=None, KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
-        ConstPhotRatio=True, MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
-        BACK_TYPE='AUTO', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, \
+    def ECP(FITS_REF, FITS_SCI, FITS_DIFF=None, FITS_Solution=None, ForceConv='AUTO', GKerHW=None, \
+        KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
+        MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', BACK_TYPE='AUTO', \
+        BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, ANALYSIS_THRESH=5.0, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
         ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask=None, \
         BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
-
+        
         """
         # NOTE: This function is to Perform Crowded-Flavor SFFT for single task:
         #       Pycuda & Cupy backend: do preprocessing on one CPU thread, and do subtraction on one GPU device.
@@ -68,6 +68,9 @@ class Easy_CrowdedPacket:
                                             #       Using a 'very cold' detection threshold here is to speed up SExtractor.
                                             #       Although DETECT_THRESH = 5.0 means we will miss the faint-end sources with 
                                             #       SNR < 20 (approximately), the cost is generally acceptable for saturation mask.
+
+        -ANALYSIS_THRESH [5.0]              # SExtractor Parameter ANALYSIS_THRESH
+                                            # NOTE: By default, let -ANALYSIS_THRESH = -DETECT_THRESH
 
         -DETECT_MINAREA [5]                 # SExtractor Parameter DETECT_MINAREA
         
@@ -163,9 +166,12 @@ class Easy_CrowdedPacket:
         # * Perform Auto Crowded-Prep [Mask Saturation]
         _ACP = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
             BACK_TYPE=BACK_TYPE, BACK_VALUE=BACK_VALUE, BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, \
-            DETECT_THRESH=DETECT_THRESH, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, \
-            DEBLEND_MINCONT=DEBLEND_MINCONT, BACKPHOTO_TYPE=BACKPHOTO_TYPE, ONLY_FLAGS=ONLY_FLAGS, BoundarySIZE=BoundarySIZE)
-        SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=BACK_SIZE_SUPER, StarExt_iter=StarExt_iter, PriorBanMask=PriorBanMask)
+            DETECT_THRESH=DETECT_THRESH, ANALYSIS_THRESH=ANALYSIS_THRESH, DETECT_MINAREA=DETECT_MINAREA, \
+            DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=DEBLEND_MINCONT, BACKPHOTO_TYPE=BACKPHOTO_TYPE, \
+            ONLY_FLAGS=ONLY_FLAGS, BoundarySIZE=BoundarySIZE)
+
+        SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=BACK_SIZE_SUPER, \
+            StarExt_iter=StarExt_iter, PriorBanMask=PriorBanMask)
 
         # * Determine ConvdSide & KerHW
         FWHM_REF = SFFTPrepDict['FWHM_REF']

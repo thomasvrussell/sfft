@@ -7,17 +7,17 @@ import os.path as pa
 from astropy.io import fits
 from sfft.AutoCrowdedPrep import Auto_CrowdedPrep
 from sfft.utils.meta.TimeoutKit import TimeoutAfter
-# version: Sep 16, 2022
+# version: Jan 1, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.3"
+__version__ = "v1.4"
 
 class MultiEasy_CrowdedPacket:
     def __init__(self, FITS_REF_Queue, FITS_SCI_Queue, FITS_DIFF_Queue=[], FITS_Solution_Queue=[], \
         ForceConv_Queue=[], GKerHW_Queue=[], KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
         ConstPhotRatio=True, MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
-        BACK_TYPE='AUTO', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, \
-        DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
+        BACK_TYPE='AUTO', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, \
+        ANALYSIS_THRESH=5.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
         ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask_Queue=[]):
 
         """
@@ -61,7 +61,7 @@ class MultiEasy_CrowdedPacket:
         
         -BACK_TYPE ['AUTO']                 # SExtractor Parameter BACK_TYPE = [AUTO or MANUAL].
          
-        -BACK_VALUE [0.0]                   # SExtractor Parameter BACK_VALUE (only work for BACK_TYPE='MANUAL')
+        -BACK_VALUE [0]                     # SExtractor Parameter BACK_VALUE (only work for BACK_TYPE='MANUAL')
 
         -BACK_SIZE [64]                     # SExtractor Parameter BACK_SIZE
 
@@ -70,8 +70,11 @@ class MultiEasy_CrowdedPacket:
         -DETECT_THRESH [5.0]                # SExtractor Parameter DETECT_THRESH
                                             # NOTE: One may notice that the default DETECT_THRESH in SExtractor is 1.5.
                                             #       Using a 'very cold' detection threshold here is to speed up SExtractor.
-                                            #       Although DETECT_THRESH = 5.0 means we will miss the faint-end sources with 
-                                            #       SNR < 20 (approximately), the cost is generally acceptable for saturation mask.
+                                            #       Although DETECT_THRESH = 5.0 means we will miss the faint-end sources with SNR < 20 
+                                            #       (approximately), the cost is generally acceptable for saturation mask.
+
+        -ANALYSIS_THRESH [5.0]              # SExtractor Parameter ANALYSIS_THRESH
+                                            # NOTE: By default, let -ANALYSIS_THRESH = -DETECT_THRESH
 
         -DETECT_MINAREA [5]                 # SExtractor Parameter DETECT_MINAREA
         
@@ -190,6 +193,7 @@ class MultiEasy_CrowdedPacket:
         self.BACK_FILTERSIZE = BACK_FILTERSIZE
         
         self.DETECT_THRESH = DETECT_THRESH
+        self.ANALYSIS_THRESH = ANALYSIS_THRESH
         self.DETECT_MINAREA = DETECT_MINAREA
         self.DETECT_MAXAREA = DETECT_MAXAREA
         self.DEBLEND_MINCONT = DEBLEND_MINCONT
@@ -230,7 +234,7 @@ class MultiEasy_CrowdedPacket:
             warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.PriorBanMask_Queue = [None] * self.NUM_TASK
         else: self.PriorBanMask_Queue = PriorBanMask_Queue
-    
+
     def MESP_Cupy(self, NUM_THREADS_4PREPROC=8, NUM_THREADS_4SUBTRACT=1, CUDA_DEVICES_4SUBTRACT=['0'], \
         TIMEOUT_4PREPROC_EACHTASK=300, TIMEOUT_4SUBTRACT_EACHTASK=300):
 
@@ -282,12 +286,13 @@ class MultiEasy_CrowdedPacket:
                     try:
                         with TimeoutAfter(timeout=TIMEOUT_4PREPROC_EACHTASK, exception=TimeoutError):
                             _ACP = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=self.GAIN_KEY, \
-                                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
-                                BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, \
+                                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, \
+                                BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, \
                                 DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, \
                                 BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE)
-                            SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=self.BACK_SIZE_SUPER, StarExt_iter=self.StarExt_iter, \
-                                PriorBanMask=PriorBanMask)
+                            
+                            SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=self.BACK_SIZE_SUPER, \
+                                StarExt_iter=self.StarExt_iter, PriorBanMask=PriorBanMask)
                         
                         NEW_STATUS = 1
                         _message = 'Successful Preprocessing for task-[%d] ' %taskidx_acquired

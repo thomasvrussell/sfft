@@ -12,16 +12,16 @@ from astropy.table import Table, Column
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Sep 28, 2022
+# version: Jan 1, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.3"
+__version__ = "v1.4"
 
 class PY_SEx:
     @staticmethod
     def PS(FITS_obj, PSF_obj=None, FITS_ref=None, PL=None, CATALOG_TYPE='FITS_LDAC', \
         GAIN_KEY='GAIN', SATUR_KEY='SATURATE', PIXEL_SCALE=1.0, SEEING_FWHM=1.2, BACK_TYPE='AUTO', \
-        BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, DETECT_THRESH=1.5, \
+        BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, DETECT_THRESH=1.5, ANALYSIS_THRESH=1.5, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_NTHRESH=32, DEBLEND_MINCONT=0.005, CLEAN='Y', \
         BACKPHOTO_TYPE='LOCAL', PHOT_APERTURES=5.0, NegativeCorr=True, CHECKIMAGE_TYPE='NONE', \
         VIGNET=None, StampImgSize=None, AddRD=False, ONLY_FLAGS=None, XBoundary=0.0, YBoundary=0.0, \
@@ -75,6 +75,10 @@ class PY_SEx:
 
         -DETECT_THRESH [1.5]            # SExtractor Parameter DETECT_THRESH
                                         # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+
+        -ANALYSIS_THRESH [1.5]          # SExtractor Parameter ANALYSIS_THRESH
+                                        # <sigmas> or <threshold>,<ZP> in mag.arcsec-2
+                                        # Threshold at which CLASS STAR and FWHM_ operate.
 
         -DETECT_MINAREA [5]             # SExtractor Parameter DETECT_MINAREA
                                         # min. # of pixels above threshold
@@ -175,7 +179,7 @@ class PY_SEx:
             FITS_SExCheckLst            # List of file path of SExtractor check images
                                         # P.S. only for -MDIR is not None
 
-        
+
         # ---------------- MORE DESCRIPTION ON HOW SEXTRACTOR WORK ---------------- 
         #
         # * SExtractor Inputs
@@ -199,12 +203,13 @@ class PY_SEx:
         #       f. Specify output columns in output SExtractor photometry table: 
         #          (-PL).
         #
-        #    TODO: Incorporate the Weight-Map Image as Input of PYSEx
-        #          SExtractor allows users to feed a weight-map image. It is very useful for mosaic image, which has
-        #          vairable effective GAIN and background noise level across the field due to different Num_Exposure.
-        #          A weight-map image would help SExtractor to calculate errors, such as, FLUXERR and MAGERR, more accurately. 
-        #          For current version, I would recommend users to set an average effective GAIN for mosaic image, 
-        #          and keep in mind it may cause inaccurate error estimation (to some extent) in SExtractor.
+        #    Remarks on Weight-Map:
+        #       SExtractor allows users to feed a weight-map image. It is very useful for mosaic image, which has
+        #       vairable effective GAIN and background noise level across the field due to different Num_Exposure.
+        #       Weight-map would help SExtractor to calculate errors, such as, FLUXERR and MAGERR, more accurately.
+        #       For current version, PYSEx does not include this feature, and I would recommend users to set 
+        #       an average effective GAIN for mosaic image, and keep in mind it may, to some extent, 
+        #       cause inaccurate error estimations.
         #
         # * SExtractor Workflow (Background)
         #    ** Extract Global_Background_Map (GBMap) and its RMS (GBRMap) from Image4detect & Image4phot
@@ -462,7 +467,7 @@ class PY_SEx:
             GAIN = phr_obj[GAIN_KEY]
             print('MeLOn CheckPoint: SEx use GAIN=%s [READ from FITS header %s]' %(GAIN, GAIN_KEY))
         else: 
-            GAIN = 0.0
+            GAIN = 0.0 
             warnings.warn('MeLOn WARNING: SEx use GAIN=%s [SExtractor default value]' %GAIN)
         
         if SATUR_KEY in phr_obj:
@@ -501,6 +506,7 @@ class PY_SEx:
         ConfigDict['BACK_FILTERSIZE'] = '%s' %BACK_FILTERSIZE
 
         ConfigDict['DETECT_THRESH'] = '%s' %DETECT_THRESH
+        ConfigDict['ANALYSIS_THRESH'] = '%s' %ANALYSIS_THRESH
         ConfigDict['DETECT_MINAREA'] = '%s' %DETECT_MINAREA
         ConfigDict['DETECT_MAXAREA'] = '%s' %DETECT_MAXAREA
         ConfigDict['DEBLEND_NTHRESH'] = '%s' %DEBLEND_NTHRESH
@@ -646,10 +652,9 @@ class PY_SEx:
                    %(len(AstSEx), pa.basename(FITS_obj)))
 
             # ** a. CORRECT the SExtractor bug on MAG & MAGERR due to negative flux count.
-            #       For such cases, corresponding MAG & MAGERR will turn to be a trivial 99
-            #       PYSEx will re-calculate them from FLUX & FLUXERR 
-            #       if MAG & MAGERR in PL and NegativeCorr=True.
-                        
+            #       For such cases, corresponding MAG & MAGERR will turn to be a trivial 99.
+            #       PYSEx will re-calculate them from FLUX & FLUXERR if MAG & MAGERR in PL and NegativeCorr=True.
+
             MAG_TYPES = [p for p in Param_lst if p[:4] == 'MAG_']
             if len(MAG_TYPES) > 0:
                 if NegativeCorr:
@@ -785,7 +790,7 @@ class PY_SEx:
                     
                     QuestINDEX = Symm[:, 0]
                     AstSEx.add_column(Column(QuestINDEX, name='QuestINDEX'))
-
+                    
                     print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources by symmetric matching | [%s]!' \
                            %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
 

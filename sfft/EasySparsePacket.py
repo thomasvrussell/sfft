@@ -6,18 +6,18 @@ from astropy.io import fits
 import scipy.ndimage as ndimage
 from astropy.table import Column
 from sfft.AutoSparsePrep import Auto_SparsePrep
-# version: Aug 31, 2022
+# version: Jan 1, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.3"
+__version__ = "v1.4"
 
 class Easy_SparsePacket:
     @staticmethod
     def ESP(FITS_REF, FITS_SCI, FITS_DIFF=None, FITS_Solution=None, ForceConv='AUTO', GKerHW=None, \
         KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=0, ConstPhotRatio=True, \
         MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='ESATUR', BACK_TYPE='MANUAL', BACK_VALUE=0.0, \
-        BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
-        DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30, \
+        BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, ANALYSIS_THRESH=2.0, DETECT_MINAREA=5, \
+        DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30, \
         XY_PriorSelect=None, Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
         MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, CVREJ_MAGD_THRESH=0.12, \
         ELABO_VAR_REJECTION=True, EVREJ_RATIO_THREH=5.0, EVREJ_SAFE_MAGDEV=0.04, StarExt_iter=4, \
@@ -82,6 +82,9 @@ class Easy_SparsePacket:
                                        #       Using a 'cold' detection threshold here is to speed up SExtractor.
                                        #       Although DETECT_THRESH = 2.0 means we will miss the faint-end sources with 
                                        #       SNR < 9 (approximately), the cost is generally acceptable for source selection.
+
+        -ANALYSIS_THRESH [2.0]         # SExtractor Parameter ANALYSIS_THRESH
+                                       # NOTE: By default, let -ANALYSIS_THRESH = -DETECT_THRESH
 
         -DETECT_MINAREA [5]            # SExtractor Parameter DETECT_MINAREA
         
@@ -264,8 +267,8 @@ class Easy_SparsePacket:
         warnings.warn('\nMeLOn WARNING: Input images for sparse-flavor sfft should be SKY-SUBTRACTED !!!')
         _ASP = Auto_SparsePrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
             BACK_TYPE=BACK_TYPE, BACK_VALUE=BACK_VALUE, BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, \
-            DETECT_THRESH=DETECT_THRESH, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, \
-            DEBLEND_MINCONT=DEBLEND_MINCONT, BACKPHOTO_TYPE=BACKPHOTO_TYPE, \
+            DETECT_THRESH=DETECT_THRESH, ANALYSIS_THRESH=ANALYSIS_THRESH, DETECT_MINAREA=DETECT_MINAREA, \
+            DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=DEBLEND_MINCONT, BACKPHOTO_TYPE=BACKPHOTO_TYPE, \
             ONLY_FLAGS=ONLY_FLAGS, BoundarySIZE=BoundarySIZE)
 
         if XY_PriorSelect is None:

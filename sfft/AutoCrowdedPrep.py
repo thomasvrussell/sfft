@@ -5,14 +5,14 @@ from astropy.io import fits
 import scipy.ndimage as ndimage
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-# version: Aug 17, 2022
+# version: Jan 1, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.3"
+__version__ = "v1.4"
 
 class Auto_CrowdedPrep:
     def __init__(self, FITS_REF, FITS_SCI, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', BACK_TYPE='AUTO', BACK_VALUE=0.0, \
-        BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
+        BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, ANALYSIS_THRESH=5.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
         DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=None, BoundarySIZE=0.0):
 
         self.FITS_REF = FITS_REF
@@ -27,6 +27,7 @@ class Auto_CrowdedPrep:
         self.BACK_FILTERSIZE = BACK_FILTERSIZE
 
         self.DETECT_THRESH = DETECT_THRESH
+        self.ANALYSIS_THRESH = ANALYSIS_THRESH
         self.DETECT_MINAREA = DETECT_MINAREA
         self.DETECT_MAXAREA = DETECT_MAXAREA
         self.DEBLEND_MINCONT = DEBLEND_MINCONT
@@ -59,11 +60,11 @@ class Auto_CrowdedPrep:
             # ** trigger a very-cold SExtractor
             PL = ['X_IMAGE', 'Y_IMAGE', 'FLUX_AUTO', 'FLUXERR_AUTO', 'FLUX_MAX', 'FWHM_IMAGE']
             PYSEX_OP = PY_SEx.PS(FITS_obj=FITS_obj, PL=PL, GAIN_KEY=self.GAIN_KEY, SATUR_KEY=self.SATUR_KEY, \
-                BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, \
-                BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
+                BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, \
+                DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
                 DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, \
-                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, \
-                XBoundary=self.BoundarySIZE, YBoundary=self.BoundarySIZE, MDIR=None)
+                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, XBoundary=self.BoundarySIZE, \
+                YBoundary=self.BoundarySIZE, MDIR=None)
             AstSEx, PixA_SEG = PYSEX_OP[0], PYSEX_OP[1][0].astype(int)
             
             # *** Note on the crude estimate of FWHM ***

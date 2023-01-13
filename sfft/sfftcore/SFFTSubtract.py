@@ -2,9 +2,10 @@ import os
 import sys
 import time
 import numpy as np
+# version: Jan 12, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.1"
+__version__ = "v1.4"
 
 class ElementalSFFTSubtract_Pycuda:
     @staticmethod
@@ -144,18 +145,18 @@ class ElementalSFFTSubtract_Pycuda:
         _func(PixA_X_GPU, PixA_Y_GPU, PixA_CX_GPU, PixA_CY_GPU, block=TpB_PIX, grid=BpG_PIX)
 
         # * Spatial Polynomial terms Tij, Iij, Tpq
-        SPixA_Tij_GPU = gpuarray.zeros((Fij, N0, N1), dtype=np.float64)
         SPixA_Iij_GPU = gpuarray.zeros((Fij, N0, N1), dtype=np.float64)
         SPixA_Tpq_GPU = gpuarray.zeros((Fpq, N0, N1), dtype=np.float64)
 
         _module = SFFTModule_dict['SpatialPoly']
         _func = _module.get_function('kmain')
         _func(REF_ij_GPU, REF_pq_GPU, PixA_CX_GPU, PixA_CY_GPU, PixA_I_GPU, \
-            SPixA_Tij_GPU, SPixA_Iij_GPU, SPixA_Tpq_GPU, block=TpB_PIX, grid=BpG_PIX)
+            SPixA_Iij_GPU, SPixA_Tpq_GPU, block=TpB_PIX, grid=BpG_PIX)
         PixA_I_GPU.gpudata.free()
         dt1 = time.time() - t1
 
         t2 = time.time()
+
         # * Empirical Trick on FFT-Plan
         EmpFFTPlan = False
         plan_once = cu_fft.Plan((N0, N1), np.complex128, np.complex128)
@@ -635,54 +636,45 @@ class ElementalSFFTSubtract_Cupy:
         _func = _module.get_function('kmain')
         _func(args=(PixA_X_GPU, PixA_Y_GPU, PixA_CX_GPU, PixA_CY_GPU), block=TpB_PIX, grid=BpG_PIX)
 
-        # * Spatial Polynomial terms Tij, Iij, Tpq
-        SPixA_Tij_GPU = cp.zeros((Fij, N0, N1), dtype=np.float64)
+        # * Spatial Polynomial terms Iij, Tpq
         SPixA_Iij_GPU = cp.zeros((Fij, N0, N1), dtype=np.float64)
         SPixA_Tpq_GPU = cp.zeros((Fpq, N0, N1), dtype=np.float64)
 
         _module = SFFTModule_dict['SpatialPoly']
         _func = _module.get_function('kmain')
         _func(args=(REF_ij_GPU, REF_pq_GPU, PixA_CX_GPU, PixA_CY_GPU, PixA_I_GPU, \
-            SPixA_Tij_GPU, SPixA_Iij_GPU, SPixA_Tpq_GPU), block=TpB_PIX, grid=BpG_PIX)
+            SPixA_Iij_GPU, SPixA_Tpq_GPU), block=TpB_PIX, grid=BpG_PIX)
         
         del PixA_I_GPU
         dt1 = time.time() - t1
 
         t2 = time.time()
-        # * Empirical Trick on FFT-Plan
-        EmpFFTPlan = False
-        if DK == 2 and DB == 2:
-            EmpFFTPlan = True
 
         """
-        # may be alternative to perform FFT
+        # alternative way to perform FFT
         import cupyx as cpx
         plan = cpx.scipy.fftpack.get_fft_plan(x)
         y = cpx.scipy.fftpack.fftn(x, plan=plan)
-
+        
         """
 
         # * Make DFT of J, Iij, Tpq and their conjugates
-        if EmpFFTPlan:
-            PixA_FJ_GPU = SCALE * cp.fft.fft2(PixA_J_GPU)
-            _SPixA_FFT_GPU = cp.empty((12, N0, N1), dtype=np.complex128)
-            _SPixA_FFT_GPU[:6, :] = SPixA_Iij_GPU.astype(np.complex128)
-            _SPixA_FFT_GPU[6:, :] = SPixA_Tpq_GPU.astype(np.complex128)  
-            _SPixA_FFT_GPU = SCALE * cp.fft.fft2(_SPixA_FFT_GPU)
-            SPixA_FIij_GPU = _SPixA_FFT_GPU[:6, :]
-            SPixA_FTpq_GPU = _SPixA_FFT_GPU[6:, :]
+        PixA_FJ_GPU = cp.empty((N0, N1), dtype=np.complex128)
+        PixA_FJ_GPU[:, :] = PixA_J_GPU.astype(np.complex128)
+        PixA_FJ_GPU[:, :] = cp.fft.fft2(PixA_FJ_GPU)
+        PixA_FJ_GPU[:, :] *= SCALE
 
-        if not EmpFFTPlan:
-            Batchsize = 1 + Fij + Fpq
-            _SPixA_FFT_GPU = cp.empty((Batchsize, N0, N1), dtype=np.complex128)
-            _SPixA_FFT_GPU[0, :, :] = PixA_J_GPU.astype(np.complex128)
-            _SPixA_FFT_GPU[1: Fij+1, :, :] = SPixA_Iij_GPU.astype(np.complex128)
-            _SPixA_FFT_GPU[Fij+1:, :, :] = SPixA_Tpq_GPU.astype(np.complex128)
-            
-            _SPixA_FFT_GPU = SCALE * cp.fft.fft2(_SPixA_FFT_GPU)
-            PixA_FJ_GPU = _SPixA_FFT_GPU[0, :, :]
-            SPixA_FIij_GPU = _SPixA_FFT_GPU[1: Fij+1, :, :]
-            SPixA_FTpq_GPU = _SPixA_FFT_GPU[Fij+1:, :, :]
+        SPixA_FIij_GPU = cp.empty((Fij, N0, N1), dtype=np.complex128)
+        SPixA_FIij_GPU[:, :, :] = SPixA_Iij_GPU.astype(np.complex128)
+        for k in range(Fij): 
+            SPixA_FIij_GPU[k: k+1] = cp.fft.fft2(SPixA_FIij_GPU[k: k+1])
+        SPixA_FIij_GPU[:, :] *= SCALE
+
+        SPixA_FTpq_GPU = cp.empty((Fpq, N0, N1), dtype=np.complex128)
+        SPixA_FTpq_GPU[:, :, :] = SPixA_Tpq_GPU.astype(np.complex128)
+        for k in range(Fpq): 
+            SPixA_FTpq_GPU[k: k+1] = cp.fft.fft2(SPixA_FTpq_GPU[k: k+1])
+        SPixA_FTpq_GPU[:, :] *= SCALE
 
         del SPixA_Iij_GPU
         del SPixA_Tpq_GPU
@@ -752,15 +744,13 @@ class ElementalSFFTSubtract_Cupy:
                 block=TpB_PIX, grid=BpG_PIX)
 
             # b. PreOMG = SCALE * Re[DFT(HpOMG)]
-            if EmpFFTPlan:
-                HpOMG_GPU[:12] = SCALE * cp.fft.fft2(HpOMG_GPU[:12])
-                HpOMG_GPU[12: 24] = SCALE * cp.fft.fft2(HpOMG_GPU[12: 24])
-                HpOMG_GPU[24: 36] = SCALE * cp.fft.fft2(HpOMG_GPU[24: 36])
+            for k in range(FOMG):
+                HpOMG_GPU[k: k+1] = cp.fft.fft2(HpOMG_GPU[k: k+1])
+            HpOMG_GPU *= SCALE
 
-            if not EmpFFTPlan:
-                HpOMG_GPU = SCALE * cp.fft.fft2(HpOMG_GPU)
-
-            PreOMG_GPU = cp.array(SCALE * HpOMG_GPU.real, dtype=np.float64)
+            PreOMG_GPU = cp.empty((FOMG, N0, N1), dtype=np.float64)
+            PreOMG_GPU[:, :, :] = HpOMG_GPU.real
+            PreOMG_GPU[:, :, :] *= SCALE
             del HpOMG_GPU
 
             # c. Fill Linear System with PreOMG
@@ -783,16 +773,15 @@ class ElementalSFFTSubtract_Cupy:
                 block=TpB_PIX, grid=BpG_PIX)
 
             # b. PreGAM = 1 * Re[DFT(HpGAM)]
-            if EmpFFTPlan:
-                HpGAM_GPU[:12] = SCALE * cp.fft.fft2(HpGAM_GPU[:12])
-                HpGAM_GPU[12: 24] = SCALE * cp.fft.fft2(HpGAM_GPU[12: 24])
-                HpGAM_GPU[24: 36] = SCALE * cp.fft.fft2(HpGAM_GPU[24: 36])
+            for k in range(FGAM):
+                HpGAM_GPU[k: k+1] = cp.fft.fft2(HpGAM_GPU[k: k+1])
+            HpGAM_GPU *= SCALE
 
-            if not EmpFFTPlan:
-                HpGAM_GPU = SCALE * cp.fft.fft2(HpGAM_GPU)
-            
-            PreGAM_GPU = cp.array(HpGAM_GPU.real, dtype=np.float64)
+            PreGAM_GPU = cp.empty((FGAM, N0, N1), dtype=np.float64)
+            PreGAM_GPU[:, :, :] = HpGAM_GPU.real
             del HpGAM_GPU
+            # TODO: which is better?
+            #PreGAM_GPU = HpGAM_GPU.real
 
             # c. Fill Linear System with PreGAM
             _module = SFFTModule_dict['FillLS_GAM']
@@ -814,15 +803,12 @@ class ElementalSFFTSubtract_Cupy:
                 block=TpB_PIX, grid=BpG_PIX)
 
             # b. PrePSI = 1 * Re[DFT(HpPSI)]
-            if EmpFFTPlan:
-                HpPSI_GPU[:12] = SCALE * cp.fft.fft2(HpPSI_GPU[:12])
-                HpPSI_GPU[12: 24] = SCALE * cp.fft.fft2(HpPSI_GPU[12: 24])
-                HpPSI_GPU[24: 36] = SCALE * cp.fft.fft2(HpPSI_GPU[24: 36])
+            for k in range(FPSI):
+                HpPSI_GPU[k: k+1] = cp.fft.fft2(HpPSI_GPU[k: k+1])
+            HpPSI_GPU *= SCALE
 
-            if not EmpFFTPlan:
-                HpPSI_GPU = SCALE * cp.fft.fft2(HpPSI_GPU)
-
-            PrePSI_GPU = cp.array(HpPSI_GPU.real, dtype=np.float64)
+            PrePSI_GPU = cp.empty((FPSI, N0, N1), dtype=np.float64)
+            PrePSI_GPU[:, :, :] = HpPSI_GPU.real
             del HpPSI_GPU
 
             # c. Fill Linear System with PrePSI
@@ -845,15 +831,13 @@ class ElementalSFFTSubtract_Cupy:
                 block=TpB_PIX, grid=BpG_PIX)
 
             # b. PrePHI = SCALE_L * Re[DFT(HpPHI)]
-            if EmpFFTPlan:
-                HpPHI_GPU[:12] = SCALE * cp.fft.fft2(HpPHI_GPU[:12])
-                HpPHI_GPU[12: 24] = SCALE * cp.fft.fft2(HpPHI_GPU[12: 24])
-                HpPHI_GPU[24: 36] = SCALE * cp.fft.fft2(HpPHI_GPU[24: 36])
+            for k in range(FPHI):
+                HpPHI_GPU[k: k+1] = cp.fft.fft2(HpPHI_GPU[k: k+1])
+            HpPHI_GPU *= SCALE
 
-            if not EmpFFTPlan:
-                HpPHI_GPU = SCALE * cp.fft.fft2(HpPHI_GPU)
-
-            PrePHI_GPU = cp.array(SCALE_L * HpPHI_GPU.real, dtype=np.float64)
+            PrePHI_GPU = cp.empty((FPHI, N0, N1), dtype=np.float64)
+            PrePHI_GPU[:, :, :] = HpPHI_GPU.real
+            PrePHI_GPU[:, :, :] *= SCALE_L
             del HpPHI_GPU
 
             # c. Fill Linear System with PrePHI
@@ -881,30 +865,29 @@ class ElementalSFFTSubtract_Cupy:
 
             # b1. PreTHE = 1 * Re[DFT(HpTHE)]
             # b2. PreDEL = SCALE_L * Re[DFT(HpDEL)]
-            if EmpFFTPlan:
-                _SPixA_FFT_GPU = cp.empty((12, N0, N1), dtype=np.complex128)
-                _SPixA_FFT_GPU[:6, :] = HpTHE_GPU
-                _SPixA_FFT_GPU[6:, :] = HpDEL_GPU
-                del HpTHE_GPU
-                del HpDEL_GPU                
-                _SPixA_FFT_GPU = SCALE * cp.fft.fft2(_SPixA_FFT_GPU)
-                HpTHE_GPU = _SPixA_FFT_GPU[:6, :]
-                HpDEL_GPU = _SPixA_FFT_GPU[6:, :]
+            for k in range(FTHE):
+                HpTHE_GPU[k: k+1] = cp.fft.fft2(HpTHE_GPU[k: k+1])
+            HpTHE_GPU[:, :, :] *= SCALE
+            
+            for k in range(FDEL):
+                HpDEL_GPU[k: k+1] = cp.fft.fft2(HpDEL_GPU[k: k+1])
+            HpDEL_GPU[:, :, :] *= SCALE
 
-            if not EmpFFTPlan:
-                HpTHE_GPU = SCALE * cp.fft.fft2(HpTHE_GPU)
-                HpDEL_GPU = SCALE * cp.fft.fft2(HpDEL_GPU)
-
-            PreTHE_GPU = cp.array(HpTHE_GPU.real, dtype=np.float64)
-            PreDEL_GPU = cp.array(SCALE_L * HpDEL_GPU.real, dtype=np.float64)
+            PreTHE_GPU = cp.empty((FTHE, N0, N1), dtype=np.float64)
+            PreTHE_GPU[:, :, :] = HpTHE_GPU.real
             del HpTHE_GPU
+            
+            PreDEL_GPU = cp.empty((FDEL, N0, N1), dtype=np.float64)
+            PreDEL_GPU[:, :, :] = HpDEL_GPU.real
+            PreDEL_GPU[:, :, :] *= SCALE_L
             del HpDEL_GPU
-
+            
             # c1. Fill Linear System with PreTHE
             _module = SFFTModule_dict['FillLS_THE']
             _func = _module.get_function('kmain')
             _func(args=(SREF_ijab_GPU, REF_ab_GPU, PreTHE_GPU, RHb_GPU), \
                 block=TpB_THE, grid=BpG_THE)
+
             del PreTHE_GPU
 
             # c2. Fill Linear System with PreDEL
@@ -1085,14 +1068,13 @@ class ElementalSFFTSubtract_Numpy:
         _func = SFFTModule_dict['SpatialCoor']
         _func(PixA_X=PixA_X, PixA_Y=PixA_Y, PixA_CX=PixA_CX, PixA_CY=PixA_CY)
 
-        # * Spatial Polynomial terms Tij, Iij, Tpq
-        SPixA_Tij = np.zeros((Fij, N0, N1), dtype=np.float64)
+        # * Spatial Polynomial terms Iij, Tpq
         SPixA_Iij = np.zeros((Fij, N0, N1), dtype=np.float64)
         SPixA_Tpq = np.zeros((Fpq, N0, N1), dtype=np.float64)
 
         _func = SFFTModule_dict['SpatialPoly']
-        _func(REF_ij=REF_ij, REF_pq=REF_pq, PixA_CX=PixA_CX, PixA_CY=PixA_CY, PixA_I=PixA_I, \
-            SPixA_Tij=SPixA_Tij, SPixA_Iij=SPixA_Iij, SPixA_Tpq=SPixA_Tpq)
+        _func(REF_ij=REF_ij, REF_pq=REF_pq, PixA_CX=PixA_CX, PixA_CY=PixA_CY, \
+            PixA_I=PixA_I, SPixA_Iij=SPixA_Iij, SPixA_Tpq=SPixA_Tpq)
         dt1 = time.time() - t1
 
         t2 = time.time()
@@ -1379,35 +1361,35 @@ class GeneralSFFTSubtract:
         #       then we apply the solution to input Images I & J.
         #
         """
-        
-        print(r"""
-                                __    __    __    __
-                               /  \  /  \  /  \  /  \
-                              /    \/    \/    \/    \
-            █████████████████/  /██/  /██/  /██/  /█████████████████████████
-                            /  / \   / \   / \   / \  \____
-                           /  /   \_/   \_/   \_/   \    o \__,
-                          / _/                       \_____/  `
-                          |/
-
-                      █████████  ███████████ ███████████ ███████████        
-                     ███░░░░░███░░███░░░░░░█░░███░░░░░░█░█░░░███░░░█            
-                    ░███    ░░░  ░███   █ ░  ░███   █ ░ ░   ░███  ░ 
-                    ░░█████████  ░███████    ░███████       ░███    
-                     ░░░░░░░░███ ░███░░░█    ░███░░░█       ░███    
-                     ███    ░███ ░███  ░     ░███  ░        ░███    
-                    ░░█████████  █████       █████          █████   
-                     ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░         
-
-                    Saccadic Fast Fourier Transform (SFFT) algorithm
-                    sfft (v1.*) supported by @LeiHu
-
-                    GitHub: https://github.com/thomasvrussell/sfft
-                    Related Paper: https://arxiv.org/abs/2109.09334
-                    
-            ████████████████████████████████████████████████████████████████
-            
-            """)
+      
+        #print(r"""
+        #                        __    __    __    __
+        #                       /  \  /  \  /  \  /  \
+        #                      /    \/    \/    \/    \
+        #    █████████████████/  /██/  /██/  /██/  /█████████████████████████
+        #                    /  / \   / \   / \   / \  \____
+        #                   /  /   \_/   \_/   \_/   \    o \__,
+        #                  / _/                       \_____/  `
+        #                  |/
+        #
+        #              █████████  ███████████ ███████████ ███████████        
+        #             ███░░░░░███░░███░░░░░░█░░███░░░░░░█░█░░░███░░░█            
+        #            ░███    ░░░  ░███   █ ░  ░███   █ ░ ░   ░███  ░ 
+        #            ░░█████████  ░███████    ░███████       ░███    
+        #             ░░░░░░░░███ ░███░░░█    ░███░░░█       ░███    
+        #             ███    ░███ ░███  ░     ░███  ░        ░███    
+        #            ░░█████████  █████       █████          █████   
+        #             ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░         
+        #
+        #            Saccadic Fast Fourier Transform (SFFT) algorithm
+        #            sfft (v1.*) supported by @LeiHu
+        #
+        #            GitHub: https://github.com/thomasvrussell/sfft
+        #            Related Paper: https://arxiv.org/abs/2109.09334
+        #            
+        #    ████████████████████████████████████████████████████████████████
+        #    
+        #    """)
         
         # * Size-Check Processes
         tmplst = [PixA_I.shape, PixA_J.shape]

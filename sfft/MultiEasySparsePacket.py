@@ -9,16 +9,16 @@ import scipy.ndimage as ndimage
 from astropy.table import Column
 from sfft.AutoSparsePrep import Auto_SparsePrep
 from sfft.utils.meta.TimeoutKit import TimeoutAfter
-# version: Sep 16, 2022
+# version: Jan 1, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.3"
+__version__ = "v1.4"
 
 class MultiEasy_SparsePacket:
     def __init__(self, FITS_REF_Queue, FITS_SCI_Queue, FITS_DIFF_Queue=[], FITS_Solution_Queue=[], \
         ForceConv_Queue=[], GKerHW_Queue=[], KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=0, \
         ConstPhotRatio=True, MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='ESATUR', BACK_TYPE='MANUAL', \
-        BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, DETECT_MINAREA=5, \
+        BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, ANALYSIS_THRESH=2.0, DETECT_MINAREA=5, \
         DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30, \
         XY_PriorSelect_Queue=[], Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
         MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, CVREJ_MAGD_THRESH=0.12, \
@@ -85,6 +85,9 @@ class MultiEasy_SparsePacket:
                                             #       Using a 'cold' detection threshold here is to speed up SExtractor.
                                             #       Although DETECT_THRESH = 2.0 means we will miss the faint-end sources with 
                                             #       SNR < 9 (approximately), the cost is generally acceptable for source selection.
+
+        -ANALYSIS_THRESH [2.0]              # SExtractor Parameter ANALYSIS_THRESH
+                                            # NOTE: By default, let -ANALYSIS_THRESH = -DETECT_THRESH
 
         -DETECT_MINAREA [5]                 # SExtractor Parameter DETECT_MINAREA
         
@@ -295,6 +298,7 @@ class MultiEasy_SparsePacket:
         self.BACK_FILTERSIZE = BACK_FILTERSIZE
         
         self.DETECT_THRESH = DETECT_THRESH
+        self.ANALYSIS_THRESH = ANALYSIS_THRESH
         self.DETECT_MINAREA = DETECT_MINAREA
         self.DETECT_MAXAREA = DETECT_MAXAREA
         self.DEBLEND_MINCONT = DEBLEND_MINCONT
@@ -413,8 +417,8 @@ class MultiEasy_SparsePacket:
 
                             # ** perform auto sparse-prep
                             _ASP = Auto_SparsePrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=self.GAIN_KEY, \
-                                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
-                                BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, \
+                                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, \
+                                BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, \
                                 DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, \
                                 BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE)
 

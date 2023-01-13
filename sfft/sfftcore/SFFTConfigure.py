@@ -1,9 +1,10 @@
 import os
 import sys
 import numpy as np
+# version: Jan 12, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.1"
+__version__ = "v1.4"
 
 class SingleSFFTConfigure_Pycuda:
     @staticmethod
@@ -109,13 +110,12 @@ class SingleSFFTConfigure_Pycuda:
 
         # ************************************ SpatialPoly.cu ************************************ #
 
-        # ** produce Tij, Iij, Tpq
+        # ** produce Iij, Tpq
         _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq}
         _funcstr = r"""
         extern "C" __global__ void kmain(int REF_ij_GPU[%(Fij)s][2], int REF_pq_GPU[%(Fpq)s][2],
             double PixA_CX_GPU[%(N0)s][%(N1)s], double PixA_CY_GPU[%(N0)s][%(N1)s], double PixA_I_GPU[%(N0)s][%(N1)s], 
-            double SPixA_Tij_GPU[%(Fij)s][%(N0)s][%(N1)s], double SPixA_Iij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-            double SPixA_Tpq_GPU[%(Fpq)s][%(N0)s][%(N1)s]) 
+            double SPixA_Iij_GPU[%(Fij)s][%(N0)s][%(N1)s], double SPixA_Tpq_GPU[%(Fpq)s][%(N0)s][%(N1)s]) 
         {
             int ROW = blockIdx.x*blockDim.x+threadIdx.x;
             int COL = blockIdx.y*blockDim.y+threadIdx.y;
@@ -130,7 +130,6 @@ class SingleSFFTConfigure_Pycuda:
                     int i = REF_ij_GPU[ij][0];
                     int j = REF_ij_GPU[ij][1];
                     double poly_kterm = pow(PixA_CX_GPU[ROW][COL], i) * pow(PixA_CY_GPU[ROW][COL], j);
-                    SPixA_Tij_GPU[ij][ROW][COL] = poly_kterm;
                     SPixA_Iij_GPU[ij][ROW][COL] = PixA_I_GPU[ROW][COL] * poly_kterm;
                 }
                     
@@ -919,13 +918,12 @@ class SingleSFFTConfigure_Cupy:
 
         # ************************************ SpatialPoly.cu ************************************ #
 
-        # ** produce Tij, Iij, Tpq
+        # ** produce Iij, Tpq
         _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq}
         _funcstr = r"""
         extern "C" __global__ void kmain(int REF_ij_GPU[%(Fij)s][2], int REF_pq_GPU[%(Fpq)s][2],
             double PixA_CX_GPU[%(N0)s][%(N1)s], double PixA_CY_GPU[%(N0)s][%(N1)s], double PixA_I_GPU[%(N0)s][%(N1)s], 
-            double SPixA_Tij_GPU[%(Fij)s][%(N0)s][%(N1)s], double SPixA_Iij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-            double SPixA_Tpq_GPU[%(Fpq)s][%(N0)s][%(N1)s]) 
+            double SPixA_Iij_GPU[%(Fij)s][%(N0)s][%(N1)s], double SPixA_Tpq_GPU[%(Fpq)s][%(N0)s][%(N1)s]) 
         {
             int ROW = blockIdx.x*blockDim.x+threadIdx.x;
             int COL = blockIdx.y*blockDim.y+threadIdx.y;
@@ -940,7 +938,6 @@ class SingleSFFTConfigure_Cupy:
                     int i = REF_ij_GPU[ij][0];
                     int j = REF_ij_GPU[ij][1];
                     double poly_kterm = pow(PixA_CX_GPU[ROW][COL], i) * pow(PixA_CY_GPU[ROW][COL], j);
-                    SPixA_Tij_GPU[ij][ROW][COL] = poly_kterm;
                     SPixA_Iij_GPU[ij][ROW][COL] = PixA_I_GPU[ROW][COL] * poly_kterm;
                 }
                     
@@ -1720,11 +1717,10 @@ class SingleSFFTConfigure_Numpy:
         SFFTModule_dict['SpatialCoor'] = SpatialCoor
         # ************************************ SpatialPoly.py ************************************ #
 
-        # ** produce Tij, Iij, Tpq
-        _strdec = 'Tuple((f8[:,:,:], f8[:,:,:], f8[:,:,:]))' + \
-            '(i4[:,:], i4[:,:], f8[:,:], f8[:,:], f8[:,:], f8[:,:,:], f8[:,:,:], f8[:,:,:])'
+        # ** produce Iij, Tpq
+        _strdec = 'Tuple((f8[:,:,:], f8[:,:,:]))' + '(i4[:,:], i4[:,:], f8[:,:], f8[:,:], f8[:,:], f8[:,:,:], f8[:,:,:])'
         @nb.njit(_strdec, parallel=True)
-        def SpatialPoly(REF_ij, REF_pq, PixA_CX, PixA_CY, PixA_I, SPixA_Tij, SPixA_Iij, SPixA_Tpq):
+        def SpatialPoly(REF_ij, REF_pq, PixA_CX, PixA_CY, PixA_I, SPixA_Iij, SPixA_Tpq):
             
             #assert REF_ij.dtype == np.int32 and REF_ij.shape == (Fij, 2)
             #assert REF_pq.dtype == np.int32 and REF_pq.shape == (Fpq, 2)
@@ -1733,14 +1729,12 @@ class SingleSFFTConfigure_Numpy:
             #assert PixA_CY.dtype == np.float64 and PixA_CY.shape == (N0, N1)
             #assert PixA_I.dtype == np.float64 and PixA_I.shape == (N0, N1)
             
-            #assert SPixA_Tij.dtype == np.float64 and SPixA_Tij.shape == (Fij, N0, N1)
             #assert SPixA_Iij.dtype == np.float64 and SPixA_Iij.shape == (Fij, N0, N1)
             #assert SPixA_Tpq.dtype == np.float64 and SPixA_Tpq.shape == (Fpq, N0, N1)
 
             for ij in nb.prange(Fij):
                 i, j = REF_ij[ij]
                 PixA_kpoly = np.power(PixA_CX, i) * np.power(PixA_CY, j)
-                SPixA_Tij[ij, :, :] = PixA_kpoly   # NOTE UPDATE
                 SPixA_Iij[ij, :, :] = PixA_I * PixA_kpoly   # NOTE UPDATE
             
             for pq in nb.prange(Fpq):
@@ -1748,7 +1742,7 @@ class SingleSFFTConfigure_Numpy:
                 PixA_bpoly = np.power(PixA_CX, p) * np.power(PixA_CY, q)
                 SPixA_Tpq[pq, :, :] = PixA_bpoly   # NOTE UPDATE
             
-            return SPixA_Tij, SPixA_Iij, SPixA_Tpq
+            return SPixA_Iij, SPixA_Tpq
 
         SFFTModule_dict['SpatialPoly'] = SpatialPoly
         # ************************************ HadProd_OMG.py & FillLS_OMG.py ************************************ #
