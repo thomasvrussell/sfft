@@ -1,9 +1,10 @@
 import math
 import threading
 import multiprocessing
+# version: Feb 6, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
+__version__ = "v1.4"
 
 class Multi_Proc:
     @staticmethod
@@ -24,7 +25,7 @@ class Multi_Proc:
             procs = []
             for i in range(nproc):
                 p = multiprocessing.Process(target=worker, \
-                    args=(taskid_lst[chunksize*i: chunksize*(i+1)], out_q))
+                    args=(taskid_lst[chunksize * i:chunksize * (i + 1)], out_q)) 
                 procs.append(p)
                 p.start()
 
@@ -46,7 +47,7 @@ class Multi_Proc:
             myThread_Queue = []
             chunksize = int(math.ceil(len(taskid_lst) / float(nproc)))
             for i in range(nproc):
-                taskid_asslst = taskid_lst[chunksize*i: chunksize*(i+1)]
+                taskid_asslst = taskid_lst[chunksize * i:chunksize * (i + 1)]
                 myThread = threading.Thread(target=trigger, args=(taskid_asslst,))
                 myThread_Queue.append(myThread)
                 myThread.start()
@@ -55,4 +56,3 @@ class Multi_Proc:
                 t.join()
             
             return None
-

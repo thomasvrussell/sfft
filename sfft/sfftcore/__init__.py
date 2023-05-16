@@ -4,5 +4,5 @@ Remarks on Internal Packages Imports:
     
 """
 
-from .SFFTConfigure import SingleSFFTConfigure, BatchSFFTConfigure
+from .SFFTConfigure import SingleSFFTConfigure
 from .SFFTSubtract import ElementalSFFTSubtract, GeneralSFFTSubtract

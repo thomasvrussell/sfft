@@ -1,9 +1,13 @@
 import time
+import cupy as cp
 import numpy as np
 import os.path as pa
 from astropy.io import fits
 from sfft.AutoCrowdedPrep import Auto_CrowdedPrep
-# version: Jan 1, 2023
+from sfft.utils.SFFTSolutionReader import Realize_FluxScaling
+from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
+from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
+# version: Feb 25, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.4"
@@ -16,23 +20,22 @@ class Easy_CrowdedPacket:
         BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, ANALYSIS_THRESH=5.0, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
         ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask=None, \
-        BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
+        BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
         
         """
         # NOTE: This function is to Perform Crowded-Flavor SFFT for single task:
-        #       Pycuda & Cupy backend: do preprocessing on one CPU thread, and do subtraction on one GPU device.
-        #       Numpy backend: do preprocessing on one CPU thread, and do subtraction with pyFFTW and Numba 
+        #       Cupy backend: do preprocessing on one CPU thread, and perform subtraction on one GPU device.
+        #       Numpy backend: do preprocessing on one CPU thread, and perform subtraction with pyFFTW and Numba 
         #                      using multiple threads (-NUM_CPU_THREADS_4SUBTRACT).
         
         * Parameters for Crowded-Flavor SFFT [single task]
         
         # ----------------------------- Computing Enviornment --------------------------------- #
 
-        -BACKEND_4SUBTRACT ['Cupy']         # can be 'Pycuda', 'Cupy' and 'Numpy'. 
-                                            # Pycuda backend and Cupy backend require GPU device(s), 
-                                            # while 'Numpy' is a pure CPU-based backend for sfft subtraction.
-                                            # Cupy backend is even faster than Pycuda, however, it consume more GPU memory.
-                                            # NOTE: Cupy backend can support CUDA 11*, while Pycuda does not (issues from Scikit-Cuda).
+        -BACKEND_4SUBTRACT ['Cupy']         # 'Cupy' or 'Numpy'. 
+                                            # Cupy backend require GPU(s) that is capable of performing double-precision calculations,
+                                            # while Numpy backend is a pure CPU-based backend for sfft subtraction.
+                                            # NOTE: 'Pycuda' backend is no longer supported since sfft v1.4.0.
 
         -CUDA_DEVICE_4SUBTRACT ['0']        # it specifies certain GPU device (index) to conduct the subtraction task.
                                             # the GPU devices are usually numbered 0 to N-1 (you may use command nvidia-smi to check).
@@ -147,6 +150,11 @@ class Easy_CrowdedPacket:
 
         -FITS_Solution [None]               # File path of the solution of the linear system. 
                                             # it is an array of (..., a_ijab, ... b_pq, ...).
+        
+        # ----------------------------- Miscellaneous --------------------------------- #
+        
+        -VERBOSE_LEVEL [2]                  # The level of verbosity, can be [0, 1, 2]
+                                            # 0/1/2: QUIET/NORMAL/FULL mode
 
         # Important Notice:
         #
@@ -158,17 +166,20 @@ class Easy_CrowdedPacket:
         #     [difference image is expected to have PSF & flux zero-point consistent with reference image]
         #     e.g., -ForceConv='SCI' or -ForceConv='AUTO' when science has better seeing.
         #
-        # Remarks: this convention is to guarantee that transients emerge on science image always 
-        #          show a positive signal on difference images.
+        # Remarks: this convention is to guarantee that a transient emerge on science image 
+        #          always shows itself as a positive signal on the difference images.
 
         """
 
         # * Perform Auto Crowded-Prep [Mask Saturation]
+        if VERBOSE_LEVEL in [0, 1, 2]:
+            print('MeLOn CheckPoint: TRIGGER Crowded-Flavor Auto Preprocessing!')
+
         _ACP = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=GAIN_KEY, SATUR_KEY=SATUR_KEY, \
             BACK_TYPE=BACK_TYPE, BACK_VALUE=BACK_VALUE, BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, \
             DETECT_THRESH=DETECT_THRESH, ANALYSIS_THRESH=ANALYSIS_THRESH, DETECT_MINAREA=DETECT_MINAREA, \
             DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=DEBLEND_MINCONT, BACKPHOTO_TYPE=BACKPHOTO_TYPE, \
-            ONLY_FLAGS=ONLY_FLAGS, BoundarySIZE=BoundarySIZE)
+            ONLY_FLAGS=ONLY_FLAGS, BoundarySIZE=BoundarySIZE, VERBOSE_LEVEL=VERBOSE_LEVEL)
 
         SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=BACK_SIZE_SUPER, \
             StarExt_iter=StarExt_iter, PriorBanMask=PriorBanMask)
@@ -188,22 +199,29 @@ class Easy_CrowdedPacket:
             KerHW = int(np.clip(KerHWRatio * FWHM_La, KerHWLimit[0], KerHWLimit[1]))
         else: KerHW = GKerHW
 
-        # * Compile Functions in SFFT Subtraction
-        from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
+        # * Choose GPU device for Cupy backend
+        if BACKEND_4SUBTRACT == 'Cupy':
+            device = cp.cuda.Device(int(CUDA_DEVICE_4SUBTRACT))
+            device.use()
 
+        # * Compile Functions in SFFT Subtraction
         PixA_REF = SFFTPrepDict['PixA_REF']
         PixA_SCI = SFFTPrepDict['PixA_SCI']
         
+        if VERBOSE_LEVEL in [0, 1, 2]:
+            print('MeLOn CheckPoint: TRIGGER Function Compilations of SFFT-SUBTRACTION!')
+
         Tcomp_start = time.time()
         SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], KerHW=KerHW, \
             KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
-            BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
-            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
-        print('\nMeLOn Report: Compiling Functions in SFFT Subtraction Takes [%.3f s]' %(time.time() - Tcomp_start))
+            BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, \
+            VERBOSE_LEVEL=VERBOSE_LEVEL)
+
+        if VERBOSE_LEVEL in [1, 2]:
+            _message = 'Function Compilations of SFFT-SUBTRACTION TAKES [%.3f s]' %(time.time() - Tcomp_start)
+            print('\nMeLOn Report: %s' %_message)
 
         # * Perform SFFT Subtraction
-        from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
-
         SatMask_REF = SFFTPrepDict['REF-SAT-Mask']
         SatMask_SCI = SFFTPrepDict['SCI-SAT-Mask']
         NaNmask_U = SFFTPrepDict['Union-NaN-Mask']
@@ -234,35 +252,108 @@ class Easy_CrowdedPacket:
                 ContamMask_J = SatMask_REF
             else: ContamMask_I = None
         
+        if VERBOSE_LEVEL in [0, 1, 2]:
+            print('MeLOn CheckPoint: TRIGGER SFFT-SUBTRACTION!')
+
         Tsub_start = time.time()
         _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
             SFFTConfig=SFFTConfig, ContamMask_I=ContamMask_I, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)
+
         Solution, PixA_DIFF, ContamMask_CI = _tmp
+        if VERBOSE_LEVEL in [1, 2]:
+            _message = 'SFFT-SUBTRACTION TAKES [%.3f s]' %(time.time() - Tsub_start)
+            print('\nMeLOn Report: %s' %_message)
+        
+        # ** adjust the sign of difference image 
+        #    NOTE: Our convention is to make the transients on SCI always show themselves as positive signal on DIFF
+        #    (a) when REF is convolved, DIFF = SCI - Conv(REF)
+        #    (b) when SCI is convolved, DIFF = Conv(SCI) - REF
+
+        if ConvdSide == 'SCI':
+            PixA_DIFF = -PixA_DIFF
+
+        if VERBOSE_LEVEL in [1, 2]:
+            if ConvdSide == 'REF':
+                _message = 'Reference Image is Convolved in SFFT-SUBTRACTION [DIFF = SCI - Conv(REF)]!'
+                print('MeLOn CheckPoint: %s' %_message)
+
+            if ConvdSide == 'SCI':
+                _message = 'Science Image is Convolved in SFFT-SUBTRACTION [DIFF = Conv(SCI) - REF]!'
+                print('MeLOn CheckPoint: %s' %_message)
+
+        # ** estimate the flux scaling through the convolution of image subtraction
+        #    NOTE: if photometric ratio is not constant (ConstPhotRatio=False), we measure of a grid
+        #          of coordinates to estimate the flux scaling and its fluctuation (polynomial form).
+        #    NOTE: here we set the tile-size of the grid about 64 x 64 pix, but meanwhile, 
+        #          we also require the tiles should no less than 6 along each axis.
+
+        N0, N1 = SFFTConfig[0]['N0'], SFFTConfig[0]['N1']
+        L0, L1 = SFFTConfig[0]['L0'], SFFTConfig[0]['L1']
+        DK, Fpq = SFFTConfig[0]['DK'], SFFTConfig[0]['Fpq']
+
+        if ConstPhotRatio:
+            SFFT_FSCAL_NSAMP = 1
+            XY_q = np.array([[N0/2.0, N1/2.0]]) + 0.5
+            RFS = Realize_FluxScaling(XY_q=XY_q)
+            SFFT_FSCAL_q = RFS.FromArray(Solution=Solution, N0=N0, N1=N1, L0=L0, L1=L1, DK=DK, Fpq=Fpq)
+            SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG = SFFT_FSCAL_q[0], 0.0
+        
+        if not ConstPhotRatio:
+            TILESIZE_X, TILESIZE_Y = 64, 64    # FIXME emperical/arbitrary values
+            NTILE_X = np.max([round(N0/TILESIZE_X), 6])
+            NTILE_Y = np.max([round(N1/TILESIZE_Y), 6])
+            GX = np.linspace(0.5, N0+0.5, NTILE_X+1)
+            GY = np.linspace(0.5, N1+0.5, NTILE_Y+1)
+            YY, XX = np.meshgrid(GY, GX)
+            XY_q = np.array([XX.flatten(), YY.flatten()]).T
+            SFFT_FSCAL_NSAMP = XY_q.shape[0]
+            
+            RFS = Realize_FluxScaling(XY_q=XY_q)
+            SFFT_FSCAL_q = RFS.FromArray(Solution=Solution, N0=N0, N1=N1, L0=L0, L1=L1, DK=DK, Fpq=Fpq)
+            SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG = np.mean(SFFT_FSCAL_q), np.std(SFFT_FSCAL_q)
+        
+        if VERBOSE_LEVEL in [1, 2]:
+            _message = 'The Flux Scaling through the Convolution of SFFT-SUBTRACTION '
+            _message += '[%.6f +/- %.6f] from [%d] positions!\n' %(SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG, SFFT_FSCAL_NSAMP)
+            print('MeLOn CheckPoint: %s' %_message)
+        
+        # ** final tweaks on the difference image
+        if NaNmask_U is not None:
+            PixA_DIFF[NaNmask_U] = np.nan   # Mask Union-NaN regions
+        
         if MaskSatContam:
             ContamMask_DIFF = np.logical_or(ContamMask_CI, ContamMask_J)
-        print('\nMeLOn Report: SFFT Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
-        
-        # * Modifications on the difference image
-        #   a) when REF is convolved, DIFF = SCI - Conv(REF)
-        #      PSF(DIFF) is coincident with PSF(SCI), transients on SCI are positive signal in DIFF.
-        #   b) when SCI is convolved, DIFF = Conv(SCI) - REF
-        #      PSF(DIFF) is coincident with PSF(REF), transients on SCI are still positive signal in DIFF.
+            PixA_DIFF[ContamMask_DIFF] = np.nan   # Mask Saturation-Contaminated regions
 
-        if NaNmask_U is not None:
-            # ** Mask Union-NaN region
-            PixA_DIFF[NaNmask_U] = np.nan
-        if MaskSatContam:
-            # ** Mask Saturate-Contaminate region 
-            PixA_DIFF[ContamMask_DIFF] = np.nan
-        if ConvdSide == 'SCI': 
-            # ** Flip difference when science is convolved
-            PixA_DIFF = -PixA_DIFF
-        
         # * Save difference image
         if FITS_DIFF is not None:
+
+            """
+            # Remarks on header of difference image
+            # [1] In general, the FITS header of difference image would mostly be inherited from science image.
+            #
+            # [2] when science image is convolved, we turn to set GAIN_DIFF = GAIN_SCI / SFFT_FSCAL_MEAN (unit: e-/ADU)
+            #     so that one can correctly convert ADU to e- for a transient appears on science image.
+            #     WARNING: for a transient appears on reference image, GAIN_DIFF = GAIN_SCI is correct.
+            #              we should keep in mind that GAIN_DIFF is not an absolute instrumental value.
+            #     WARNING: one can only estimate the Poission noise from the science transient via GIAN_DIFF.
+            #              the Poission noise from the background source (host galaxy) can enhance the 
+            #              background noise at the position of the transient. photometry softwares which 
+            #              only take background noise and transient Possion noise into account would tend 
+            #              to overestimate the SNR of the transient.
+            # 
+            # [3] when science image is convolved, we turn to set SATURA_DIFF = SATURA_SCI * SFFT_FSCAL_MEAN         
+            #     WARNING: it is still not a good idea to use SATURA_DIFF to identify the SATURATION regions
+            #              on difference image. more appropriate way is masking the saturation contaminated 
+            #              regions on difference image (MaskSatContam=True), or alternatively, leave them  
+            #              alone and using AI stamp classifier to reject saturation-related bogus.
+            #
+            """
+
             _hdl = fits.open(FITS_SCI)
             _hdl[0].data[:, :] = PixA_DIFF.T
+
             _hdl[0].header['NAME_REF'] = (pa.basename(FITS_REF), 'MeLOn: SFFT')
             _hdl[0].header['NAME_SCI'] = (pa.basename(FITS_SCI), 'MeLOn: SFFT')
             _hdl[0].header['FWHM_REF'] = (FWHM_REF, 'MeLOn: SFFT')
@@ -271,13 +362,25 @@ class Easy_CrowdedPacket:
             _hdl[0].header['BGORDER'] = (BGPolyOrder, 'MeLOn: SFFT')
             _hdl[0].header['CPHOTR'] = (str(ConstPhotRatio), 'MeLOn: SFFT')
             _hdl[0].header['KERHW'] = (KerHW, 'MeLOn: SFFT')
-            _hdl[0].header['CONVD'] = (ConvdSide  , 'MeLOn: SFFT')
+            _hdl[0].header['CONVD'] = (ConvdSide, 'MeLOn: SFFT')
+
+            if ConvdSide == 'SCI':
+                GAIN_SCI = _hdl[0].header[GAIN_KEY]
+                SATUR_SCI = _hdl[0].header[SATUR_KEY]
+                GAIN_DIFF = GAIN_SCI / SFFT_FSCAL_MEAN
+                SATUR_DIFF = SATUR_SCI * SFFT_FSCAL_MEAN
+
+                _hdl[0].header[GAIN_KEY] = (GAIN_DIFF, 'MeLOn: SFFT')
+                _hdl[0].header[SATUR_KEY] = (SATUR_DIFF, 'MeLOn: SFFT')
+
             _hdl.writeto(FITS_DIFF, overwrite=True)
             _hdl.close()
         
         # * Save solution array
         if FITS_Solution is not None:
             phdu = fits.PrimaryHDU()
+            phdu.header['N0'] = (SFFTConfig[0]['N0'], 'MeLOn: SFFT')
+            phdu.header['N1'] = (SFFTConfig[0]['N1'], 'MeLOn: SFFT')
             phdu.header['DK'] = (SFFTConfig[0]['DK'], 'MeLOn: SFFT')
             phdu.header['DB'] = (SFFTConfig[0]['DB'], 'MeLOn: SFFT')
             phdu.header['L0'] = (SFFTConfig[0]['L0'], 'MeLOn: SFFT')
@@ -291,5 +394,5 @@ class Easy_CrowdedPacket:
             PixA_Solution = Solution.reshape((-1, 1))
             phdu.data = PixA_Solution.T
             fits.HDUList([phdu]).writeto(FITS_Solution, overwrite=True)
-        
-        return SFFTPrepDict, Solution, PixA_DIFF
+
+        return PixA_DIFF, SFFTPrepDict, Solution, SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG

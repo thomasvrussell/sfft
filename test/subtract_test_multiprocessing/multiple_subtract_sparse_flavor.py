@@ -4,7 +4,7 @@ import numpy as np
 import os.path as pa
 from sfft.MultiEasySparsePacket import MultiEasy_SparsePacket
 CDIR = pa.dirname(pa.abspath(__file__))
-# sfft version: 1.3.2+
+# sfft version: 1.4.0+
 
 # * AN IMPORTANT WARNING (Oct 25, 2022)
 #   Please do not put the function MultiEasy_SparsePacket in a Python loop,
@@ -30,9 +30,8 @@ ForceConv = 'REF'                  # FIXME {'AUTO', 'REF', 'SCI'}
 
 KerHWRatio = 2.0                   # FIXME Ratio of kernel half-width to FWHM (typically, 1.5-2.5).
 KerPolyOrder = 2                   # FIXME {0, 1, 2, 3}, Polynomial degree of kernel spatial variation
-BGPolyOrder = 2                    # FIXME {0, 1, 2, 3}, Polynomial degree of differential background spatial variation.
+BGPolyOrder = 0                    # FIXME {0, 1, 2, 3}, Polynomial degree of differential background spatial variation.
                                    #       it is trivial here, as sparse-flavor-sfft requires sky subtraction in advance.
-                                   # WARNING: I temporarily change it from 0 back to 2, as 0 is not optimized for GPU memory usage yet (22, Nov 16).
 ConstPhotRatio = True              # FIXME Constant photometric ratio between images?
 
 # configuration: required info in FITS header
@@ -73,10 +72,10 @@ _MESP = MultiEasy_SparsePacket(FITS_REF_Queue=FITS_REF_Queue, FITS_SCI_Queue=FIT
     BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, MaskSatContam=False, GAIN_KEY=GAIN_KEY, \
     SATUR_KEY=SATUR_KEY, BACK_TYPE='MANUAL', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, \
     DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
-    ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect_Queue=[], Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, \
-    BeltHW=0.2, PS_ELLIPThresh=0.3, MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, \
+    ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect_Queue=[], Hough_MINFR=0.1, Hough_PeakClip=0.7, \
+    BeltHW=0.2, PointSource_MINELLIP=0.3, MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, \
     CVREJ_MAGD_THRESH=0.12, ELABO_VAR_REJECTION=True, EVREJ_RATIO_THREH=5.0, EVREJ_SAFE_MAGDEV=0.04, \
-    XY_PriorBan_Queue=[], PostAnomalyCheck=False, PAC_RATIO_THRESH=5.0)
+    XY_PriorBan_Queue=[], PostAnomalyCheck=False, PAC_RATIO_THRESH=5.0, CLEAN_GPU_MEMORY=False, VERBOSE_LEVEL=2)
 
 DICT_STATUS_BAR = _MESP.MESP_Cupy(NUM_THREADS_4PREPROC=NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT=NUM_THREADS_4SUBTRACT, \
     CUDA_DEVICES_4SUBTRACT=CUDA_DEVICES_4SUBTRACT, TIMEOUT_4PREPROC_EACHTASK=TIMEOUT_4PREPROC_EACHTASK, \
@@ -100,6 +99,9 @@ PARAMETERS NAME CHANGED:
   -MAGD_THRESH (v1.1, v1.2) >>>> -CVREJ_MAGD_THRESH (v1.3+)
   -CheckPostAnomaly (v1.1, v1.2) >>>> -PostAnomalyCheck (v1.3+)
   -PARATIO_THRESH (v1.1, v1.2) >>>> -PAC_RATIO_THRESH (v1.3+)
+  -Hough_FRLowerLimit (v1.0.6 - v1.3.4)  > Hough_MINFR (v1.4+)
+  -Hough_peak_clip (v1.3.1 - v1.3.4) > Hough_PeakClip (v1.4+)
+  -PS_ELLIPThresh (v1.2* - v1.3.4) > PointSource_MINELLIP (v1.4+)
 
 PARAMETERS DEFUALT-VALUE CHANGED:
   -BGPolyOrder=2 (v1.1, v1.2) >>>> -BGPolyOrder=0 (v1.3+)
@@ -133,5 +135,11 @@ NEW PARAMETERS:
 
   (6) allows for more detailed tunning on hough transformation
   >>>> Hough_peak_clip (v1.3.1+)
-  
+
+  (7) allows for cleaning GPU memory after all subtraction tasks done
+  >>>> CLEAN_GPU_MEMORY (v1.4+)
+
+  (8) allows for verbsose level control
+  >>>> VERBOSE_LEVEL (v1.4+)
+
 """

@@ -1,29 +1,31 @@
 import time
+import cupy as cp
 import numpy as np
 import os.path as pa
 from astropy.io import fits
+from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
+from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
+# version: Feb 25, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.1"
+__version__ = "v1.4"
 
 class Customized_Packet:
     @staticmethod
     def CP(FITS_REF, FITS_SCI, FITS_mREF, FITS_mSCI, ForceConv, GKerHW, \
         FITS_DIFF=None, FITS_Solution=None, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
+        BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
         
         """
         * Parameters for Customized SFFT
-        # @ Customized: Skip built-in preprocessing (automatic image-masking) 
-        #               by a given customized masked image-pair.
+        # @ Customized: Skip built-in preprocessing (automatic image-masking) by a customized masked image-pair.
         #
         # ----------------------------- Computing Enviornment --------------------------------- #
 
-        -BACKEND_4SUBTRACT ['Cupy']         # can be 'Pycuda', 'Cupy' and 'Numpy'. 
-                                            # Pycuda backend and Cupy backend require GPU device(s), 
-                                            # while 'Numpy' is a pure CPU-based backend for sfft subtraction.
-                                            # Cupy backend is even faster than Pycuda, however, it consume more GPU memory.
-                                            # NOTE: Cupy backend can support CUDA 11*, while Pycuda does not (issues from Scikit-Cuda).
+        -BACKEND_4SUBTRACT ['Cupy']         # 'Cupy' or 'Numpy'.
+                                            # Cupy backend require GPU(s) that is capable of performing double-precision calculations,
+                                            # while Numpy backend is a pure CPU-based backend for sfft subtraction.
+                                            # NOTE: 'Pycuda' backend is no longer supported since sfft v1.4.0.
 
         -CUDA_DEVICE_4SUBTRACT ['0']        # it specifies certain GPU device (index) to conduct the subtraction task.
                                             # the GPU devices are usually numbered 0 to N-1 (you may use command nvidia-smi to check).
@@ -65,6 +67,11 @@ class Customized_Packet:
 
         -FITS_Solution [None]               # File path of the solution of the linear system.
                                             # it is an array of (..., a_ijab, ... b_pq, ...).
+
+        # ----------------------------- Miscellaneous --------------------------------- #
+        
+        -VERBOSE_LEVEL [2]                  # The level of verbosity, can be [0, 1, 2]
+                                            # 0/1/2: QUIET/NORMAL/FULL mode
 
         # Important Notice:
         #
@@ -114,19 +121,26 @@ class Customized_Packet:
         ConvdSide = ForceConv
         KerHW = GKerHW
 
+        # * Choose GPU device for Cupy backend
+        if BACKEND_4SUBTRACT == 'Cupy':
+            device = cp.cuda.Device(int(CUDA_DEVICE_4SUBTRACT))
+            device.use()
+
         # * Compile Functions in SFFT Subtraction
-        from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
+        if VERBOSE_LEVEL in [0, 1, 2]:
+            print('MeLOn CheckPoint: TRIGGER Function Compilations of SFFT-SUBTRACTION!')
 
         Tcomp_start = time.time()
         SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], KerHW=KerHW, \
             KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
-            BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
-            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
-        print('\nMeLOn Report: Compiling Functions in SFFT Subtraction Takes [%.3f s]' %(time.time() - Tcomp_start))
+            BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, \
+            VERBOSE_LEVEL=VERBOSE_LEVEL)
+
+        if VERBOSE_LEVEL in [1, 2]:
+            _message = 'Function Compilations of SFFT-SUBTRACTION TAKES [%.3f s]' %(time.time() - Tcomp_start)
+            print('\nMeLOn Report: %s' %_message)
 
         # * Perform SFFT Subtraction
-        from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
-
         if ConvdSide == 'REF':
             PixA_mI, PixA_mJ = PixA_mREF, PixA_mSCI
             if NaNmask_U is not None:
@@ -143,12 +157,18 @@ class Customized_Packet:
                 PixA_J[NaNmask_U] = PixA_mJ[NaNmask_U]
             else: PixA_I, PixA_J = PixA_SCI, PixA_REF
         
+        if VERBOSE_LEVEL in [0, 1, 2]:
+            print('MeLOn CheckPoint: TRIGGER SFFT-SUBTRACTION!')
+
         Tsub_start = time.time()
         _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
             SFFTConfig=SFFTConfig, ContamMask_I=None, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)
+
         Solution, PixA_DIFF = _tmp[:2]
-        print('\nMeLOn Report: SFFT Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
+        if VERBOSE_LEVEL in [1, 2]:
+            _message = 'SFFT-SUBTRACTION TAKES [%.3f s]' %(time.time() - Tsub_start)
+            print('\nMeLOn Report: %s' %_message)
         
         # * Modifications on the difference image
         #   a) when REF is convolved, DIFF = SCI - Conv(REF)
@@ -173,7 +193,7 @@ class Customized_Packet:
             _hdl[0].header['BGORDER'] = (BGPolyOrder, 'MeLOn: SFFT')
             _hdl[0].header['CPHOTR'] = (str(ConstPhotRatio), 'MeLOn: SFFT')
             _hdl[0].header['KERHW'] = (KerHW, 'MeLOn: SFFT')
-            _hdl[0].header['CONVD'] = (ConvdSide  , 'MeLOn: SFFT')
+            _hdl[0].header['CONVD'] = (ConvdSide, 'MeLOn: SFFT')
             _hdl.writeto(FITS_DIFF, overwrite=True)
             _hdl.close()
         

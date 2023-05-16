@@ -1,31 +1,37 @@
+import sys
 import time
 import math
 import warnings
 import threading
+import cupy as cp
 import numpy as np
 import os.path as pa
 from astropy.io import fits
 from sfft.AutoCrowdedPrep import Auto_CrowdedPrep
 from sfft.utils.meta.TimeoutKit import TimeoutAfter
-# version: Jan 1, 2023
+from sfft.utils.SFFTSolutionReader import Realize_FluxScaling
+from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
+from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
+# version: Feb 24, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.4"
 
 class MultiEasy_CrowdedPacket:
     def __init__(self, FITS_REF_Queue, FITS_SCI_Queue, FITS_DIFF_Queue=[], FITS_Solution_Queue=[], \
-        ForceConv_Queue=[], GKerHW_Queue=[], KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, BGPolyOrder=2, \
-        ConstPhotRatio=True, MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
+        ForceConv_Queue=[], GKerHW_Queue=[], KerHWRatio=2.0, KerHWLimit=(2, 20), KerPolyOrder=2, \
+        BGPolyOrder=2, ConstPhotRatio=True, MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
         BACK_TYPE='AUTO', BACK_VALUE='0.0', BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, \
         ANALYSIS_THRESH=5.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
-        ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask_Queue=[]):
+        ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask_Queue=[], \
+        CLEAN_GPU_MEMORY=False, VERBOSE_LEVEL=2):
 
         """
-        # NOTE: This function is to Perform Crowded-Flavor SFFT for multiple tasks:
-        #       @ it makes sense when users have multiple CPU threads and GPU(s) available.
-        #       @ WARNING: the module currently only support Cupy backend!
+        # NOTE: This function is to perform Crowded-Flavor SFFT for multiple tasks:
+        #       @ this module (only support Cupy backend) would help making the 
+        #         best use of the available CPU and GPU resources.
 
-        * Parameters for Sparse-Flavor SFFT [multiple tasks]
+        * Parameters for Crowded-Flavor SFFT [multiple tasks]
         
         # ----------------------------- Computing Enviornment [Cupy backend ONLY] --------------------------------- #
 
@@ -41,7 +47,8 @@ class MultiEasy_CrowdedPacket:
                                             #       with the CUDA threads (block, threads ...).
 
         -CUDA_DEVICES_4SUBTRACT [['0']]     # it specifies certain GPU devices (indices) to conduct the subtractions.
-                                            # the GPU devices are usually numbered 0 to N-1 (you may use command nvidia-smi to check).
+                                            # the GPU devices are usually numbered 0 to N-1. 
+                                            # (you may use command nvidia-smi to check for Nvidia GPU devices).
 
         -TIMEOUT_4PREPROC_EACHTASK [300]    # timeout of each task during preprocessing.
                                             
@@ -147,18 +154,25 @@ class MultiEasy_CrowdedPacket:
 
         # ----------------------------- Input & Output --------------------------------- #
 
-        -FITS_REF_Queue []                 # A queue of -FITS_REF in sfft.Easy_CrowdedPacket.
-                                           # File path of input reference image.
+        -FITS_REF_Queue []                  # A queue of -FITS_REF in sfft.Easy_CrowdedPacket.
+                                            # File path of input reference image.
 
-        -FITS_SCI_Queue []                 # A queue of -FITS_SCI in sfft.Easy_CrowdedPacket.
-                                           # File path of input science image.
+        -FITS_SCI_Queue []                  # A queue of -FITS_SCI in sfft.Easy_CrowdedPacket.
+                                            # File path of input science image.
 
-        -FITS_DIFF_Queue [None]            # A queue of -FITS_DIFF in sfft.Easy_CrowdedPacket.
-                                           # File path of output difference image.
+        -FITS_DIFF_Queue [None]             # A queue of -FITS_DIFF in sfft.Easy_CrowdedPacket.
+                                            # File path of output difference image.
 
-        -FITS_Solution_Queue [None]        # A queue of -FITS_Solution in sfft.Easy_CrowdedPacket.
-                                           # File path of the solution of the linear system.
-                                           # it is an array of (..., a_ijab, ... b_pq, ...).
+        -FITS_Solution_Queue [None]         # A queue of -FITS_Solution in sfft.Easy_CrowdedPacket.
+                                            # File path of the solution of the linear system.
+                                            # it is an array of (..., a_ijab, ... b_pq, ...).
+
+        # ----------------------------- Miscellaneous --------------------------------- #
+        
+        -CLEAN_GPU_MEMORY [False]           # Clean GPU memory or not after all subtractions done in a GPU device.
+
+        -VERBOSE_LEVEL [2]                  # The level of verbosity, can be [0, 1, 2]
+                                            # 0/1/2: QUIET/NORMAL/FULL mode
 
         # Important Notice:
         #
@@ -177,6 +191,7 @@ class MultiEasy_CrowdedPacket:
 
         self.FITS_REF_Queue = FITS_REF_Queue
         self.FITS_SCI_Queue = FITS_SCI_Queue
+        self.NUM_TASK = len(FITS_SCI_Queue)
 
         self.KerHWRatio = KerHWRatio
         self.KerHWLimit = KerHWLimit
@@ -203,35 +218,42 @@ class MultiEasy_CrowdedPacket:
         
         self.BACK_SIZE_SUPER = BACK_SIZE_SUPER
         self.StarExt_iter = StarExt_iter
-        self.NUM_TASK = len(FITS_SCI_Queue)
+        
+        self.CLEAN_GPU_MEMORY = CLEAN_GPU_MEMORY
+        self.VERBOSE_LEVEL = VERBOSE_LEVEL
 
         if FITS_DIFF_Queue == []:
-            _warn_message = 'Argument FITS_DIFF_Queue is EMPTY then Use default [...None...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [2]:
+                _warn_message = 'Argument FITS_DIFF_Queue is EMPTY then Use default [...None...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.FITS_DIFF_Queue = [None] * self.NUM_TASK
         else: self.FITS_DIFF_Queue = FITS_DIFF_Queue
         
         if FITS_Solution_Queue == []:
-            _warn_message = 'Argument FITS_Solution_Queue is EMPTY then Use default [...None...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [2]:
+                _warn_message = 'Argument FITS_Solution_Queue is EMPTY then Use default [...None...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.FITS_Solution_Queue = [None] * self.NUM_TASK
         else: self.FITS_Solution_Queue = FITS_Solution_Queue
         
         if ForceConv_Queue == []:
-            _warn_message = 'Argument ForceConv_Queue is EMPTY then Use default [...AUTO...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [0, 1, 2]:
+                _warn_message = 'Argument ForceConv_Queue is EMPTY then Use default [...AUTO...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.ForceConv_Queue = ['AUTO'] * self.NUM_TASK
         else: self.ForceConv_Queue = ForceConv_Queue
 
         if GKerHW_Queue == []:
-            _warn_message = 'Argument GKerHW_Queue is EMPTY then Use default [...None...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [2]:
+                _warn_message = 'Argument GKerHW_Queue is EMPTY then Use default [...None...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.GKerHW_Queue = [None] * self.NUM_TASK
         else: self.GKerHW_Queue = GKerHW_Queue
 
         if PriorBanMask_Queue == []:
-            _warn_message = 'Argument PriorBanMask_Queue is EMPTY then Use default [...None...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [2]:
+                _warn_message = 'Argument PriorBanMask_Queue is EMPTY then Use default [...None...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.PriorBanMask_Queue = [None] * self.NUM_TASK
         else: self.PriorBanMask_Queue = PriorBanMask_Queue
 
@@ -248,16 +270,17 @@ class MultiEasy_CrowdedPacket:
         
         _RATIO = self.NUM_TASK / NUM_THREADS_4PREPROC
         if _RATIO > 4.0:
-            _warn_message = 'THIS FUNCTION IS NOT OPTIMIZED FOR RATIO OF '
-            _warn_message += 'NUM_TASK / NUM_THREADS_4PREPROC BEING TO HIGH [%.1f > 4.0]!' %_RATIO
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [0, 1, 2]:
+                _warn_message = 'THIS FUNCTION IS NOT OPTIMIZED FOR RATIO OF '
+                _warn_message += 'NUM_TASK / NUM_THREADS_4PREPROC BEING TO HIGH [%.1f > 4.0]!' %_RATIO
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
 
         BACKEND_4SUBTRACT = 'Cupy'
         taskidx_lst = np.arange(self.NUM_TASK)
         assert NUM_THREADS_4SUBTRACT == len(CUDA_DEVICES_4SUBTRACT)
         
-        DICT_STATUS_BAR = {'task-[%d]' %taskidx: 0 for taskidx in taskidx_lst}
-        DICT_PRODUCTS = {'task-[%d]' %taskidx: {} for taskidx in taskidx_lst}
+        DICT_STATUS_BAR = {'TASK-[%d]' %taskidx: 0 for taskidx in taskidx_lst}
+        DICT_PRODUCTS = {'TASK-[%d]' %taskidx: {} for taskidx in taskidx_lst}
         lock = threading.RLock()
 
         # * define the function for preprocessing (see sfft.EasyCrowdedPacket)
@@ -266,49 +289,70 @@ class MultiEasy_CrowdedPacket:
             THREAD_ALIVE_4PREPROC = True
             while THREAD_ALIVE_4PREPROC:
                 with lock:
-                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['task-[%d]' %taskidx] for taskidx in taskidx_lst])
+                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['TASK-[%d]' %taskidx] for taskidx in taskidx_lst])
                     OPEN_MASK_4PREPROC = STATUS_SNAPSHOT == 0
                     if np.sum(OPEN_MASK_4PREPROC) > 0:
                         taskidx_acquired = taskidx_lst[OPEN_MASK_4PREPROC][0]
-                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = 32
-                        _message = 'Preprocessing thread-[%d] ACQUIRED task-[%d]!' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
-                        print('\nMeLOn CheckPoint: %s' %_message)
+                        DICT_STATUS_BAR['TASK-[%d]' %taskidx_acquired] = 32
+
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4PREPROC-[%d] ACQUIRED TASK-[%d] ' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                            _message += '(Crowded-Flavor Auto Preprocessing)!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
                     else: 
                         THREAD_ALIVE_4PREPROC = False
                         taskidx_acquired = None
-                        _message = 'TERMINATE Preprocessing thread-[%d] AS NO TASK WILL BE ALLOCATED!' %INDEX_THREAD_4PREPROC
-                        print('\nMeLOn CheckPoint: %s' %_message)
+
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4PREPROC-[%d] TERMINATED ' %INDEX_THREAD_4PREPROC
+                            _message += 'SINCE NO MORE TASK WILL BE ALLOCATED '
+                            _message += '(Crowded-Flavor Auto Preprocessing)!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
 
                 if taskidx_acquired is not None:
                     FITS_REF = self.FITS_REF_Queue[taskidx_acquired]
                     FITS_SCI = self.FITS_SCI_Queue[taskidx_acquired]
                     PriorBanMask = self.PriorBanMask_Queue[taskidx_acquired]
+
                     try:
                         with TimeoutAfter(timeout=TIMEOUT_4PREPROC_EACHTASK, exception=TimeoutError):
+                            
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4PREPROC-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                                _message += 'TRIGGER Crowded-Flavor Auto Preprocessing!'
+                                print('MeLOn CheckPoint: %s' %_message)
+
+                            # ** perform Auto-Crowded-Prep
                             _ACP = Auto_CrowdedPrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=self.GAIN_KEY, \
-                                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, \
-                                BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, \
-                                DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, \
-                                BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE)
+                                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
+                                BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, \
+                                DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, \
+                                DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, \
+                                DEBLEND_MINCONT=self.DEBLEND_MINCONT, BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, \
+                                ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE, VERBOSE_LEVEL=self.VERBOSE_LEVEL)
                             
                             SFFTPrepDict = _ACP.AutoMask(BACK_SIZE_SUPER=self.BACK_SIZE_SUPER, \
                                 StarExt_iter=self.StarExt_iter, PriorBanMask=PriorBanMask)
                         
                         NEW_STATUS = 1
-                        _message = 'Successful Preprocessing for task-[%d] ' %taskidx_acquired
-                        _message += 'in Preprocessing thread-[%d]!' %INDEX_THREAD_4PREPROC
-                        print('\nMeLOn CheckPoint: %s' %_message)
-                    except:
+                        if self.VERBOSE_LEVEL in [1, 2]:
+                            _message = 'THREAD-4PREPROC-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                            _message += 'SUCCESSFUL Crowded-Flavor Auto Preprocessing!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
+
+                    except Exception as e:
                         NEW_STATUS = -1
-                        _error_message = 'UnSuccessful Preprocessing for task-[%d] ' %taskidx_acquired
-                        _error_message += 'in Preprocessing thread-[%d]!' %INDEX_THREAD_4PREPROC
-                        print('\nMeLOn ERROR: %s' %_error_message)
                         SFFTPrepDict = None
+                        if self.VERBOSE_LEVEL in [0, 1, 2]:
+                            print(e, file=sys.stderr)
+                            _error_message = 'THREAD-4PREPROC-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                            _error_message += 'FAILED Crowded-Flavor Auto Preprocessing!'
+                            print('\nMeLOn ERROR: %s' %_error_message)
                     
                     with lock:
                         # NOTE: IN FACT, THERE IS NO RISK HERE EVEN WITHOUT LOCK.
-                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = NEW_STATUS
-                        DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['SFFTPrepDict'] = SFFTPrepDict
+                        DICT_STATUS_BAR['TASK-[%d]' %taskidx_acquired] = NEW_STATUS
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['SFFTPrepDict'] = SFFTPrepDict
 
             return None
         
@@ -316,32 +360,49 @@ class MultiEasy_CrowdedPacket:
         def FUNC_4SUBTRCT(INDEX_THREAD_4SUBTRACT):
             
             CUDA_DEVICE_4SUBTRACT = CUDA_DEVICES_4SUBTRACT[INDEX_THREAD_4SUBTRACT]
+            device = cp.cuda.Device(int(CUDA_DEVICE_4SUBTRACT))
+            device.use()
+
             THREAD_ALIVE_4SUBTRCT = True
+            GPU_MEMORY_CLEANED = True
+
             while THREAD_ALIVE_4SUBTRCT:
                 SHORT_PAUSE = False
+
                 with lock:
-                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['task-[%d]' %taskidx] for taskidx in taskidx_lst])
+                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['TASK-[%d]' %taskidx] for taskidx in taskidx_lst])
                     OPEN_MASK_4SUBTRACT = STATUS_SNAPSHOT == 1
                     WAIT_MASK_4SUBTRACT = np.in1d(STATUS_SNAPSHOT, [0, 32])
+
                     if np.sum(OPEN_MASK_4SUBTRACT) > 0:
                         taskidx_acquired = taskidx_lst[OPEN_MASK_4SUBTRACT][0]
-                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = 64
-                        _message = 'Subtraction thread-[%d] ACQUIRED task-[%d]!' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
-                        print('\nMeLOn CheckPoint: %s' %_message)
+                        DICT_STATUS_BAR['TASK-[%d]' %taskidx_acquired] = 64
+
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4SUBTRACT-[%d] ACQUIRED TASK-[%d] ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                            _message += '(SFFT-SUBTRACTION)!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
+
                     elif np.sum(WAIT_MASK_4SUBTRACT) > 0:
                         SHORT_PAUSE = True
                         taskidx_acquired = None
+
                     else:
                         THREAD_ALIVE_4SUBTRCT = False
                         taskidx_acquired = None
-                        _message = 'TERMINATE Subtraction thread-[%d] AS NO TASK WILL BE ALLOCATED!' %INDEX_THREAD_4SUBTRACT
-                        print('\nMeLOn CheckPoint: %s' %_message)
+
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4SUBTRACT-[%d] TERMINATED ' %INDEX_THREAD_4SUBTRACT
+                            _message += 'SINCE NO MORE TASK WILL BE ALLOCATED '
+                            _message += '(SFFT-SUBTRACTION)!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
 
                 if SHORT_PAUSE:
                     # run a short sleep, otherwise this thread may always hold the lock by the while loop
                     time.sleep(0.01)
                 
                 if taskidx_acquired is not None:
+
                     FITS_REF = self.FITS_REF_Queue[taskidx_acquired]
                     FITS_SCI = self.FITS_SCI_Queue[taskidx_acquired]
                     FITS_DIFF = self.FITS_DIFF_Queue[taskidx_acquired]
@@ -351,10 +412,11 @@ class MultiEasy_CrowdedPacket:
 
                     with lock:
                         # NOTE: IN FACT, THERE IS NO RISK HERE EVEN WITHOUT LOCK.
-                        SFFTPrepDict = DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['SFFTPrepDict']
+                        SFFTPrepDict = DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['SFFTPrepDict']
 
                     try:
                         with TimeoutAfter(timeout=TIMEOUT_4SUBTRACT_EACHTASK, exception=TimeoutError):
+
                             # * Determine ConvdSide & KerHW
                             FWHM_REF = SFFTPrepDict['FWHM_REF']
                             FWHM_SCI = SFFTPrepDict['FWHM_SCI']
@@ -372,20 +434,28 @@ class MultiEasy_CrowdedPacket:
                             else: KerHW = GKerHW
 
                             # * Compile Functions in SFFT Subtraction
-                            from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
-
                             PixA_REF = SFFTPrepDict['PixA_REF']
                             PixA_SCI = SFFTPrepDict['PixA_SCI']
                             
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'TRIGGER Function Compilations of SFFT-SUBTRACTION'
+                                print('MeLOn CheckPoint: %s' %_message)
+                            
                             Tcomp_start = time.time()
-                            SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], KerHW=KerHW, \
-                                KerPolyOrder=self.KerPolyOrder, BGPolyOrder=self.BGPolyOrder, ConstPhotRatio=self.ConstPhotRatio, \
-                                BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
-                            print('\nMeLOn Report: Compiling Functions in SFFT Subtraction Takes [%.3f s]' %(time.time() - Tcomp_start))
+                            GPU_MEMORY_CLEANED = False
+                            SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], \
+                                KerHW=KerHW, KerPolyOrder=self.KerPolyOrder, BGPolyOrder=self.BGPolyOrder, \
+                                ConstPhotRatio=self.ConstPhotRatio, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+                                VERBOSE_LEVEL=self.VERBOSE_LEVEL)
+
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'Function Compilations of SFFT-SUBTRACTION '
+                                _message += 'TAKES [%.3f s]!' %(time.time() - Tcomp_start)
+                                print('\nMeLOn Report: %s' %_message)
 
                             # * Perform SFFT Subtraction
-                            from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
-
                             SatMask_REF = SFFTPrepDict['REF-SAT-Mask']
                             SatMask_SCI = SFFTPrepDict['SCI-SAT-Mask']
                             NaNmask_U = SFFTPrepDict['Union-NaN-Mask']
@@ -416,35 +486,115 @@ class MultiEasy_CrowdedPacket:
                                     ContamMask_J = SatMask_REF
                                 else: ContamMask_I = None
                             
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'TRIGGER Function Executions of SFFT-SUBTRACTION!'
+                                print('MeLOn CheckPoint: %s' %_message)
+                            
                             Tsub_start = time.time()
                             _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
                                 SFFTConfig=SFFTConfig, ContamMask_I=ContamMask_I, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-                                CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
+                                VERBOSE_LEVEL=self.VERBOSE_LEVEL)
+
                             Solution, PixA_DIFF, ContamMask_CI = _tmp
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'Function Executions of SFFT-SUBTRACTION'
+                                _message += 'TAKES [%.3f s]!' %(time.time() - Tsub_start)
+                                print('\nMeLOn Report: %s' %_message)
+
+                            # ** adjust the sign of difference image 
+                            #    NOTE: Our convention is to make the transients on SCI always show themselves as positive signal on DIFF
+                            #    (a) when REF is convolved, DIFF = SCI - Conv(REF)
+                            #    (b) when SCI is convolved, DIFF = Conv(SCI) - REF
+
+                            if ConvdSide == 'SCI':
+                                PixA_DIFF = -PixA_DIFF
+
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                if ConvdSide == 'REF':
+                                    _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                    _message += 'Reference Image is Convolved in SFFT-SUBTRACTION [DIFF = SCI - Conv(REF)]!'
+                                    print('MeLOn CheckPoint: %s' %_message)
+
+                                if ConvdSide == 'SCI':
+                                    _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                    _message += 'Science Image is Convolved in SFFT-SUBTRACTION [DIFF = Conv(SCI) - REF]!'
+                                    print('MeLOn CheckPoint: %s' %_message)
+
+                            # ** estimate the flux scaling through the convolution of image subtraction
+                            #    NOTE: if photometric ratio is not constant (ConstPhotRatio=False), we measure of a grid
+                            #          of coordinates to estimate the flux scaling and its fluctuation (polynomial form).
+                            #    NOTE: here we set the tile-size of the grid about 64 x 64 pix, but meanwhile, 
+                            #          we also require the tiles should no less than 6 along each axis.
+
+                            N0, N1 = SFFTConfig[0]['N0'], SFFTConfig[0]['N1']
+                            L0, L1 = SFFTConfig[0]['L0'], SFFTConfig[0]['L1']
+                            DK, Fpq = SFFTConfig[0]['DK'], SFFTConfig[0]['Fpq']
+
+                            if self.ConstPhotRatio:
+                                SFFT_FSCAL_NSAMP = 1
+                                XY_q = np.array([[N0/2.0, N1/2.0]]) + 0.5
+                                RFS = Realize_FluxScaling(XY_q=XY_q)
+                                SFFT_FSCAL_q = RFS.FromArray(Solution=Solution, N0=N0, N1=N1, L0=L0, L1=L1, DK=DK, Fpq=Fpq)
+                                SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG = SFFT_FSCAL_q[0], 0.0
+                            
+                            if not self.ConstPhotRatio:
+                                TILESIZE_X, TILESIZE_Y = 64, 64    # FIXME emperical/arbitrary values
+                                NTILE_X = np.max([round(N0/TILESIZE_X), 6])
+                                NTILE_Y = np.max([round(N1/TILESIZE_Y), 6])
+                                GX = np.linspace(0.5, N0+0.5, NTILE_X+1)
+                                GY = np.linspace(0.5, N1+0.5, NTILE_Y+1)
+                                YY, XX = np.meshgrid(GY, GX)
+                                XY_q = np.array([XX.flatten(), YY.flatten()]).T
+                                SFFT_FSCAL_NSAMP = XY_q.shape[0]
+                                
+                                RFS = Realize_FluxScaling(XY_q=XY_q)
+                                SFFT_FSCAL_q = RFS.FromArray(Solution=Solution, N0=N0, N1=N1, L0=L0, L1=L1, DK=DK, Fpq=Fpq)
+                                SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG = np.mean(SFFT_FSCAL_q), np.std(SFFT_FSCAL_q)
+
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'The Flux Scaling through the Convolution of SFFT-SUBTRACTION '
+                                _message += '[%.6f +/- %.6f] from [%d] positions!\n' %(SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG, SFFT_FSCAL_NSAMP)
+                                print('MeLOn CheckPoint: %s' %_message)
+
+                            # ** final tweaks on the difference image
+                            if NaNmask_U is not None:
+                                PixA_DIFF[NaNmask_U] = np.nan   # Mask Union-NaN regions
+                            
                             if self.MaskSatContam:
                                 ContamMask_DIFF = np.logical_or(ContamMask_CI, ContamMask_J)
-                            print('\nMeLOn Report: SFFT Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
-                            
-                            # * Modifications on the difference image
-                            #   a) when REF is convolved, DIFF = SCI - Conv(REF)
-                            #      PSF(DIFF) is coincident with PSF(SCI), transients on SCI are positive signal in DIFF.
-                            #   b) when SCI is convolved, DIFF = Conv(SCI) - REF
-                            #      PSF(DIFF) is coincident with PSF(REF), transients on SCI are still positive signal in DIFF.
-
-                            if NaNmask_U is not None:
-                                # ** Mask Union-NaN region
-                                PixA_DIFF[NaNmask_U] = np.nan
-                            if self.MaskSatContam:
-                                # ** Mask Saturate-Contaminate region 
-                                PixA_DIFF[ContamMask_DIFF] = np.nan
-                            if ConvdSide == 'SCI': 
-                                # ** Flip difference when science is convolved
-                                PixA_DIFF = -PixA_DIFF
+                                PixA_DIFF[ContamMask_DIFF] = np.nan   # Mask Saturation-Contaminated regions
                             
                             # * Save difference image
                             if FITS_DIFF is not None:
+
+                                """
+                                # Remarks on header of difference image
+                                # [1] In general, the FITS header of difference image would mostly be inherited from science image.
+                                #
+                                # [2] when science image is convolved, we turn to set GAIN_DIFF = GAIN_SCI / SFFT_FSCAL_MEAN (unit: e-/ADU)
+                                #     so that one can correctly convert ADU to e- for a transient appears on science image.
+                                #     WARNING: for a transient appears on reference image, GAIN_DIFF = GAIN_SCI is correct.
+                                #              we should keep in mind that GAIN_DIFF is not an absolute instrumental value.
+                                #     WARNING: one can only estimate the Poission noise from the science transient via GIAN_DIFF.
+                                #              the Poission noise from the background source (host galaxy) can enhance the 
+                                #              background noise at the position of the transient. photometry softwares which 
+                                #              only take background noise and transient Possion noise into account would tend 
+                                #              to overestimate the SNR of the transient.
+                                # 
+                                # [3] when science image is convolved, we turn to set SATURA_DIFF = SATURA_SCI * SFFT_FSCAL_MEAN         
+                                #     WARNING: it is still not a good idea to use SATURA_DIFF to identify the SATURATION regions
+                                #              on difference image. more appropriate way is masking the saturation contaminated 
+                                #              regions on difference image (MaskSatContam=True), or alternatively, leave them  
+                                #              alone and using AI stamp classifier to reject saturation-related bogus.
+                                #
+                                """
+
                                 _hdl = fits.open(FITS_SCI)
                                 _hdl[0].data[:, :] = PixA_DIFF.T
+
                                 _hdl[0].header['NAME_REF'] = (pa.basename(FITS_REF), 'MeLOn: SFFT')
                                 _hdl[0].header['NAME_SCI'] = (pa.basename(FITS_SCI), 'MeLOn: SFFT')
                                 _hdl[0].header['FWHM_REF'] = (FWHM_REF, 'MeLOn: SFFT')
@@ -454,6 +604,16 @@ class MultiEasy_CrowdedPacket:
                                 _hdl[0].header['CPHOTR'] = (str(self.ConstPhotRatio), 'MeLOn: SFFT')
                                 _hdl[0].header['KERHW'] = (KerHW, 'MeLOn: SFFT')
                                 _hdl[0].header['CONVD'] = (ConvdSide, 'MeLOn: SFFT')
+
+                                if ConvdSide == 'SCI':
+                                    GAIN_SCI = _hdl[0].header[self.GAIN_KEY]
+                                    SATUR_SCI = _hdl[0].header[self.SATUR_KEY]
+                                    GAIN_DIFF = GAIN_SCI / SFFT_FSCAL_MEAN
+                                    SATUR_DIFF = SATUR_SCI * SFFT_FSCAL_MEAN
+
+                                    _hdl[0].header[self.GAIN_KEY] = (GAIN_DIFF, 'MeLOn: SFFT')
+                                    _hdl[0].header[self.SATUR_KEY] = (SATUR_DIFF, 'MeLOn: SFFT')
+
                                 _hdl.writeto(FITS_DIFF, overwrite=True)
                                 _hdl.close()
                             
@@ -477,30 +637,59 @@ class MultiEasy_CrowdedPacket:
                                 fits.HDUList([phdu]).writeto(FITS_Solution, overwrite=True)
 
                         NEW_STATUS = 2
-                        _message = 'Successful Subtraction for task-[%d] ' %taskidx_acquired
-                        _message += 'in Subtraction thread-[%d]!' %INDEX_THREAD_4SUBTRACT
-                        print('\nMeLOn CheckPoint: %s' %_message)
+                        if self.VERBOSE_LEVEL in [1, 2]:
+                            _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                            _message += 'SUCCESSFUL SFFT-SUBTRACTION!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
+                    
+                    except Exception as e:
+                        PixA_DIFF, Solution = None, None
+                        SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG = np.nan, np.nan
 
-                    except:
-                        # ** free GPU memory when the subtraction fails
-                        import cupy as cp
-                        with cp.cuda.Device(int(CUDA_DEVICE_4SUBTRACT)):
-                            mempool = cp.get_default_memory_pool()
-                            pinned_mempool = cp.get_default_pinned_memory_pool()
-                            mempool.free_all_blocks()
-                            pinned_mempool.free_all_blocks()
+                        # ** clean GPU memory when the subtraction fails
+                        mempool = cp.get_default_memory_pool()
+                        pinned_mempool = cp.get_default_pinned_memory_pool()
+                        mempool.free_all_blocks()
+                        pinned_mempool.free_all_blocks()
+                        
+                        GPU_MEMORY_CLEANED = True
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                            _message += 'CLEAN GPU-[%s] MEMORY!' %CUDA_DEVICE_4SUBTRACT
+                            print('\nMeLOn CheckPoint: %s' %_message)
 
                         NEW_STATUS = -2
-                        _error_message = 'UnSuccessful Subtraction for task-[%d] ' %taskidx_acquired
-                        _error_message += 'in Subtraction thread-[%d]!' %INDEX_THREAD_4SUBTRACT
-                        print('\nMeLOn ERROR: %s' %_error_message)
                         Solution = None
                         PixA_DIFF = None
+                        if self.VERBOSE_LEVEL in [0, 1, 2]:
+                            print(e, file=sys.stderr)
+                            _error_message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                            _error_message += 'FAILED SFFT-SUBTRACTION!'
+                            print('\nMeLOn ERROR: %s' %_error_message)
 
                     with lock:
-                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = NEW_STATUS
-                        DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['Solution'] = Solution
-                        DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['PixA_DIFF'] = PixA_DIFF
+                        DICT_STATUS_BAR['TASK-[%d]' %taskidx_acquired] = NEW_STATUS
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['PixA_DIFF'] = PixA_DIFF
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['Solution'] = Solution
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['SFFT_FSCAL_MEAN'] = SFFT_FSCAL_MEAN
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['SFFT_FSCAL_SIG'] = SFFT_FSCAL_SIG
+
+            if self.CLEAN_GPU_MEMORY:
+                if not GPU_MEMORY_CLEANED:
+                    mempool = cp.get_default_memory_pool()
+                    pinned_mempool = cp.get_default_pinned_memory_pool()
+                    mempool.free_all_blocks()
+                    pinned_mempool.free_all_blocks()
+                    
+                    if self.VERBOSE_LEVEL in [1, 2]:
+                        _message = 'THREAD-4SUBTRACT-[%d]: ' %INDEX_THREAD_4SUBTRACT
+                        _message += 'FINAL CLEAN GPU-[%s] MEMORY ' %CUDA_DEVICE_4SUBTRACT
+                        print('\nMeLOn CheckPoint: %s' %_message)
+                else:
+                    if self.VERBOSE_LEVEL in [1, 2]:
+                        _message = 'THREAD-4SUBTRACT-[%d]: ' %INDEX_THREAD_4SUBTRACT
+                        _message += 'SKIP FINAL CLEAN, SINCE GPU-[%s] MEMORY ALREADY CLEANED' %CUDA_DEVICE_4SUBTRACT
+                        print('\nMeLOn CheckPoint: %s' %_message)
 
             return None
 
@@ -518,5 +707,10 @@ class MultiEasy_CrowdedPacket:
   
         for MyThread in MyThreadQueue:
             MyThread.join()
+        
+        # * show a summary
+        if self.VERBOSE_LEVEL in [0, 1, 2]:
+            NUM_SUCCESS = np.sum(np.array([DICT_STATUS_BAR[task] for task in DICT_STATUS_BAR]) == 2)
+            print('\nMeLOn CheckPoint: SFFT PROCESSED TASKS SUCCESSFULLY [%d / %d]!' %(NUM_SUCCESS, self.NUM_TASK))
         
         return DICT_STATUS_BAR, DICT_PRODUCTS

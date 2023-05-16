@@ -1,7 +1,8 @@
+import sys
 import time
-import math
 import warnings
 import threading
+import cupy as cp
 import numpy as np
 import os.path as pa
 from astropy.io import fits
@@ -9,7 +10,10 @@ import scipy.ndimage as ndimage
 from astropy.table import Column
 from sfft.AutoSparsePrep import Auto_SparsePrep
 from sfft.utils.meta.TimeoutKit import TimeoutAfter
-# version: Jan 1, 2023
+from sfft.utils.SFFTSolutionReader import Realize_FluxScaling
+from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
+from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
+# version: Mar 18, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.4"
@@ -20,15 +24,15 @@ class MultiEasy_SparsePacket:
         ConstPhotRatio=True, MaskSatContam=False, GAIN_KEY='GAIN', SATUR_KEY='ESATUR', BACK_TYPE='MANUAL', \
         BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, ANALYSIS_THRESH=2.0, DETECT_MINAREA=5, \
         DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30, \
-        XY_PriorSelect_Queue=[], Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
+        XY_PriorSelect_Queue=[], Hough_MINFR=0.1, Hough_PeakClip=0.7, BeltHW=0.2, PointSource_MINELLIP=0.3, \
         MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, CVREJ_MAGD_THRESH=0.12, \
         ELABO_VAR_REJECTION=True, EVREJ_RATIO_THREH=5.0, EVREJ_SAFE_MAGDEV=0.04, StarExt_iter=4, \
-        XY_PriorBan_Queue=[], PostAnomalyCheck=False, PAC_RATIO_THRESH=5.0):
+        XY_PriorBan_Queue=[], PostAnomalyCheck=False, PAC_RATIO_THRESH=5.0, CLEAN_GPU_MEMORY=False, VERBOSE_LEVEL=2):
 
         """
-        # NOTE: This function is to Perform Sparse-Flavor SFFT for multiple tasks:
-        #       @ it makes sense when users have multiple CPU threads and GPU(s) available.
-        #       @ WARNING: the module currently only support Cupy backend!
+        # NOTE: This function is to perform Sparse-Flavor SFFT for multiple tasks:
+        #       @ this module (only support Cupy backend) would help making the 
+        #         best use of the available CPU and GPU resources.
 
         * Parameters for Sparse-Flavor SFFT [multiple tasks]
 
@@ -46,7 +50,8 @@ class MultiEasy_SparsePacket:
                                             #       with the CUDA threads (block, threads ...).
 
         -CUDA_DEVICES_4SUBTRACT [['0']]     # it specifies certain GPU devices (indices) to conduct the subtractions.
-                                            # the GPU devices are usually numbered 0 to N-1 (you may use command nvidia-smi to check).
+                                            # the GPU devices are usually numbered 0 to N-1.
+                                            # (you may use command nvidia-smi to check for Nvidia GPU devices).
 
         -TIMEOUT_4PREPROC_EACHTASK [300]    # timeout of each task during preprocessing.
                                             
@@ -116,13 +121,13 @@ class MultiEasy_SparsePacket:
                                         # this allows sfft to us a prior source selection to solve the subtraction.
                                         # NOTE: ONLY WORKS FOR Auto-Sparse-Prep [SEMI-AUTO] MODE
 
-        -Hough_FRLowerLimit [0.1]       # The lower bound of FLUX_RATIO for line feature detection using Hough transformation.
+        -Hough_MINFR [0.1]              # The lower bound of FLUX_RATIO for line feature detection using Hough transformation.
                                         # Setting a proper lower bound can avoid to detect some line features by chance,
                                         # which are not contributed from point sources but resides in the small-FLUX_RATIO region.
-                                        # NOTE: Recommended values of Hough_FRLowerLimit: 0.1 ~ 1.0
+                                        # NOTE: Recommended values of Hough_MINFR: 0.1 ~ 1.0
                                         # NOTE: ONLY WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE
 
-        -Hough_peak_clip [0.7]          # It determines the lower bound of the sensitivity of the line feature detection.
+        -Hough_PeakClip [0.7]           # It determines the lower bound of the sensitivity of the line feature detection.
                                         # NOTE: When the point-source-belt is not very pronounced (e.g., in galaxy dominated fields),
                                         #       one may consider to reduce the parameter from default 0.7 to, says, ~ 0.4.
                                         # NOTE: ONLY WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE
@@ -132,7 +137,7 @@ class MultiEasy_SparsePacket:
                                         #          a figure of MAG_AUTO against FLUX_RADIUS.
                                         # NOTE: IT WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE :::: determine point-source-belt
 
-        -PS_ELLIPThresh [0.3]           # An additiona Restriction on ELLIPTICITY (ELLIPTICITY < PS_ELLIPThresh) for point sources.
+        -PointSource_MINELLIP [0.3]     # An additiona Restriction on ELLIPTICITY (ELLIPTICITY < PointSource_MINELLIP) for point sources.
                                         # NOTE: IT WORKS FOR Auto-Sparse-Prep [HOUGH-AUTO] MODE :::: determine point-sources
                                     
         -MatchTol [None]                # Given separation tolerance (pix) for source matching 
@@ -262,7 +267,14 @@ class MultiEasy_SparsePacket:
 
         -FITS_Solution_Queue [[]]           # A queue of -FITS_Solution in sfft.Easy_SparsePacket.
                                             # Recall -FITS_Solution: File path of the solution of the linear system. 
-                                            #   it is an array of (..., a_ijab, ... b_pq, ...).
+                                            # it is an array of (..., a_ijab, ... b_pq, ...).
+
+        # ----------------------------- Miscellaneous --------------------------------- #
+        
+        -CLEAN_GPU_MEMORY [False]           # Clean GPU memory or not after all subtractions done in a GPU device.
+
+        -VERBOSE_LEVEL [2]                  # The level of verbosity, can be [0, 1, 2]
+                                            # 0/1/2: QUIET/NORMAL/FULL mode
 
         # Important Notice:
         #
@@ -278,7 +290,7 @@ class MultiEasy_SparsePacket:
         #          show a positive signal on difference images.
 
         """
-
+        
         self.FITS_REF_Queue = FITS_REF_Queue
         self.FITS_SCI_Queue = FITS_SCI_Queue
         self.NUM_TASK = len(FITS_SCI_Queue)
@@ -306,10 +318,10 @@ class MultiEasy_SparsePacket:
         self.ONLY_FLAGS = ONLY_FLAGS
         self.BoundarySIZE = BoundarySIZE
 
-        self.Hough_FRLowerLimit = Hough_FRLowerLimit
-        self.Hough_peak_clip = Hough_peak_clip
+        self.Hough_MINFR = Hough_MINFR
+        self.Hough_PeakClip = Hough_PeakClip
         self.BeltHW = BeltHW
-        self.PS_ELLIPThresh = PS_ELLIPThresh
+        self.PointSource_MINELLIP = PointSource_MINELLIP
 
         self.MatchTol = MatchTol
         self.MatchTolFactor = MatchTolFactor
@@ -324,42 +336,58 @@ class MultiEasy_SparsePacket:
 
         self.PostAnomalyCheck = PostAnomalyCheck
         self.PAC_RATIO_THRESH = PAC_RATIO_THRESH
-        
+
+        self.CLEAN_GPU_MEMORY = CLEAN_GPU_MEMORY
+        self.VERBOSE_LEVEL = VERBOSE_LEVEL
+
         if FITS_DIFF_Queue == []:
-            _warn_message = 'Argument FITS_DIFF_Queue is EMPTY then Use default [...None...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [2]:
+                _warn_message = 'Argument FITS_DIFF_Queue is EMPTY then Use default [...None...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.FITS_DIFF_Queue = [None] * self.NUM_TASK
         else: self.FITS_DIFF_Queue = FITS_DIFF_Queue
         
         if FITS_Solution_Queue == []:
-            _warn_message = 'Argument FITS_Solution_Queue is EMPTY then Use default [...None...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [2]:
+                _warn_message = 'Argument FITS_Solution_Queue is EMPTY then Use default [...None...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.FITS_Solution_Queue = [None] * self.NUM_TASK
         else: self.FITS_Solution_Queue = FITS_Solution_Queue
         
         if ForceConv_Queue == []:
-            _warn_message = 'Argument ForceConv_Queue is EMPTY then Use default [...AUTO...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [0, 1, 2]:
+                _warn_message = 'Argument ForceConv_Queue is EMPTY then Use default [...AUTO...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.ForceConv_Queue = ['AUTO'] * self.NUM_TASK
         else: self.ForceConv_Queue = ForceConv_Queue
 
         if GKerHW_Queue == []:
-            _warn_message = 'Argument GKerHW_Queue is EMPTY then Use default [...None...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [2]:
+                _warn_message = 'Argument GKerHW_Queue is EMPTY then Use default [...None...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.GKerHW_Queue = [None] * self.NUM_TASK
         else: self.GKerHW_Queue = GKerHW_Queue
 
         if XY_PriorSelect_Queue == []:
-            _warn_message = 'Argument XY_PriorSelect_Queue is EMPTY then Use default [...None...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [2]:
+                _warn_message = 'Argument XY_PriorSelect_Queue is EMPTY then Use default [...None...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.XY_PriorSelect_Queue = [None] * self.NUM_TASK
         else: self.XY_PriorSelect_Queue = XY_PriorSelect_Queue
 
         if XY_PriorBan_Queue == []:
-            _warn_message = 'Argument XY_PriorBan_Queue is EMPTY then Use default [...None...] instead!'
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [2]:
+                _warn_message = 'Argument XY_PriorBan_Queue is EMPTY then Use default [...None...] instead!'
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
             self.XY_PriorBan_Queue = [None] * self.NUM_TASK
         else: self.XY_PriorBan_Queue = XY_PriorBan_Queue
+
+        if self.PostAnomalyCheck:
+            if self.VERBOSE_LEVEL in [2]:    
+                warnings.warn('\nMeLOn REMINDER: Post-Anomaly Check requires correct GAIN values!')
+
+        if self.VERBOSE_LEVEL in [2]:
+            warnings.warn('\nMeLOn REMINDER: Input images for sparse-flavor sfft should be SKY-SUBTRACTED!')
 
     def MESP_Cupy(self, NUM_THREADS_4PREPROC=8, NUM_THREADS_4SUBTRACT=1, CUDA_DEVICES_4SUBTRACT=['0'], \
         TIMEOUT_4PREPROC_EACHTASK=300, TIMEOUT_4SUBTRACT_EACHTASK=300):
@@ -374,16 +402,17 @@ class MultiEasy_SparsePacket:
     
         _RATIO = self.NUM_TASK / NUM_THREADS_4PREPROC
         if _RATIO > 4.0:
-            _warn_message = 'THIS FUNCTION IS NOT OPTIMIZED FOR RATIO OF '
-            _warn_message += 'NUM_TASK / NUM_THREADS_4PREPROC BEING TO HIGH [%.1f > 4.0]!' %_RATIO
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+            if self.VERBOSE_LEVEL in [0, 1, 2]:
+                _warn_message = 'THIS FUNCTION IS NOT OPTIMIZED FOR RATIO OF '
+                _warn_message += 'NUM_TASK / NUM_THREADS_4PREPROC BEING TO HIGH [%.1f > 4.0]!' %_RATIO
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
 
         BACKEND_4SUBTRACT = 'Cupy'
         taskidx_lst = np.arange(self.NUM_TASK)
         assert NUM_THREADS_4SUBTRACT == len(CUDA_DEVICES_4SUBTRACT)
 
-        DICT_STATUS_BAR = {'task-[%d]' %taskidx: 0 for taskidx in taskidx_lst}
-        DICT_PRODUCTS = {'task-[%d]' %taskidx: {} for taskidx in taskidx_lst}
+        DICT_STATUS_BAR = {'TASK-[%d]' %taskidx: 0 for taskidx in taskidx_lst}
+        DICT_PRODUCTS = {'TASK-[%d]' %taskidx: {} for taskidx in taskidx_lst}
         lock = threading.RLock()
 
         # * define the function for preprocessing (see sfft.EasySparsePacket)
@@ -392,18 +421,25 @@ class MultiEasy_SparsePacket:
             THREAD_ALIVE_4PREPROC = True
             while THREAD_ALIVE_4PREPROC:
                 with lock:
-                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['task-[%d]' %taskidx] for taskidx in taskidx_lst])
+                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['TASK-[%d]' %taskidx] for taskidx in taskidx_lst])
                     OPEN_MASK_4PREPROC = STATUS_SNAPSHOT == 0
                     if np.sum(OPEN_MASK_4PREPROC) > 0:
                         taskidx_acquired = taskidx_lst[OPEN_MASK_4PREPROC][0]
-                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = 32
-                        _message = 'Preprocessing thread-[%d] ACQUIRED task-[%d]!' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
-                        print('\nMeLOn CheckPoint: %s' %_message)
+                        DICT_STATUS_BAR['TASK-[%d]' %taskidx_acquired] = 32
+
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4PREPROC-[%d] ACQUIRED TASK-[%d] ' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                            _message += '(Sparse-Flavor Auto Preprocessing)!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
                     else: 
                         THREAD_ALIVE_4PREPROC = False
                         taskidx_acquired = None
-                        _message = 'TERMINATE Preprocessing thread-[%d] AS NO TASK WILL BE ALLOCATED!' %INDEX_THREAD_4PREPROC
-                        print('\nMeLOn CheckPoint: %s' %_message)
+
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4PREPROC-[%d] TERMINATED ' %INDEX_THREAD_4PREPROC
+                            _message += 'SINCE NO MORE TASK WILL BE ALLOCATED '
+                            _message += '(Sparse-Flavor Auto Preprocessing)!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
 
                 if taskidx_acquired is not None:
                     FITS_REF = self.FITS_REF_Queue[taskidx_acquired]
@@ -413,45 +449,59 @@ class MultiEasy_SparsePacket:
 
                     try:
                         with TimeoutAfter(timeout=TIMEOUT_4PREPROC_EACHTASK, exception=TimeoutError):
-                            warnings.warn('\nMeLOn WARNING: Input images for sparse-flavor sfft should be SKY-SUBTRACTED !!!')
 
-                            # ** perform auto sparse-prep
+                            # ** perform Auto-Sparse-Prep
                             _ASP = Auto_SparsePrep(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, GAIN_KEY=self.GAIN_KEY, \
-                                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, \
-                                BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, \
-                                DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, \
-                                BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE)
+                                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
+                                BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, \
+                                DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, \
+                                DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, \
+                                DEBLEND_MINCONT=self.DEBLEND_MINCONT, BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, \
+                                ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE, \
+                                VERBOSE_LEVEL=self.VERBOSE_LEVEL)
 
                             if XY_PriorSelect is None:
                                 IMAGE_MASK_METHOD = 'HOUGH-AUTO'
-                                print('MeLOn CheckPoint: TRIGGER Auto-Sparse-Prep [%s] MODE for task-[%d]!' %(IMAGE_MASK_METHOD, taskidx_acquired))
-                                SFFTPrepDict = _ASP.HoughAutoMask(Hough_FRLowerLimit=self.Hough_FRLowerLimit, \
-                                    Hough_peak_clip=self.Hough_peak_clip, BeltHW=self.BeltHW, PS_ELLIPThresh=self.PS_ELLIPThresh, \
-                                    MatchTol=self.MatchTol, MatchTolFactor=self.MatchTolFactor, ELABO_VAR_REJECTION=self.ELABO_VAR_REJECTION, \
+                                if self.VERBOSE_LEVEL in [1, 2]:
+                                    _message = 'THREAD-4PREPROC-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                                    _message += 'TRIGGER Sparse-Flavor Auto Preprocessing [%s] MODE!' %IMAGE_MASK_METHOD
+                                    print('MeLOn CheckPoint: %s' %_message)
+                                
+                                SFFTPrepDict = _ASP.HoughAutoMask(Hough_MINFR=self.Hough_MINFR, \
+                                    Hough_PeakClip=self.Hough_PeakClip, BeltHW=self.BeltHW, \
+                                    PointSource_MINELLIP=self.PointSource_MINELLIP, MatchTol=self.MatchTol, \
+                                    MatchTolFactor=self.MatchTolFactor, ELABO_VAR_REJECTION=self.ELABO_VAR_REJECTION, \
                                     EVREJ_RATIO_THREH=self.EVREJ_RATIO_THREH, EVREJ_SAFE_MAGDEV=self.EVREJ_SAFE_MAGDEV, \
                                     StarExt_iter=self.StarExt_iter, XY_PriorBan=XY_PriorBan)
-                            
-                            if XY_PriorSelect is not None:
+                            else:
                                 IMAGE_MASK_METHOD = 'SEMI-AUTO'
-                                print('MeLOn CheckPoint: TRIGGER Auto-Sparse-Prep [%s] MODE for task-[%d]!' %(IMAGE_MASK_METHOD, taskidx_acquired))
+                                if self.VERBOSE_LEVEL in [1, 2]:
+                                    _message = 'THREAD-4PREPROC-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                                    _message += 'TRIGGER Sparse-Flavor Auto Preprocessing [%s] MODE!' %IMAGE_MASK_METHOD
+                                    print('MeLOn CheckPoint: %s' %_message)
+
                                 SFFTPrepDict = _ASP.SemiAutoMask(XY_PriorSelect=XY_PriorSelect, MatchTol=self.MatchTol, \
                                     MatchTolFactor=self.MatchTolFactor, StarExt_iter=self.StarExt_iter)
 
                         NEW_STATUS = 1
-                        _message = 'Successful Preprocessing for task-[%d] ' %taskidx_acquired
-                        _message += 'in Preprocessing thread-[%d]!' %INDEX_THREAD_4PREPROC
-                        print('\nMeLOn CheckPoint: %s' %_message)
-                    except:
+                        if self.VERBOSE_LEVEL in [1, 2]:
+                            _message = 'THREAD-4PREPROC-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                            _message += 'SUCCESSFUL Sparse-Flavor Auto Preprocessing!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
+
+                    except Exception as e:
                         NEW_STATUS = -1
-                        _error_message = 'UnSuccessful Preprocessing for task-[%d] ' %taskidx_acquired
-                        _error_message += 'in Preprocessing thread-[%d]!' %INDEX_THREAD_4PREPROC
-                        print('\nMeLOn ERROR: %s' %_error_message)
                         SFFTPrepDict = None
-            
+                        if self.VERBOSE_LEVEL in [0, 1, 2]:
+                            print(e, file=sys.stderr)
+                            _error_message = 'THREAD-4PREPROC-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4PREPROC, taskidx_acquired)
+                            _error_message += 'FAILED Sparse-Flavor Auto Preprocessing!'
+                            print('\nMeLOn ERROR: %s' %_error_message)
+
                     with lock:
                         # NOTE: IN FACT, THERE IS NO RISK HERE EVEN WITHOUT LOCK.
-                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = NEW_STATUS
-                        DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['SFFTPrepDict'] = SFFTPrepDict
+                        DICT_STATUS_BAR['TASK-[%d]' %taskidx_acquired] = NEW_STATUS
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['SFFTPrepDict'] = SFFTPrepDict
 
             return None
 
@@ -459,32 +509,49 @@ class MultiEasy_SparsePacket:
         def FUNC_4SUBTRCT(INDEX_THREAD_4SUBTRACT):
             
             CUDA_DEVICE_4SUBTRACT = CUDA_DEVICES_4SUBTRACT[INDEX_THREAD_4SUBTRACT]
+            device = cp.cuda.Device(int(CUDA_DEVICE_4SUBTRACT))
+            device.use()
+
             THREAD_ALIVE_4SUBTRCT = True
+            GPU_MEMORY_CLEANED = True
+
             while THREAD_ALIVE_4SUBTRCT:
                 SHORT_PAUSE = False
+
                 with lock:
-                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['task-[%d]' %taskidx] for taskidx in taskidx_lst])
+                    STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['TASK-[%d]' %taskidx] for taskidx in taskidx_lst])
                     OPEN_MASK_4SUBTRACT = STATUS_SNAPSHOT == 1
                     WAIT_MASK_4SUBTRACT = np.in1d(STATUS_SNAPSHOT, [0, 32])
+
                     if np.sum(OPEN_MASK_4SUBTRACT) > 0:
                         taskidx_acquired = taskidx_lst[OPEN_MASK_4SUBTRACT][0]
-                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = 64
-                        _message = 'Subtraction thread-[%d] ACQUIRED task-[%d]!' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
-                        print('\nMeLOn CheckPoint: %s' %_message)
+                        DICT_STATUS_BAR['TASK-[%d]' %taskidx_acquired] = 64
+
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4SUBTRACT-[%d] ACQUIRED TASK-[%d] ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                            _message += '(SFFT-SUBTRACTION)!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
+
                     elif np.sum(WAIT_MASK_4SUBTRACT) > 0:
                         SHORT_PAUSE = True
                         taskidx_acquired = None
+
                     else:
                         THREAD_ALIVE_4SUBTRCT = False
                         taskidx_acquired = None
-                        _message = 'TERMINATE Subtraction thread-[%d] AS NO TASK WILL BE ALLOCATED!' %INDEX_THREAD_4SUBTRACT
-                        print('\nMeLOn CheckPoint: %s' %_message)
+
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4SUBTRACT-[%d] TERMINATED ' %INDEX_THREAD_4SUBTRACT
+                            _message += 'SINCE NO MORE TASK WILL BE ALLOCATED '
+                            _message += '(SFFT-SUBTRACTION)!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
 
                 if SHORT_PAUSE:
                     # run a short sleep, otherwise this thread may always hold the lock by the while loop
                     time.sleep(0.01)
                 
                 if taskidx_acquired is not None:
+
                     FITS_REF = self.FITS_REF_Queue[taskidx_acquired]
                     FITS_SCI = self.FITS_SCI_Queue[taskidx_acquired]
                     FITS_DIFF = self.FITS_DIFF_Queue[taskidx_acquired]
@@ -494,10 +561,11 @@ class MultiEasy_SparsePacket:
 
                     with lock:
                         # NOTE: IN FACT, THERE IS NO RISK HERE EVEN WITHOUT LOCK.
-                        SFFTPrepDict = DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['SFFTPrepDict']
+                        SFFTPrepDict = DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['SFFTPrepDict']
                     
                     try:
                         with TimeoutAfter(timeout=TIMEOUT_4SUBTRACT_EACHTASK, exception=TimeoutError):                    
+                            
                             # * Determine ConvdSide & KerHW
                             FWHM_REF = SFFTPrepDict['FWHM_REF']
                             FWHM_SCI = SFFTPrepDict['FWHM_SCI']
@@ -515,19 +583,31 @@ class MultiEasy_SparsePacket:
                             else: KerHW = GKerHW
                             
                             # * Compile Functions in SFFT Subtraction
-                            from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
+                            
 
                             PixA_REF = SFFTPrepDict['PixA_REF']
                             PixA_SCI = SFFTPrepDict['PixA_SCI']
+                            
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'TRIGGER Function Compilations of SFFT-SUBTRACTION'
+                                print('MeLOn CheckPoint: %s' %_message)
 
                             Tcomp_start = time.time()
-                            SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], KerHW=KerHW, \
-                                KerPolyOrder=self.KerPolyOrder, BGPolyOrder=self.BGPolyOrder, ConstPhotRatio=self.ConstPhotRatio, \
-                                BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
-                            print('\nMeLOn Report: Compiling Functions in SFFT Subtraction Takes [%.3f s]' %(time.time() - Tcomp_start))
+                            GPU_MEMORY_CLEANED = False
+                            SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], \
+                                KerHW=KerHW, KerPolyOrder=self.KerPolyOrder, BGPolyOrder=self.BGPolyOrder, \
+                                ConstPhotRatio=self.ConstPhotRatio, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
+                                VERBOSE_LEVEL=self.VERBOSE_LEVEL)
+
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'Function Compilations of SFFT-SUBTRACTION '
+                                _message += 'TAKES [%.3f s]!' %(time.time() - Tcomp_start)
+                                print('\nMeLOn Report: %s' %_message)
 
                             # * Perform SFFT Subtraction
-                            from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
+                            
 
                             SatMask_REF = SFFTPrepDict['REF-SAT-Mask']
                             SatMask_SCI = SFFTPrepDict['SCI-SAT-Mask']
@@ -559,37 +639,104 @@ class MultiEasy_SparsePacket:
                                     ContamMask_J = SatMask_REF
                                 else: ContamMask_I = None
 
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'TRIGGER Function Executions of SFFT-SUBTRACTION!'
+                                print('MeLOn CheckPoint: %s' %_message)
+
                             Tsub_start = time.time()
                             _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
                                 SFFTConfig=SFFTConfig, ContamMask_I=ContamMask_I, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-                                CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
+                                VERBOSE_LEVEL=self.VERBOSE_LEVEL)
+                            
                             Solution, PixA_DIFF, ContamMask_CI = _tmp
-                            if self.MaskSatContam:
-                                ContamMask_DIFF = np.logical_or(ContamMask_CI, ContamMask_J)
-                            print('\nMeLOn Report: SFFT Subtraction Takes [%.3f s]' %(time.time() - Tsub_start))
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'Function Executions of SFFT-SUBTRACTION'
+                                _message += 'TAKES [%.3f s]!' %(time.time() - Tsub_start)
+                                print('\nMeLOn Report: %s' %_message)
 
+                            # ** adjust the sign of difference image 
+                            #    NOTE: Our convention is to make the transients on SCI always show themselves as positive signal on DIFF
+                            #    (a) when REF is convolved, DIFF = SCI - Conv(REF)
+                            #    (b) when SCI is convolved, DIFF = Conv(SCI) - REF
+
+                            if ConvdSide == 'SCI':
+                                PixA_DIFF = -PixA_DIFF
+
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                if ConvdSide == 'REF':
+                                    _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                    _message += 'Reference Image is Convolved in SFFT-SUBTRACTION [DIFF = SCI - Conv(REF)]!'
+                                    print('MeLOn CheckPoint: %s' %_message)
+
+                                if ConvdSide == 'SCI':
+                                    _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                    _message += 'Science Image is Convolved in SFFT-SUBTRACTION [DIFF = Conv(SCI) - REF]!'
+                                    print('MeLOn CheckPoint: %s' %_message)
+
+                            # ** estimate the flux scaling through the convolution of image subtraction
+                            #    NOTE: if photometric ratio is not constant (ConstPhotRatio=False), we measure of a grid
+                            #          of coordinates to estimate the flux scaling and its fluctuation (polynomial form).
+                            #    NOTE: here we set the tile-size of the grid about 64 x 64 pix, but meanwhile, 
+                            #          we also require the tiles should no less than 6 along each axis.
+
+                            N0, N1 = SFFTConfig[0]['N0'], SFFTConfig[0]['N1']
+                            L0, L1 = SFFTConfig[0]['L0'], SFFTConfig[0]['L1']
+                            DK, Fpq = SFFTConfig[0]['DK'], SFFTConfig[0]['Fpq']
+
+                            if self.ConstPhotRatio:
+                                SFFT_FSCAL_NSAMP = 1
+                                XY_q = np.array([[N0/2.0, N1/2.0]]) + 0.5
+                                RFS = Realize_FluxScaling(XY_q=XY_q)
+                                SFFT_FSCAL_q = RFS.FromArray(Solution=Solution, N0=N0, N1=N1, L0=L0, L1=L1, DK=DK, Fpq=Fpq)
+                                SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG = SFFT_FSCAL_q[0], 0.0
+                            
+                            if not self.ConstPhotRatio:
+                                TILESIZE_X, TILESIZE_Y = 64, 64    # FIXME emperical/arbitrary values
+                                NTILE_X = np.max([round(N0/TILESIZE_X), 6])
+                                NTILE_Y = np.max([round(N1/TILESIZE_Y), 6])
+                                GX = np.linspace(0.5, N0+0.5, NTILE_X+1)
+                                GY = np.linspace(0.5, N1+0.5, NTILE_Y+1)
+                                YY, XX = np.meshgrid(GY, GX)
+                                XY_q = np.array([XX.flatten(), YY.flatten()]).T
+                                SFFT_FSCAL_NSAMP = XY_q.shape[0]
+                                
+                                RFS = Realize_FluxScaling(XY_q=XY_q)
+                                SFFT_FSCAL_q = RFS.FromArray(Solution=Solution, N0=N0, N1=N1, L0=L0, L1=L1, DK=DK, Fpq=Fpq)
+                                SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG = np.mean(SFFT_FSCAL_q), np.std(SFFT_FSCAL_q)
+
+                            PHOT_FSCAL = 10**(SFFTPrepDict['MAG_OFFSET']/-2.5)  # FLUX_SCI/FLUX_REF
+                            if ConvdSide == 'SCI': PHOT_FSCAL = 1.0/PHOT_FSCAL
+
+                            if self.VERBOSE_LEVEL in [1, 2]:
+                                _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                _message += 'The Flux Scaling through the Convolution of SFFT-SUBTRACTION '
+                                _message += '[%.6f +/- %.6f] from [%d] positions!\n' %(SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG, SFFT_FSCAL_NSAMP)
+                                _message += 'P.S. The approximated Flux Scaling from Photometry [%.6f].' %PHOT_FSCAL
+                                print('MeLOn CheckPoint: %s' %_message)
+                            
+                            # ** run post anomaly check (PAC)
                             if self.PostAnomalyCheck:
-                                warnings.warn('\nMeLOn WARNING: Post-Anomaly Check requires correct GAIN values!')
-                                # TODO: Incorporate weight-maps of the input image pair for more accurate FLUXERR.
 
                                 """
                                 # Remarks on the Post Anomaly Check (PAC)
-                                # [1] Recall that Elaborate Variable Rejection (EVREJ) also use SExtractor photometric errors to identify variables.
-                                #     I would say, PAC should be more accurate than EVREJ.
+                                # [1] One may notice that Elaborate Variable Rejection (EVREJ) also use SExtractor 
+                                #     photometric errors to identify variables. However, PAC should be more accurate than EVREJ.
                                 #     NOTE: Bright transients (compared with its host) can be also identified by PAC.
                                 #
                                 # [2] distribution mean: image subtraction is expected to have better accuracy on the determination 
                                 #     of the photometric scaling, compared with the constant MAG_OFFSET in EVREJ. As a result,
                                 #     the flux change counted on the difference image is likely more 'real' than that in EVREJ.
                                 #
-                                # [3] distribution variance: i) inaccurate SExtractor FLUXERR especially at the bright end
-                                #     and ii) the error of MAG_OFFSET affect one FLUXERR scaling.
-                                #     NOTE: The imperfections on distribution variance are just same as EVREJ.
-                                #     NOTE: Using SFFT kernel sum would be better than MAG_OFFSET for scaling FLUXERR. 
-                                #           For simplicity, howerver, we use MAG_OFFSET (with error << 5%) which is good enough here.
+                                # [3] distribution variance: SExtractor FLUXERR_AUTO can be inaccurate, and the convolution effect
+                                #     on the photometric errors has been simplified as multiplying an average flux scaling on an image.
                                 #
                                 """
-                                
+
+                                if self.VERBOSE_LEVEL in [2]:
+                                    warnings.warn('\nMeLOn REMINDER: Post-Anomaly Check requires CORRECT GAIN in FITS HEADER!')
+
                                 AstSEx_SS = SFFTPrepDict['SExCatalog-SubSource']
                                 SFFTLmap = SFFTPrepDict['SFFT-LabelMap']
                                 
@@ -600,17 +747,15 @@ class MultiEasy_SparsePacket:
                                 else: AstSEx_vSS = AstSEx_SS
                                 
                                 # ** Estimate expected variance of Non-Prior-Banned SubSources on the difference
-                                MAG_OFFSET = SFFTPrepDict['MAG_OFFSET']
-                                FLUX_SCAL = 10**(MAG_OFFSET/-2.5)  # FLUX_SCI/FLUX_REF
-
                                 FLUXERR_vSSr = np.array(AstSEx_vSS['FLUXERR_AUTO_REF'])
                                 FLUXERR_vSSs = np.array(AstSEx_vSS['FLUXERR_AUTO_SCI'])
 
                                 if ConvdSide == 'REF':
-                                    sFLUXERR_vSSr = FLUXERR_vSSr * FLUX_SCAL
+                                    sFLUXERR_vSSr = FLUXERR_vSSr * SFFT_FSCAL_MEAN
                                     ExpDVAR_vSS = sFLUXERR_vSSr**2 + FLUXERR_vSSs**2
+
                                 if ConvdSide == 'SCI':
-                                    sFLUXERR_vSSs = FLUXERR_vSSs / FLUX_SCAL
+                                    sFLUXERR_vSSs = FLUXERR_vSSs * SFFT_FSCAL_MEAN
                                     ExpDVAR_vSS = FLUXERR_vSSr**2 + sFLUXERR_vSSs**2
 
                                 # ** Measure the ratios of Non-Prior-Banned SubSources on the difference for PAC
@@ -619,10 +764,12 @@ class MultiEasy_SparsePacket:
                                 RATIO_vSS = DFSUM_vSS / np.clip(np.sqrt(ExpDVAR_vSS), a_min=1e-8, a_max=None)
                                 PAMASK_vSS = np.abs(RATIO_vSS) > self.PAC_RATIO_THRESH
 
-                                _message = 'FIND [%d] PostAnomaly SubSources [> %.2f sigma] ' %(np.sum(PAMASK_vSS), self.PAC_RATIO_THRESH)
-                                _message += 'out of [%d] Non-Prior-Banned SubSources!\n' %(len(AstSEx_vSS))
-                                _message += 'P.S. there are [%d] Prior-Banned SubSources!' %(len(AstSEx_SS) - len(AstSEx_vSS))
-                                print('\nMeLOn CheckPoint: %s' %_message)
+                                if self.VERBOSE_LEVEL in [1, 2]:
+                                    _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                                    _message += 'Identified [%d] PostAnomaly SubSources [> %.2f sigma] ' %(np.sum(PAMASK_vSS), self.PAC_RATIO_THRESH)
+                                    _message += 'out of [%d] Non-Prior-Banned SubSources!\n' %(len(AstSEx_vSS))
+                                    _message += 'P.S. there are [%d] Prior-Banned SubSources!' %(len(AstSEx_SS) - len(AstSEx_vSS))
+                                    print('\nMeLOn CheckPoint: %s' %_message)
                                 
                                 # ** Record the results (decorate AstSEx_SS in SFFTPrepDict)
                                 if 'MASK_PriorBan' in AstSEx_SS.colnames:
@@ -645,27 +792,43 @@ class MultiEasy_SparsePacket:
                                 AstSEx_SS.add_column(Column(DFSUM_SS, name='DFSUM_PostAnomaly'))
                                 AstSEx_SS.add_column(Column(RATIO_SS, name='RATIO_PostAnomaly'))
                                 AstSEx_SS.add_column(Column(PAMASK_SS, name='MASK_PostAnomaly'))
-
-                            # * Modifications on the difference image
-                            #   a) when REF is convolved, DIFF = SCI - Conv(REF)
-                            #      PSF_DIFF is coincident with SCI, transients on SCI are positive signal in DIFF.
-                            #   b) when SCI is convolved, DIFF = Conv(SCI) - REF
-                            #      PSF_DIFF is coincident with REF, transients on SCI are still positive signal in DIFF.
-
+                            
+                            # ** final tweaks on the difference image
                             if NaNmask_U is not None:
-                                # ** Mask Union-NaN region
-                                PixA_DIFF[NaNmask_U] = np.nan
+                                PixA_DIFF[NaNmask_U] = np.nan   # Mask Union-NaN regions
+                            
                             if self.MaskSatContam:
-                                # ** Mask Saturate-Contaminate region 
-                                PixA_DIFF[ContamMask_DIFF] = np.nan
-                            if ConvdSide == 'SCI': 
-                                # ** Flip difference when science is convolved
-                                PixA_DIFF = -PixA_DIFF
+                                ContamMask_DIFF = np.logical_or(ContamMask_CI, ContamMask_J)
+                                PixA_DIFF[ContamMask_DIFF] = np.nan   # Mask Saturation-Contaminated regions
                             
                             # * Save difference image
                             if FITS_DIFF is not None:
+
+                                """
+                                # Remarks on header of difference image
+                                # [1] In general, the FITS header of difference image would mostly be inherited from science image.
+                                #
+                                # [2] when science image is convolved, we turn to set GAIN_DIFF = GAIN_SCI / SFFT_FSCAL_MEAN (unit: e-/ADU)
+                                #     so that one can correctly convert ADU to e- for a transient appears on science image.
+                                #     WARNING: for a transient appears on reference image, GAIN_DIFF = GAIN_SCI is correct.
+                                #              we should keep in mind that GAIN_DIFF is not an absolute instrumental value.
+                                #     WARNING: one can only estimate the Poission noise from the science transient via GIAN_DIFF.
+                                #              the Poission noise from the background source (host galaxy) can enhance the 
+                                #              background noise at the position of the transient. photometry softwares which 
+                                #              only take background noise and transient Possion noise into account would tend 
+                                #              to overestimate the SNR of the transient.
+                                # 
+                                # [3] when science image is convolved, we turn to set SATURA_DIFF = SATURA_SCI * SFFT_FSCAL_MEAN         
+                                #     WARNING: it is still not a good idea to use SATURA_DIFF to identify the SATURATION regions
+                                #              on difference image. more appropriate way is masking the saturation contaminated 
+                                #              regions on difference image (MaskSatContam=True), or alternatively, leave them  
+                                #              alone and using AI stamp classifier to reject saturation-related bogus.
+                                #
+                                """
+
                                 _hdl = fits.open(FITS_SCI)
                                 _hdl[0].data[:, :] = PixA_DIFF.T
+
                                 _hdl[0].header['NAME_REF'] = (pa.basename(FITS_REF), 'MeLOn: SFFT')
                                 _hdl[0].header['NAME_SCI'] = (pa.basename(FITS_SCI), 'MeLOn: SFFT')
                                 _hdl[0].header['FWHM_REF'] = (FWHM_REF, 'MeLOn: SFFT')
@@ -675,6 +838,16 @@ class MultiEasy_SparsePacket:
                                 _hdl[0].header['CPHOTR'] = (str(self.ConstPhotRatio), 'MeLOn: SFFT')
                                 _hdl[0].header['KERHW'] = (KerHW, 'MeLOn: SFFT')
                                 _hdl[0].header['CONVD'] = (ConvdSide, 'MeLOn: SFFT')
+
+                                if ConvdSide == 'SCI':
+                                    GAIN_SCI = _hdl[0].header[self.GAIN_KEY]
+                                    SATUR_SCI = _hdl[0].header[self.SATUR_KEY]
+                                    GAIN_DIFF = GAIN_SCI / SFFT_FSCAL_MEAN
+                                    SATUR_DIFF = SATUR_SCI * SFFT_FSCAL_MEAN
+
+                                    _hdl[0].header[self.GAIN_KEY] = (GAIN_DIFF, 'MeLOn: SFFT')
+                                    _hdl[0].header[self.SATUR_KEY] = (SATUR_DIFF, 'MeLOn: SFFT')
+
                                 _hdl.writeto(FITS_DIFF, overwrite=True)
                                 _hdl.close()
                             
@@ -696,32 +869,60 @@ class MultiEasy_SparsePacket:
                                 PixA_Solution = Solution.reshape((-1, 1))
                                 phdu.data = PixA_Solution.T
                                 fits.HDUList([phdu]).writeto(FITS_Solution, overwrite=True)
-
+                        
                         NEW_STATUS = 2
-                        _message = 'Successful Subtraction for task-[%d] ' %taskidx_acquired
-                        _message += 'in Subtraction thread-[%d]!' %INDEX_THREAD_4SUBTRACT
-                        print('\nMeLOn CheckPoint: %s' %_message)
-
-                    except:
-                        # ** free GPU memory when the subtraction fails
-                        import cupy as cp
+                        if self.VERBOSE_LEVEL in [1, 2]:
+                            _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                            _message += 'SUCCESSFUL SFFT-SUBTRACTION!'
+                            print('\nMeLOn CheckPoint: %s' %_message)
+                    
+                    except Exception as e:
+                        PixA_DIFF, Solution = None, None
+                        SFFT_FSCAL_MEAN, SFFT_FSCAL_SIG = np.nan, np.nan
+                        
+                        # ** clean GPU memory when the subtraction fails
                         with cp.cuda.Device(int(CUDA_DEVICE_4SUBTRACT)):
                             mempool = cp.get_default_memory_pool()
                             pinned_mempool = cp.get_default_pinned_memory_pool()
                             mempool.free_all_blocks()
                             pinned_mempool.free_all_blocks()
-
+                            
+                        GPU_MEMORY_CLEANED = True
+                        if self.VERBOSE_LEVEL in [2]:
+                            _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                            _message += 'CLEAN GPU-[%s] MEMORY!' %CUDA_DEVICE_4SUBTRACT
+                            print('\nMeLOn CheckPoint: %s' %_message)
+                        
                         NEW_STATUS = -2
-                        _error_message = 'UnSuccessful Subtraction for task-[%d] ' %taskidx_acquired
-                        _error_message += 'in Subtraction thread-[%d]!' %INDEX_THREAD_4SUBTRACT
-                        print('\nMeLOn ERROR: %s' %_error_message)
-                        Solution = None
-                        PixA_DIFF = None
-
+                        if self.VERBOSE_LEVEL in [0, 1, 2]:
+                            print(e, file=sys.stderr)
+                            _error_message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
+                            _error_message += 'FAILED SFFT-SUBTRACTION!'
+                            print('\nMeLOn ERROR: %s' %_error_message)
+                    
                     with lock:
-                        DICT_STATUS_BAR['task-[%d]' %taskidx_acquired] = NEW_STATUS
-                        DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['Solution'] = Solution
-                        DICT_PRODUCTS['task-[%d]' %taskidx_acquired]['PixA_DIFF'] = PixA_DIFF
+                        DICT_STATUS_BAR['TASK-[%d]' %taskidx_acquired] = NEW_STATUS
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['PixA_DIFF'] = PixA_DIFF
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['Solution'] = Solution
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['SFFT_FSCAL_MEAN'] = SFFT_FSCAL_MEAN
+                        DICT_PRODUCTS['TASK-[%d]' %taskidx_acquired]['SFFT_FSCAL_SIG'] = SFFT_FSCAL_SIG
+                    
+            if self.CLEAN_GPU_MEMORY:
+                if not GPU_MEMORY_CLEANED:
+                    mempool = cp.get_default_memory_pool()
+                    pinned_mempool = cp.get_default_pinned_memory_pool()
+                    mempool.free_all_blocks()
+                    pinned_mempool.free_all_blocks()
+                    
+                    if self.VERBOSE_LEVEL in [1, 2]:
+                        _message = 'THREAD-4SUBTRACT-[%d]: ' %INDEX_THREAD_4SUBTRACT
+                        _message += 'FINAL CLEAN GPU-[%s] MEMORY ' %CUDA_DEVICE_4SUBTRACT
+                        print('\nMeLOn CheckPoint: %s' %_message)
+                else:
+                    if self.VERBOSE_LEVEL in [1, 2]:
+                        _message = 'THREAD-4SUBTRACT-[%d]: ' %INDEX_THREAD_4SUBTRACT
+                        _message += 'SKIP FINAL CLEAN, SINCE GPU-[%s] MEMORY ALREADY CLEANED' %CUDA_DEVICE_4SUBTRACT
+                        print('\nMeLOn CheckPoint: %s' %_message)
 
             return None
         
@@ -740,4 +941,9 @@ class MultiEasy_SparsePacket:
         for MyThread in MyThreadQueue:
             MyThread.join()
         
+        # * show a summary
+        if self.VERBOSE_LEVEL in [0, 1, 2]:
+            NUM_SUCCESS = np.sum(np.array([DICT_STATUS_BAR[task] for task in DICT_STATUS_BAR]) == 2)
+            print('\nMeLOn CheckPoint: SFFT PROCESSED [%d / %d] TASKS SUCCESSFULLY!' %(NUM_SUCCESS, self.NUM_TASK))
+
         return DICT_STATUS_BAR, DICT_PRODUCTS

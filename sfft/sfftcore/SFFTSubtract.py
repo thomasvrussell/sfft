@@ -1,550 +1,33 @@
-import os
-import sys
 import time
 import numpy as np
-# version: Jan 12, 2023
+# version: Feb 25, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.4"
 
-class ElementalSFFTSubtract_Pycuda:
-    @staticmethod
-    def ESSP(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, CUDA_DEVICE_4SUBTRACT='0'):
-
-        import warnings
-        import pycuda.autoinit
-        from pycuda.cumath import exp
-        import pycuda.gpuarray as gpuarray
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            import skcuda.fft as cu_fft
-            import skcuda.linalg as sklinalg
-            import skcuda.cusolver as sksolver
-        os.environ["CUDA_DEVICE"] = CUDA_DEVICE_4SUBTRACT
-
-        def LSSolver(LHMAT_GPU, RHb_GPU):
-
-            H, W = LHMAT_GPU.shape
-            A_GPU = LHMAT_GPU.T.copy().astype(np.float64)
-            b_GPU = RHb_GPU.copy().astype(np.float64)
-
-            handle = sksolver.cusolverDnCreate()
-            Lwork = sksolver.cusolverDnDgetrf_bufferSize(handle, H, W, A_GPU.gpudata, H)
-            workspace_gpu = gpuarray.zeros(Lwork, dtype=np.float64)
-
-            devipiv_GPU = gpuarray.zeros(min(A_GPU.shape), dtype=np.int64)
-            devinfo_GPU = gpuarray.zeros(1, dtype=np.int64)
-
-            # * LU decomposition 
-            sksolver.cusolverDnDgetrf(handle=handle, m=H, n=W, \
-                a=A_GPU.gpudata, lda=H, workspace=workspace_gpu.gpudata, \
-                devIpiv=devipiv_GPU.gpudata, devInfo=devinfo_GPU.gpudata)
-
-            # * cusolver-based (~200 times faster than np.linalg.solve)
-            sksolver.cusolverDnDgetrs(handle=handle, trans="n", n=H, nrhs=1, a=A_GPU.gpudata, lda=H, \
-                devIpiv=devipiv_GPU.gpudata, B=b_GPU.gpudata, ldb=H, devInfo=devinfo_GPU.gpudata)
-            sksolver.cusolverDnDestroy(handle)
-            Solution_GPU = b_GPU
-
-            return Solution_GPU
-
-        ta = time.time()
-        # * Read SFFT parameters
-        print('\n  --||--||--||--||-- TRIGGER SFFT SUBTRACTION --||--||--||--||-- ')
-        print('\n  ---||--- KerPolyOrder %d | BGPolyOrder %d | KerHW [%d] ---||--- '\
-            %(SFFTConfig[0]['DK'], SFFTConfig[0]['DB'], SFFTConfig[0]['w0']))
-
-        SFFTParam_dict, SFFTModule_dict = SFFTConfig
-        N0, N1 = SFFTParam_dict['N0'], SFFTParam_dict['N1']
-        w0, w1 = SFFTParam_dict['w0'], SFFTParam_dict['w1']
-        DK, DB = SFFTParam_dict['DK'], SFFTParam_dict['DB']
-
-        if PixA_I.shape != (N0, N1) or PixA_J.shape != (N0, N1):
-            sys.exit('MeLOn ERROR: Inconsistent Shape of Input Images I & J, required [%d, %d] !' %(N0, N1))
-
-        ConstPhotRatio = SFFTParam_dict['ConstPhotRatio']
-        MaxThreadPerB = SFFTParam_dict['MaxThreadPerB']
-        
-        L0, L1 = SFFTParam_dict['L0'], SFFTParam_dict['L1']
-        Fab, Fij, Fpq = SFFTParam_dict['Fab'], SFFTParam_dict['Fij'], SFFTParam_dict['Fpq']
-        SCALE, SCALE_L = SFFTParam_dict['SCALE'], SFFTParam_dict['SCALE_L']
-
-        NEQ, Fijab = SFFTParam_dict['NEQ'], SFFTParam_dict['Fijab']
-        NEQ_FSfree = SFFTParam_dict['NEQ_FSfree']
-
-        FOMG, FGAM = SFFTParam_dict['FOMG'], SFFTParam_dict['FGAM']
-        FTHE, FPSI = SFFTParam_dict['FTHE'], SFFTParam_dict['FPSI']
-        FPHI, FDEL = SFFTParam_dict['FPHI'], SFFTParam_dict['FDEL']
-        
-        # * Grid-Block-Thread Managaement [Pixel-Level]
-        GPUManage = lambda NT: ((NT-1)//MaxThreadPerB + 1, min(NT, MaxThreadPerB))
-        BpG_PIX0, TpB_PIX0 = GPUManage(N0)
-        BpG_PIX1, TpB_PIX1 = GPUManage(N1)
-        BpG_PIX, TpB_PIX = (BpG_PIX0, BpG_PIX1), (TpB_PIX0, TpB_PIX1, 1)
-
-        # * Define First-order MultiIndex Reference
-        REF_pq = np.array([(p, q) for p in range(DB+1) for q in range(DB+1-p)]).astype(np.int32)
-        REF_ij = np.array([(i, j) for i in range(DK+1) for j in range(DK+1-i)]).astype(np.int32)
-        REF_ab = np.array([(a_pos-w0, b_pos-w1) for a_pos in range(L0) for b_pos in range(L1)]).astype(np.int32)
-        REF_pq_GPU = gpuarray.to_gpu(REF_pq)
-        REF_ij_GPU = gpuarray.to_gpu(REF_ij)
-        REF_ab_GPU = gpuarray.to_gpu(REF_ab)
-
-        # * Define Second-order MultiIndex Reference
-        SREF_iji0j0 = np.array([(ij, i0j0) for ij in range(Fij) for i0j0 in range(Fij)]).astype(np.int32)
-        SREF_pqp0q0 = np.array([(pq, p0q0) for pq in range(Fpq) for p0q0 in range(Fpq)]).astype(np.int32)
-        SREF_ijpq = np.array([(ij, pq) for ij in range(Fij) for pq in range(Fpq)]).astype(np.int32)
-        SREF_pqij = np.array([(pq, ij) for pq in range(Fpq) for ij in range(Fij)]).astype(np.int32)
-        SREF_ijab = np.array([(ij, ab) for ij in range(Fij) for ab in range(Fab)]).astype(np.int32)
-
-        SREF_iji0j0_GPU = gpuarray.to_gpu(SREF_iji0j0)
-        SREF_pqp0q0_GPU = gpuarray.to_gpu(SREF_pqp0q0)
-        SREF_ijpq_GPU = gpuarray.to_gpu(SREF_ijpq)
-        SREF_pqij_GPU = gpuarray.to_gpu(SREF_pqij)
-        SREF_ijab_GPU = gpuarray.to_gpu(SREF_ijab)
-
-        # * Define the Forbidden ij-ab Rule
-        ij00 = np.arange(w0 * L1 + w1, Fijab, Fab).astype(np.int32)
-        if ConstPhotRatio:
-            FBijab = ij00[1:]
-            MASK_nFS = np.ones(NEQ).astype(bool)
-            MASK_nFS[FBijab] = False            
-            IDX_nFS = np.where(MASK_nFS)[0].astype(np.int32)
-            IDX_nFS_GPU = gpuarray.to_gpu(IDX_nFS)
-            NEQ_FSfree = len(IDX_nFS)
-
-        t0 = time.time()
-        # * Read input images as C-order arrays
-        if not PixA_I.flags['C_CONTIGUOUS']:
-            PixA_I = np.ascontiguousarray(PixA_I, np.float64)
-            PixA_I_GPU = gpuarray.to_gpu(PixA_I)
-        else: PixA_I_GPU = gpuarray.to_gpu(PixA_I.astype(np.float64))
-        
-        if not PixA_J.flags['C_CONTIGUOUS']:
-            PixA_J = np.ascontiguousarray(PixA_J, np.float64)
-            PixA_J_GPU = gpuarray.to_gpu(PixA_J)
-        else: PixA_J_GPU = gpuarray.to_gpu(PixA_J.astype(np.float64))
-        dt0 = time.time() - t0
-
-        # * Symbol Convention NOTE
-        #    X (x) / Y (y) ----- pixel row / column index
-        #    CX (cx) / CY (cy) ----- ScaledFortranCoor of pixel (x, y) center   
-        #    e.g. pixel (x, y) = (3, 5) corresponds (cx, cy) = (4.0/N0, 6.0/N1)
-        #    NOTE cx / cy is literally \mathtt{x} / \mathtt{y} in sfft paper.
-        #    NOTE Without special definition, MeLOn convention refers to X (x) / Y (y) as FortranCoor.
-
-        # * Get Spatial Coordinates
-        t1 = time.time()
-        PixA_X_GPU = gpuarray.zeros((N0, N1), dtype=np.int32)      # row index, [0, N0)
-        PixA_Y_GPU = gpuarray.zeros((N0, N1), dtype=np.int32)      # column index, [0, N1)
-        PixA_CX_GPU = gpuarray.zeros((N0, N1), dtype=np.float64)   # coordinate.x
-        PixA_CY_GPU = gpuarray.zeros((N0, N1), dtype=np.float64)   # coordinate.y 
-
-        _module = SFFTModule_dict['SpatialCoor']
-        _func = _module.get_function('kmain')
-        _func(PixA_X_GPU, PixA_Y_GPU, PixA_CX_GPU, PixA_CY_GPU, block=TpB_PIX, grid=BpG_PIX)
-
-        # * Spatial Polynomial terms Tij, Iij, Tpq
-        SPixA_Iij_GPU = gpuarray.zeros((Fij, N0, N1), dtype=np.float64)
-        SPixA_Tpq_GPU = gpuarray.zeros((Fpq, N0, N1), dtype=np.float64)
-
-        _module = SFFTModule_dict['SpatialPoly']
-        _func = _module.get_function('kmain')
-        _func(REF_ij_GPU, REF_pq_GPU, PixA_CX_GPU, PixA_CY_GPU, PixA_I_GPU, \
-            SPixA_Iij_GPU, SPixA_Tpq_GPU, block=TpB_PIX, grid=BpG_PIX)
-        PixA_I_GPU.gpudata.free()
-        dt1 = time.time() - t1
-
-        t2 = time.time()
-
-        # * Empirical Trick on FFT-Plan
-        EmpFFTPlan = False
-        plan_once = cu_fft.Plan((N0, N1), np.complex128, np.complex128)
-        if DK == 2 and DB == 2:
-            EmpFFTPlan = True
-            plan_12 = cu_fft.Plan((N0, N1), np.complex128, np.complex128, 12)
-
-        # * Make DFT of J, Iij, Tpq and their conjugates
-        if EmpFFTPlan:
-            PixA_FJ_GPU = PixA_J_GPU.astype(np.complex128)
-            cu_fft.fft(PixA_FJ_GPU, PixA_FJ_GPU, plan_once, scale=True)
-
-            _SPixA_FFT_GPU = gpuarray.empty((12, N0, N1), dtype=np.complex128)
-            _SPixA_FFT_GPU[:6, :] = SPixA_Iij_GPU.astype(np.complex128)
-            _SPixA_FFT_GPU[6:, :] = SPixA_Tpq_GPU.astype(np.complex128)
-
-            cu_fft.fft(_SPixA_FFT_GPU, _SPixA_FFT_GPU, plan_12, scale=True)
-            SPixA_FIij_GPU = _SPixA_FFT_GPU[:6, :]
-            SPixA_FTpq_GPU = _SPixA_FFT_GPU[6:, :]
-            
-        if not EmpFFTPlan:
-            Batchsize = 1 + Fij + Fpq
-            _SPixA_FFT_GPU = gpuarray.empty((Batchsize, N0, N1), dtype=np.complex128)
-            _SPixA_FFT_GPU[0, :, :] = PixA_J_GPU.astype(np.complex128)
-            _SPixA_FFT_GPU[1: Fij+1, :, :] = SPixA_Iij_GPU.astype(np.complex128)
-            _SPixA_FFT_GPU[Fij+1:, :, :] = SPixA_Tpq_GPU.astype(np.complex128)
-
-            plan = cu_fft.Plan((N0, N1), np.complex128, np.complex128, Batchsize)
-            cu_fft.fft(_SPixA_FFT_GPU, _SPixA_FFT_GPU, plan, scale=True)
-            PixA_FJ_GPU = _SPixA_FFT_GPU[0, :, :]
-            SPixA_FIij_GPU = _SPixA_FFT_GPU[1: Fij+1, :, :]
-            SPixA_FTpq_GPU = _SPixA_FFT_GPU[Fij+1:, :, :]
-
-        SPixA_Iij_GPU.gpudata.free()
-        SPixA_Tpq_GPU.gpudata.free()
-
-        PixA_CFJ_GPU = sklinalg.conj(PixA_FJ_GPU)
-        SPixA_CFIij_GPU = sklinalg.conj(SPixA_FIij_GPU)
-        SPixA_CFTpq_GPU = sklinalg.conj(SPixA_FTpq_GPU)
-        dt2 = time.time() - t2
-        dta = time.time() - ta
-
-        print('\nMeLOn CheckPoint: Priminary Time     [%.4fs]' %dta)
-        print('/////   a   ///// Read Input Images  (%.4fs)' %dt0)
-        print('/////   b   ///// Spatial Polynomial (%.4fs)' %dt1)
-        print('/////   c   ///// DFT-%d             (%.4fs)' %(1 + Fij + Fpq, dt2))
-
-        # * Consider The Major Sources of the Linear System 
-        #     𝛀_i8j8ij     &    𝜦_i8j8pq    ||     𝚯_i8j8
-        #     𝜳_p8q8ij     &    𝚽_p8q8pq    ||     𝚫_p8q8   
-        #
-        # * Remarks
-        #    a. They have consistent form: Greek(rho, eps) = PreGreek(Mod_N0(rho), Mod_N1(eps))
-        #    b. PreGreek = s * Re[DFT(HpGreek)], where HpGreek = GLH * GRH and s is some real-scale.
-        #    c. Considering the subscripted variables, HpGreek / PreGreek is Complex / Real 3D with shape (F_Greek, N0, N1).
-        
-        if SFFTSolution is not None:
-            Solution = SFFTSolution 
-            Solution_GPU = gpuarray.to_gpu(Solution.astype(np.float64))
-            a_ijab_GPU = Solution_GPU[: Fijab]
-            b_pq_GPU = Solution_GPU[Fijab: ]
-
-        if SFFTSolution is None:
-            tb = time.time()
-            # * Grid-Block-Thread Managaement [for Greek]
-            BpG_OMG0, TpB_OMG0 = GPUManage(Fijab)
-            BpG_OMG1, TpB_OMG1 = GPUManage(Fijab)
-            BpG_OMG, TpB_OMG = (BpG_OMG0, BpG_OMG1), (TpB_OMG0, TpB_OMG1, 1)
-
-            BpG_GAM0, TpB_GAM0 = GPUManage(Fijab)
-            BpG_GAM1, TpB_GAM1 = GPUManage(Fpq)
-            BpG_GAM, TpB_GAM = (BpG_GAM0, BpG_GAM1), (TpB_GAM0, TpB_GAM1, 1)
-
-            BpG_THE0, TpB_THE0 = GPUManage(Fijab)
-            BpG_THE, TpB_THE = (BpG_THE0, 1), (TpB_THE0, 1, 1)
-
-            BpG_PSI0, TpB_PSI0 = GPUManage(Fpq)
-            BpG_PSI1, TpB_PSI1 = GPUManage(Fijab)
-            BpG_PSI, TpB_PSI = (BpG_PSI0, BpG_PSI1), (TpB_PSI0, TpB_PSI1, 1)
-
-            BpG_PHI0, TpB_PHI0 = GPUManage(Fpq)
-            BpG_PHI1, TpB_PHI1 = GPUManage(Fpq)
-            BpG_PHI, TpB_PHI = (BpG_PHI0, BpG_PHI1), (TpB_PHI0, TpB_PHI1, 1)
-
-            BpG_DEL0, TpB_DEL0 = GPUManage(Fpq)
-            BpG_DEL, TpB_DEL = (BpG_DEL0, 1), (TpB_DEL0, 1, 1)
-
-            LHMAT_GPU = gpuarray.empty((NEQ, NEQ), dtype=np.float64)
-            RHb_GPU = gpuarray.empty(NEQ, dtype=np.float64)
-            t3 = time.time()
-
-            # * -- -- -- -- -- -- -- -- Establish Linear System through 𝛀  -- -- -- -- -- -- -- -- *
-
-            # a. Hadamard Product for 𝛀 [HpOMG]
-            _module = SFFTModule_dict['HadProd_OMG']
-            _func = _module.get_function('kmain')
-            HpOMG_GPU = gpuarray.empty((FOMG, N0, N1), dtype=np.complex128)
-            _func(SREF_iji0j0_GPU, SPixA_FIij_GPU, SPixA_CFIij_GPU, HpOMG_GPU, \
-                block=TpB_PIX, grid=BpG_PIX)
-
-            # b. PreOMG = SCALE * Re[DFT(HpOMG)]
-            if EmpFFTPlan:
-                cu_fft.fft(HpOMG_GPU[:12], HpOMG_GPU[:12], plan_12, scale=True)
-                cu_fft.fft(HpOMG_GPU[12: 24], HpOMG_GPU[12: 24], plan_12, scale=True)
-                cu_fft.fft(HpOMG_GPU[24: 36], HpOMG_GPU[24: 36], plan_12, scale=True)
-
-            if not EmpFFTPlan:
-                plan = cu_fft.Plan((N0, N1), np.complex128, np.complex128, FOMG)
-                cu_fft.fft(HpOMG_GPU, HpOMG_GPU, plan, scale=True)
-
-            HpOMG_GPU = HpOMG_GPU.real 
-            HpOMG_GPU *= SCALE 
-            PreOMG_GPU = HpOMG_GPU
-
-            # c. Fill Linear System with PreOMG
-            _module = SFFTModule_dict['FillLS_OMG']
-            _func = _module.get_function('kmain')
-            _func(SREF_ijab_GPU, REF_ab_GPU, PreOMG_GPU, LHMAT_GPU, \
-                block=TpB_OMG, grid=BpG_OMG)
-
-            PreOMG_GPU.gpudata.free()
-            dt3 = time.time() - t3
-
-            t4 = time.time()
-            # * -- -- -- -- -- -- -- -- Establish Linear System through 𝜦  -- -- -- -- -- -- -- -- *
-
-            # a. Hadamard Product for 𝜦 [HpGAM]
-            _module = SFFTModule_dict['HadProd_GAM']
-            _func = _module.get_function('kmain')
-            HpGAM_GPU = gpuarray.empty((FGAM, N0, N1), dtype=np.complex128)
-            _func(SREF_ijpq_GPU, SPixA_FIij_GPU, SPixA_CFTpq_GPU, HpGAM_GPU, \
-                block=TpB_PIX, grid=BpG_PIX)
-
-            # b. PreGAM = 1 * Re[DFT(HpGAM)]
-            if EmpFFTPlan:
-                cu_fft.fft(HpGAM_GPU[:12], HpGAM_GPU[:12], plan_12, scale=True)
-                cu_fft.fft(HpGAM_GPU[12: 24], HpGAM_GPU[12: 24], plan_12, scale=True)
-                cu_fft.fft(HpGAM_GPU[24: 36], HpGAM_GPU[24: 36], plan_12, scale=True)
-
-            if not EmpFFTPlan:
-                plan = cu_fft.Plan((N0, N1), np.complex128, np.complex128, FGAM)
-                cu_fft.fft(HpGAM_GPU, HpGAM_GPU, plan, scale=True)
-
-            HpGAM_GPU = HpGAM_GPU.real 
-            PreGAM_GPU = HpGAM_GPU
-
-            # c. Fill Linear System with PreGAM
-            _module = SFFTModule_dict['FillLS_GAM']
-            _func = _module.get_function('kmain')
-            _func(SREF_ijab_GPU, REF_ab_GPU, PreGAM_GPU, LHMAT_GPU, \
-                block=TpB_GAM, grid=BpG_GAM)
-
-            PreGAM_GPU.gpudata.free()
-            dt4 = time.time() - t4
-
-            t5 = time.time()
-            # * -- -- -- -- -- -- -- -- Establish Linear System through 𝜳  -- -- -- -- -- -- -- -- *
-            
-            # a. Hadamard Product for 𝜳  [HpPSI]
-            _module = SFFTModule_dict['HadProd_PSI']
-            _func = _module.get_function('kmain')
-            HpPSI_GPU = gpuarray.empty((FPSI, N0, N1), dtype=np.complex128)
-            _func(SREF_pqij_GPU, SPixA_CFIij_GPU, SPixA_FTpq_GPU, HpPSI_GPU, \
-                block=TpB_PIX, grid=BpG_PIX)
-
-            # b. PrePSI = 1 * Re[DFT(HpPSI)]
-            if EmpFFTPlan:
-                cu_fft.fft(HpPSI_GPU[:12], HpPSI_GPU[:12], plan_12, scale=True)
-                cu_fft.fft(HpPSI_GPU[12: 24], HpPSI_GPU[12: 24], plan_12, scale=True)
-                cu_fft.fft(HpPSI_GPU[24: 36], HpPSI_GPU[24: 36], plan_12, scale=True)
-
-            if not EmpFFTPlan:
-                plan = cu_fft.Plan((N0, N1), np.complex128, np.complex128, FPSI)
-                cu_fft.fft(HpPSI_GPU, HpPSI_GPU, plan, scale=True)
-
-            HpPSI_GPU = HpPSI_GPU.real
-            PrePSI_GPU = HpPSI_GPU
-
-            # c. Fill Linear System with PrePSI
-            _module = SFFTModule_dict['FillLS_PSI']
-            _func = _module.get_function('kmain')
-            _func(SREF_ijab_GPU, REF_ab_GPU, PrePSI_GPU, LHMAT_GPU, \
-                block=TpB_PSI, grid=BpG_PSI)
-
-            PrePSI_GPU.gpudata.free()
-            dt5 = time.time() - t5
-
-            t6 = time.time()
-            # * -- -- -- -- -- -- -- -- Establish Linear System through 𝚽  -- -- -- -- -- -- -- -- *
-            
-            
-            # a. Hadamard Product for 𝚽  [HpPHI]
-            _module = SFFTModule_dict['HadProd_PHI']
-            _func = _module.get_function('kmain')
-            HpPHI_GPU = gpuarray.empty((FPHI, N0, N1), dtype=np.complex128)
-            _func(SREF_pqp0q0_GPU, SPixA_FTpq_GPU, SPixA_CFTpq_GPU, HpPHI_GPU, \
-                block=TpB_PIX, grid=BpG_PIX)
-
-            # b. PrePHI = SCALE_L * Re[DFT(HpPHI)]
-            if EmpFFTPlan:
-                cu_fft.fft(HpPHI_GPU[:12], HpPHI_GPU[:12], plan_12, scale=True)
-                cu_fft.fft(HpPHI_GPU[12: 24], HpPHI_GPU[12: 24], plan_12, scale=True)
-                cu_fft.fft(HpPHI_GPU[24: 36], HpPHI_GPU[24: 36], plan_12, scale=True)
-
-            if not EmpFFTPlan:
-                plan = cu_fft.Plan((N0, N1), np.complex128, np.complex128, FPHI)
-                cu_fft.fft(HpPHI_GPU, HpPHI_GPU, plan, scale=True)
-
-            HpPHI_GPU = HpPHI_GPU.real
-            HpPHI_GPU *= SCALE_L
-            PrePHI_GPU = HpPHI_GPU
-
-            # c. Fill Linear System with PrePHI
-            _module = SFFTModule_dict['FillLS_PHI']
-            _func = _module.get_function('kmain')
-            _func(PrePHI_GPU, LHMAT_GPU, block=TpB_PHI, grid=BpG_PHI)
-
-            PrePHI_GPU.gpudata.free()
-            dt6 = time.time() - t6
-
-            t7 = time.time()
-            # * -- -- -- -- -- -- -- -- Establish Linear System through 𝚯 & 𝚫  -- -- -- -- -- -- -- -- *
-
-            # a1. Hadamard Product for 𝚯  [HpTHE]
-            _module = SFFTModule_dict['HadProd_THE']
-            _func = _module.get_function('kmain')
-            HpTHE_GPU = gpuarray.empty((FTHE, N0, N1), dtype=np.complex128)
-            _func(SPixA_FIij_GPU, PixA_CFJ_GPU, HpTHE_GPU, block=TpB_PIX, grid=BpG_PIX)
-
-            # a2. Hadamard Product for 𝚫  [HpDEL]
-            _module = SFFTModule_dict['HadProd_DEL']
-            _func = _module.get_function('kmain')
-            HpDEL_GPU = gpuarray.empty((FDEL, N0, N1), dtype=np.complex128)
-            _func(SPixA_FTpq_GPU, PixA_CFJ_GPU, HpDEL_GPU, block=TpB_PIX, grid=BpG_PIX)
-
-            # b1. PreTHE = 1 * Re[DFT(HpTHE)]
-            # b2. PreDEL = SCALE_L * Re[DFT(HpDEL)]
-            if EmpFFTPlan:
-                SPixA_FFT_GPU = gpuarray.empty((12, N0, N1), dtype=np.complex128)
-                SPixA_FFT_GPU[:6, :] = HpTHE_GPU
-                SPixA_FFT_GPU[6:, :] = HpDEL_GPU
-                HpTHE_GPU.gpudata.free()
-                HpDEL_GPU.gpudata.free()
-                
-                cu_fft.fft(SPixA_FFT_GPU, SPixA_FFT_GPU, plan_12, scale=True)
-                HpTHE_GPU = SPixA_FFT_GPU[:6, :]
-                HpDEL_GPU = SPixA_FFT_GPU[6:, :]
-
-            if not EmpFFTPlan:
-                plan = cu_fft.Plan((N0, N1), np.complex128, np.complex128, FTHE)
-                cu_fft.fft(HpTHE_GPU, HpTHE_GPU, plan, scale=True)
-
-                plan = cu_fft.Plan((N0, N1), np.complex128, np.complex128, FDEL)
-                cu_fft.fft(HpDEL_GPU, HpDEL_GPU, plan, scale=True)
-            
-            HpTHE_GPU = HpTHE_GPU.real
-            PreTHE_GPU = HpTHE_GPU
-
-            HpDEL_GPU = HpDEL_GPU.real
-            HpDEL_GPU *= SCALE_L
-            PreDEL_GPU = HpDEL_GPU
-
-            # c1. Fill Linear System with PreTHE
-            _module = SFFTModule_dict['FillLS_THE']
-            _func = _module.get_function('kmain')
-            _func(SREF_ijab_GPU, REF_ab_GPU, PreTHE_GPU, RHb_GPU, \
-                block=TpB_THE, grid=BpG_THE)
-            PreTHE_GPU.gpudata.free()
-
-            # c2. Fill Linear System with PreDEL
-            _module = SFFTModule_dict['FillLS_DEL']
-            _func = _module.get_function('kmain')
-            _func(PreDEL_GPU, RHb_GPU, block=TpB_DEL, grid=BpG_DEL)
-            
-            PreDEL_GPU.gpudata.free()
-            dt7 = time.time() - t7
-
-            # * -- -- -- -- -- -- -- -- Remove Forbidden Stripes  -- -- -- -- -- -- -- -- *
-            if not ConstPhotRatio: pass
-            if ConstPhotRatio:
-                RHb_FSfree_GPU = gpuarray.take(RHb_GPU, IDX_nFS_GPU)
-                _module = SFFTModule_dict['Remove_LSFStripes']
-                _func = _module.get_function('kmain')
-                BpG_FSfree_PA, TpB_FSfree_PA = GPUManage(NEQ_FSfree)     # Per Axis
-                BpG_FSfree, TpB_FSfree = (BpG_FSfree_PA, BpG_FSfree_PA), (TpB_FSfree_PA, TpB_FSfree_PA, 1)
-                LHMAT_FSfree_GPU = gpuarray.empty((NEQ_FSfree, NEQ_FSfree), dtype=np.float64)
-                _func(LHMAT_GPU, IDX_nFS_GPU, LHMAT_FSfree_GPU, block=TpB_FSfree, grid=BpG_FSfree)
-
-            t8 = time.time()
-            # * -- -- -- -- -- -- -- -- Solve Linear System  -- -- -- -- -- -- -- -- *
-            if not ConstPhotRatio: 
-                Solution_GPU = LSSolver(LHMAT_GPU=LHMAT_GPU, RHb_GPU=RHb_GPU)
-
-            if ConstPhotRatio:
-                # Extend the solution to be consistent form
-                Solution_FSfree_GPU = LSSolver(LHMAT_GPU=LHMAT_FSfree_GPU, RHb_GPU=RHb_FSfree_GPU)
-                _module = SFFTModule_dict['Extend_Solution']
-                _func = _module.get_function('kmain')
-                BpG_ES, TpB_ES = (BpG_FSfree_PA, 1), (TpB_FSfree_PA, 1, 1)
-                Solution_GPU = gpuarray.zeros(NEQ, dtype=np.float64)
-                _func(Solution_FSfree_GPU, IDX_nFS_GPU, Solution_GPU, block=TpB_ES, grid=BpG_ES)
-            
-            a_ijab_GPU = Solution_GPU[: Fijab]
-            b_pq_GPU = Solution_GPU[Fijab: ]
-            Solution = Solution_GPU.get()
-            dt8 = time.time() - t8
-            dtb = time.time() - tb
-
-            print('\nMeLOn CheckPoint: Establish & Solve Linear System     [%.4fs]' %dtb)
-            print('/////   d   ///// Establish OMG                       (%.4fs)' %dt3)
-            print('/////   e   ///// Establish GAM                       (%.4fs)' %dt4)
-            print('/////   f   ///// Establish PSI                       (%.4fs)' %dt5)
-            print('/////   g   ///// Establish PHI                       (%.4fs)' %dt6)
-            print('/////   h   ///// Establish THE & DEL                 (%.4fs)' %dt7)
-            print('/////   i   ///// Solve                               (%.4fs)' %dt8)
-
-        # * Perform Subtraction 
-        PixA_DIFF = None
-        if Subtract:
-            tc = time.time()
-            t9 = time.time()
-            # Calculate Kab components
-            Wl_GPU = exp((-2j*np.pi/N0) * PixA_X_GPU.astype(np.float64))    # row index l, [0, N0)
-            Wm_GPU = exp((-2j*np.pi/N1) * PixA_Y_GPU.astype(np.float64))    # column index m, [0, N1)
-            Kab_Wla_GPU = gpuarray.empty((L0, N0, N1), dtype=np.complex128)
-            Kab_Wmb_GPU = gpuarray.empty((L1, N0, N1), dtype=np.complex128)
-
-            if w0 == w1:
-                wx = w0   # a little bit faster
-                for aob in range(-wx, wx+1):
-                    Kab_Wla_GPU[aob + wx] = Wl_GPU ** aob    # offset 
-                    Kab_Wmb_GPU[aob + wx] = Wm_GPU ** aob    # offset 
-            else:
-                for a in range(-w0, w0+1): 
-                    Kab_Wla_GPU[a + w0] = Wl_GPU ** a      # offset 
-                for b in range(-w1, w1+1): 
-                    Kab_Wmb_GPU[b + w1] = Wm_GPU ** b      # offset 
-            dt9 = time.time() - t9
-
-            t10 = time.time()
-            # Construct Difference in Fourier Space
-            _module = SFFTModule_dict['Construct_FDIFF']
-            _func = _module.get_function('kmain')     
-            PixA_FDIFF_GPU = gpuarray.empty((N0, N1), dtype=np.complex128)
-            _func(SREF_ijab_GPU, REF_ab_GPU, a_ijab_GPU.astype(np.complex128), \
-                SPixA_FIij_GPU, Kab_Wla_GPU, Kab_Wmb_GPU, b_pq_GPU.astype(np.complex128), \
-                SPixA_FTpq_GPU, PixA_FJ_GPU, PixA_FDIFF_GPU, block=TpB_PIX, grid=BpG_PIX)
-            
-            # Get Difference & Reconstructed Images
-            PixA_DIFF_GPU = gpuarray.empty_like(PixA_FDIFF_GPU)
-            cu_fft.ifft(PixA_FDIFF_GPU, PixA_DIFF_GPU, plan_once, scale=False)
-            PixA_DIFF_GPU = PixA_DIFF_GPU.real
-            PixA_DIFF = PixA_DIFF_GPU.get()
-            dt10 = time.time() - t10
-            dtc = time.time() - tc
-
-            print('\nMeLOn CheckPoint: Perform Subtraction     [%.4fs]' %dtc)
-            print('/////   j   ///// Calculate Kab           (%.4fs)' %dt9)
-            print('/////   k   ///// Construct DIFF        (%.4fs)' %dt10)
-        
-        print('\n  --||--||--||--||-- EXIT SFFT SUBTRACTION --||--||--||--||-- ')
-
-        return Solution, PixA_DIFF
-
 class ElementalSFFTSubtract_Cupy:
     @staticmethod
-    def ESSC(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, CUDA_DEVICE_4SUBTRACT='0'):
-
+    def ESSC(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, VERBOSE_LEVEL=2):
+        
         import cupy as cp
         import cupyx.scipy.linalg as cpx_linalg
-        os.environ["CUDA_DEVICE"] = CUDA_DEVICE_4SUBTRACT
 
         def LSSolver(LHMAT_GPU, RHb_GPU):
             """
-            # deprecated cupy version (moderately slow)
+            # NOTE: cupy/numpy (moderately/extremely) slow version has been DEPRECATED!
             Solution_GPU = cp.linalg.solve(LHMAT_GPU, RHb_GPU)
-            # deprecated numpy version (very slow)
             Solution_GPU = cp.array(np.linalg.solve(cp.asnumpy(LHMAT_GPU), cp.asnumpy(RHb_GPU)), dtype=np.float64)
             """
             lu_piv_GPU = cpx_linalg.lu_factor(LHMAT_GPU, overwrite_a=False, check_finite=True)
             Solution_GPU = cpx_linalg.lu_solve(lu_piv_GPU, RHb_GPU)
             return Solution_GPU
-
+        
         ta = time.time()
         # * Read SFFT parameters
-        print('\n  --||--||--||--||-- TRIGGER SFFT SUBTRACTION --||--||--||--||-- ')
-        print('\n  ---||--- KerPolyOrder %d | BGPolyOrder %d | KerHW [%d] ---||--- '\
-            %(SFFTConfig[0]['DK'], SFFTConfig[0]['DB'], SFFTConfig[0]['w0']))
+        if VERBOSE_LEVEL in [1, 2]:
+            print('\n --||--||--||--||-- TRIGGER SFFT SUBTRACTION --||--||--||--||-- ')
+            print('\n ---||--- KerPolyOrder %d | BGPolyOrder %d | KerHW [%d] ---||--- '\
+                   %(SFFTConfig[0]['DK'], SFFTConfig[0]['DB'], SFFTConfig[0]['w0']))
 
         SFFTParam_dict, SFFTModule_dict = SFFTConfig
         N0, N1 = SFFTParam_dict['N0'], SFFTParam_dict['N1']
@@ -552,7 +35,8 @@ class ElementalSFFTSubtract_Cupy:
         DK, DB = SFFTParam_dict['DK'], SFFTParam_dict['DB']
 
         if PixA_I.shape != (N0, N1) or PixA_J.shape != (N0, N1):
-            sys.exit('MeLOn ERROR: Inconsistent Shape of Input Images I & J, required [%d, %d] !' %(N0, N1))
+            _error_message = 'INCONSISTENT shape of input images I & J, [%d, %d] required!' %(N0, N1)
+            raise Exception('MeLOn ERROR: %s' %_error_message)
 
         ConstPhotRatio = SFFTParam_dict['ConstPhotRatio']
         MaxThreadPerB = SFFTParam_dict['MaxThreadPerB']
@@ -685,10 +169,13 @@ class ElementalSFFTSubtract_Cupy:
         dt2 = time.time() - t2
         dta = time.time() - ta
 
-        print('\nMeLOn CheckPoint: Priminary Time     [%.4fs]' %dta)
-        print('/////   a   ///// Read Input Images  (%.4fs)' %dt0)
-        print('/////   b   ///// Spatial Polynomial (%.4fs)' %dt1)
-        print('/////   c   ///// DFT-%d             (%.4fs)' %(1 + Fij + Fpq, dt2))
+        if VERBOSE_LEVEL in [1, 2]:
+            print('\nMeLOn CheckPoint: SFFT-SUBTRACTION Preliminary Steps takes [%.4fs]' %dta)
+
+        if VERBOSE_LEVEL in [2]:
+            print('/////   a   ///// Read Input Images  (%.4fs)' %dt0)
+            print('/////   b   ///// Spatial Polynomial (%.4fs)' %dt1)
+            print('/////   c   ///// DFT-%d             (%.4fs)' %(1 + Fij + Fpq, dt2))
 
         # * Consider The Major Sources of the Linear System 
         #     𝛀_i8j8ij     &    𝜦_i8j8pq    ||     𝚯_i8j8
@@ -780,8 +267,6 @@ class ElementalSFFTSubtract_Cupy:
             PreGAM_GPU = cp.empty((FGAM, N0, N1), dtype=np.float64)
             PreGAM_GPU[:, :, :] = HpGAM_GPU.real
             del HpGAM_GPU
-            # TODO: which is better?
-            #PreGAM_GPU = HpGAM_GPU.real
 
             # c. Fill Linear System with PreGAM
             _module = SFFTModule_dict['FillLS_GAM']
@@ -887,7 +372,6 @@ class ElementalSFFTSubtract_Cupy:
             _func = _module.get_function('kmain')
             _func(args=(SREF_ijab_GPU, REF_ab_GPU, PreTHE_GPU, RHb_GPU), \
                 block=TpB_THE, grid=BpG_THE)
-
             del PreTHE_GPU
 
             # c2. Fill Linear System with PreDEL
@@ -929,13 +413,16 @@ class ElementalSFFTSubtract_Cupy:
             dt8 = time.time() - t8
             dtb = time.time() - tb
 
-            print('\nMeLOn CheckPoint: Establish & Solve Linear System     [%.4fs]' %dtb)
-            print('/////   d   ///// Establish OMG                       (%.4fs)' %dt3)
-            print('/////   e   ///// Establish GAM                       (%.4fs)' %dt4)
-            print('/////   f   ///// Establish PSI                       (%.4fs)' %dt5)
-            print('/////   g   ///// Establish PHI                       (%.4fs)' %dt6)
-            print('/////   h   ///// Establish THE & DEL                 (%.4fs)' %dt7)
-            print('/////   i   ///// Solve                               (%.4fs)' %dt8)
+            if VERBOSE_LEVEL in [1, 2]:
+                print('\nMeLOn CheckPoint: SFFT-SUBTRACTION Establish & Solve Linear System takes [%.4fs]' %dtb)
+
+            if VERBOSE_LEVEL in [2]:
+                print('/////   d   ///// Establish OMG                       (%.4fs)' %dt3)
+                print('/////   e   ///// Establish GAM                       (%.4fs)' %dt4)
+                print('/////   f   ///// Establish PSI                       (%.4fs)' %dt5)
+                print('/////   g   ///// Establish PHI                       (%.4fs)' %dt6)
+                print('/////   h   ///// Establish THE & DEL                 (%.4fs)' %dt7)
+                print('/////   i   ///// Solve Linear System                 (%.4fs)' %dt8)
 
         # * Perform Subtraction 
         PixA_DIFF = None
@@ -975,17 +462,21 @@ class ElementalSFFTSubtract_Cupy:
             dt10 = time.time() - t10
             dtc = time.time() - tc
 
-            print('\nMeLOn CheckPoint: Perform Subtraction     [%.4fs]' %dtc)
-            print('/////   j   ///// Calculate Kab           (%.4fs)' %dt9)
-            print('/////   k   ///// Construct DIFF        (%.4fs)' %dt10)
+            if VERBOSE_LEVEL in [1, 2]:
+                print('\nMeLOn CheckPoint: SFFT-SUBTRACTION Perform Subtraction takes [%.4fs]' %dtc)
+            
+            if VERBOSE_LEVEL in [2]:
+                print('/////   j   ///// Calculate Kab         (%.4fs)' %dt9)
+                print('/////   k   ///// Construct DIFF        (%.4fs)' %dt10)
         
-        print('\n  --||--||--||--||-- EXIT SFFT SUBTRACTION --||--||--||--||-- ')
+        if VERBOSE_LEVEL in [1, 2]:
+            print('\n --||--||--||--||-- EXIT SFFT SUBTRACTION --||--||--||--||-- ')
 
-        return Solution, PixA_DIFF    
+        return Solution, PixA_DIFF
 
 class ElementalSFFTSubtract_Numpy:
     @staticmethod
-    def ESSN(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, NUM_CPU_THREADS_4SUBTRACT=8):
+    def ESSN(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
 
         import pyfftw
         pyfftw.config.NUM_THREADS = NUM_CPU_THREADS_4SUBTRACT
@@ -993,9 +484,10 @@ class ElementalSFFTSubtract_Numpy:
         
         ta = time.time()
         # * Read SFFT parameters
-        print('\n  --||--||--||--||-- TRIGGER SFFT SUBTRACTION --||--||--||--||-- ')
-        print('\n  ---||--- KerPolyOrder %d | BGPolyOrder %d | KerHW [%d] ---||--- '\
-            %(SFFTConfig[0]['DK'], SFFTConfig[0]['DB'], SFFTConfig[0]['w0']))
+        if VERBOSE_LEVEL in [1, 2]:
+            print('\n --||--||--||--||-- TRIGGER SFFT SUBTRACTION --||--||--||--||-- ')
+            print('\n ---||--- KerPolyOrder %d | BGPolyOrder %d | KerHW [%d] ---||--- '\
+                   %(SFFTConfig[0]['DK'], SFFTConfig[0]['DB'], SFFTConfig[0]['w0']))
 
         SFFTParam_dict, SFFTModule_dict = SFFTConfig
         N0, N1 = SFFTParam_dict['N0'], SFFTParam_dict['N1']
@@ -1003,11 +495,10 @@ class ElementalSFFTSubtract_Numpy:
         DK, DB = SFFTParam_dict['DK'], SFFTParam_dict['DB']
 
         if PixA_I.shape != (N0, N1) or PixA_J.shape != (N0, N1):
-            sys.exit('MeLOn ERROR: Inconsistent Shape of Input Images I & J, required [%d, %d] !' %(N0, N1))
+            _error_message = 'INCONSISTENT shape of input images I & J, [%d, %d] required!' %(N0, N1)
+            raise Exception('MeLOn ERROR: %s' %_error_message)
 
         ConstPhotRatio = SFFTParam_dict['ConstPhotRatio']
-        MaxThreadPerB = SFFTParam_dict['MaxThreadPerB']
-
         L0, L1 = SFFTParam_dict['L0'], SFFTParam_dict['L1']
         Fab, Fij, Fpq = SFFTParam_dict['Fab'], SFFTParam_dict['Fij'], SFFTParam_dict['Fpq']
         SCALE, SCALE_L = SFFTParam_dict['SCALE'], SFFTParam_dict['SCALE_L']
@@ -1097,10 +588,13 @@ class ElementalSFFTSubtract_Numpy:
         dt2 = time.time() - t2
         dta = time.time() - ta
 
-        print('\nMeLOn CheckPoint: Priminary Time     [%.4fs]' %dta)
-        print('/////   a   ///// Read Input Images  (%.4fs)' %dt0)
-        print('/////   b   ///// Spatial Polynomial (%.4fs)' %dt1)
-        print('/////   c   ///// DFT-%d             (%.4fs)' %(1 + Fij + Fpq, dt2))
+        if VERBOSE_LEVEL in [1, 2]:
+            print('\nMeLOn CheckPoint: SFFT-SUBTRACTION Preliminary Steps takes [%.4fs]' %dta)
+
+        if VERBOSE_LEVEL in [2]:
+            print('/////   a   ///// Read Input Images  (%.4fs)' %dt0)
+            print('/////   b   ///// Spatial Polynomial (%.4fs)' %dt1)
+            print('/////   c   ///// DFT-%d             (%.4fs)' %(1 + Fij + Fpq, dt2))
 
         # * Consider The Major Sources of the Linear System 
         #     𝛀_i8j8ij     &    𝜦_i8j8pq    ||     𝚯_i8j8
@@ -1263,13 +757,16 @@ class ElementalSFFTSubtract_Numpy:
             dt8 = time.time() - t8
             dtb = time.time() - tb
 
-            print('\nMeLOn CheckPoint: Establish & Solve Linear System     [%.4fs]' %dtb)
-            print('/////   d   ///// Establish OMG                       (%.4fs)' %dt3)
-            print('/////   e   ///// Establish GAM                       (%.4fs)' %dt4)
-            print('/////   f   ///// Establish PSI                       (%.4fs)' %dt5)
-            print('/////   g   ///// Establish PHI                       (%.4fs)' %dt6)
-            print('/////   h   ///// Establish THE & DEL                 (%.4fs)' %dt7)
-            print('/////   i   ///// Solve                               (%.4fs)' %dt8)
+            if VERBOSE_LEVEL in [1, 2]:
+                print('\nMeLOn CheckPoint: SFFT-SUBTRACTION Establish & Solve Linear System takes [%.4fs]' %dtb)
+
+            if VERBOSE_LEVEL in [2]:
+                print('/////   d   ///// Establish OMG                       (%.4fs)' %dt3)
+                print('/////   e   ///// Establish GAM                       (%.4fs)' %dt4)
+                print('/////   f   ///// Establish PSI                       (%.4fs)' %dt5)
+                print('/////   g   ///// Establish PHI                       (%.4fs)' %dt6)
+                print('/////   h   ///// Establish THE & DEL                 (%.4fs)' %dt7)
+                print('/////   i   ///// Solve Linear System                 (%.4fs)' %dt8)
         
         # * Perform Subtraction
         PixA_DIFF = None
@@ -1311,39 +808,42 @@ class ElementalSFFTSubtract_Numpy:
             dt10 = time.time() - t10
             dtc = time.time() - tc
 
-            print('\nMeLOn CheckPoint: Perform Subtraction     [%.4fs]' %dtc)
-            print('/////   j   ///// Calculate Kab           (%.4fs)' %dt9)
-            print('/////   k   ///// Construct DIFF        (%.4fs)' %dt10)
+            if VERBOSE_LEVEL in [1, 2]:
+                print('\nMeLOn CheckPoint: SFFT-SUBTRACTION Perform Subtraction takes [%.4fs]' %dtc)
+            
+            if VERBOSE_LEVEL in [2]:
+                print('/////   j   ///// Calculate Kab         (%.4fs)' %dt9)
+                print('/////   k   ///// Construct DIFF        (%.4fs)' %dt10)
         
-        print('\n  --||--||--||--||-- EXIT SFFT SUBTRACTION --||--||--||--||-- ')
+        if VERBOSE_LEVEL in [1, 2]:
+            print('\n --||--||--||--||-- EXIT SFFT SUBTRACTION --||--||--||--||-- ')
 
         return Solution, PixA_DIFF
 
 class ElementalSFFTSubtract:
     @staticmethod
     def ESS(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, \
-        BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
+        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
 
-        if BACKEND_4SUBTRACT == 'Pycuda':
-            Solution, PixA_DIFF = ElementalSFFTSubtract_Pycuda.ESSP(PixA_I=PixA_I, PixA_J=PixA_J, SFFTConfig=SFFTConfig, \
-                SFFTSolution=SFFTSolution, Subtract=Subtract, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
-        
         if BACKEND_4SUBTRACT == 'Cupy':
-            Solution, PixA_DIFF = ElementalSFFTSubtract_Cupy.ESSC(PixA_I=PixA_I, PixA_J=PixA_J, SFFTConfig=SFFTConfig, \
-                SFFTSolution=SFFTSolution, Subtract=Subtract, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT)
+            Solution, PixA_DIFF = ElementalSFFTSubtract_Cupy.ESSC(PixA_I=PixA_I, PixA_J=PixA_J, \
+                SFFTConfig=SFFTConfig, SFFTSolution=SFFTSolution, Subtract=Subtract, VERBOSE_LEVEL=VERBOSE_LEVEL)
 
         if BACKEND_4SUBTRACT == 'Numpy':
-            Solution, PixA_DIFF = ElementalSFFTSubtract_Numpy.ESSN(PixA_I=PixA_I, PixA_J=PixA_J, SFFTConfig=SFFTConfig, \
-                SFFTSolution=SFFTSolution, Subtract=Subtract, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
+            Solution, PixA_DIFF = ElementalSFFTSubtract_Numpy.ESSN(PixA_I=PixA_I, PixA_J=PixA_J, \
+                SFFTConfig=SFFTConfig, SFFTSolution=SFFTSolution, Subtract=Subtract, \
+                NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         return Solution, PixA_DIFF
 
 class GeneralSFFTSubtract:
     @staticmethod
     def GSS(PixA_I, PixA_J, PixA_mI, PixA_mJ, SFFTConfig, ContamMask_I=None, \
-        BACKEND_4SUBTRACT='Pycuda', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8):
+        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
 
         """
+        # Perform image subtraction on I & J with SFFT parameters solved from mI & mJ.
+        #
         # Arguments:
         # a) PixA_I: Image I that will be convolved [NaN-Free]
         # b) PixA_J: Image J that won't be convolved [NaN-Free]
@@ -1351,62 +851,60 @@ class GeneralSFFTSubtract:
         # d) PixA_mJ: Masked version of Image J. 'same' means it is identical with J [NaN-Free]
         # e) SFFTConfig: Configuration of SFFT
         # f) ContamMask_I: Contaminate-Region in Image I (e.g., Saturation and Bad pixels).
-        #               We will calculate the propagated Contaminate-Region on convolved I.
+        #                  We will calculate the propagated Contaminate-Region on convolved I.
         # 
-        # g) BACKEND_4SUBTRACT: Which backend would you like to perform SFFT subtraction on ?
-        # h) CUDA_DEVICE_4SUBTRACT (BACKEND_4SUBTRACT = Pycuda / Cupy): Which GPU device would you want to perform SFFT subtraction on ?
-        # i) NUM_CPU_THREADS_4SUBTRACT (BACKEND_4SUBTRACT = Numpy): How many CPU threads would you want to perform SFFT subtraction on ?
-        #
-        # NOTE: The SFFT parameter-solving is performed between mI & mJ, 
-        #       then we apply the solution to input Images I & J.
+        # g) BACKEND_4SUBTRACT: Which backend would you like to perform SFFT subtraction on? (Cupy/Numpy)
+        # i) NUM_CPU_THREADS_4SUBTRACT: How many CPU threads would you want to perform SFFT subtraction on? (Numpy)
         #
         """
-      
-        #print(r"""
-        #                        __    __    __    __
-        #                       /  \  /  \  /  \  /  \
-        #                      /    \/    \/    \/    \
-        #    █████████████████/  /██/  /██/  /██/  /█████████████████████████
-        #                    /  / \   / \   / \   / \  \____
-        #                   /  /   \_/   \_/   \_/   \    o \__,
-        #                  / _/                       \_____/  `
-        #                  |/
-        #
-        #              █████████  ███████████ ███████████ ███████████        
-        #             ███░░░░░███░░███░░░░░░█░░███░░░░░░█░█░░░███░░░█            
-        #            ░███    ░░░  ░███   █ ░  ░███   █ ░ ░   ░███  ░ 
-        #            ░░█████████  ░███████    ░███████       ░███    
-        #             ░░░░░░░░███ ░███░░░█    ░███░░░█       ░███    
-        #             ███    ░███ ░███  ░     ░███  ░        ░███    
-        #            ░░█████████  █████       █████          █████   
-        #             ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░         
-        #
-        #            Saccadic Fast Fourier Transform (SFFT) algorithm
-        #            sfft (v1.*) supported by @LeiHu
-        #
-        #            GitHub: https://github.com/thomasvrussell/sfft
-        #            Related Paper: https://arxiv.org/abs/2109.09334
-        #            
-        #    ████████████████████████████████████████████████████████████████
-        #    
-        #    """)
         
-        # * Size-Check Processes
-        tmplst = [PixA_I.shape, PixA_J.shape]
-        tmplst += [PixA_mI.shape, PixA_mI.shape]
+        SFFT_BANNER = r"""
+                                __    __    __    __
+                               /  \  /  \  /  \  /  \
+                              /    \/    \/    \/    \
+            █████████████████/  /██/  /██/  /██/  /█████████████████████████
+                            /  / \   / \   / \   / \  \____
+                           /  /   \_/   \_/   \_/   \    o \__,
+                          / _/                       \_____/  `
+                          |/
+        
+                      █████████  ███████████ ███████████ ███████████        
+                     ███░░░░░███░░███░░░░░░█░░███░░░░░░█░█░░░███░░░█            
+                    ░███    ░░░  ░███   █ ░  ░███   █ ░ ░   ░███  ░ 
+                    ░░█████████  ░███████    ░███████       ░███    
+                     ░░░░░░░░███ ░███░░░█    ░███░░░█       ░███    
+                     ███    ░███ ░███  ░     ░███  ░        ░███    
+                    ░░█████████  █████       █████          █████   
+                     ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░         
+        
+                    Saccadic Fast Fourier Transform (SFFT) algorithm
+                    sfft (v1.*) supported by @LeiHu
+        
+                    GitHub: https://github.com/thomasvrussell/sfft
+                    Related Paper: https://arxiv.org/abs/2109.09334
+                    
+            ████████████████████████████████████████████████████████████████
+            
+            """
+        
+        if VERBOSE_LEVEL in [2]:
+            print(SFFT_BANNER)
+        
+        # * Size-Check
+        tmplst = [PixA_I.shape, PixA_J.shape, PixA_mI.shape, PixA_mI.shape]
         if len(set(tmplst)) > 1:
-            sys.exit('MeLOn ERROR: Input images should have same size !')
-
+            raise Exception('MeLOn ERROR: Input images should have same size!')
+        
         # * Subtraction Solution derived from input masked image-pair
         Solution = ElementalSFFTSubtract.ESS(PixA_I=PixA_mI, PixA_J=PixA_mJ, \
             SFFTConfig=SFFTConfig, SFFTSolution=None, Subtract=False, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[0]
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)[0]
         
         # * Subtraction of the input image-pair (use above solution)
         PixA_DIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_I, PixA_J=PixA_J, \
             SFFTConfig=SFFTConfig, SFFTSolution=Solution, Subtract=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-            CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[1]
-
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)[1]
+        
         # * Identify propagated contamination region through convolving I
         ContamMask_CI = None
         if ContamMask_I is not None:
@@ -1414,13 +912,14 @@ class GeneralSFFTSubtract:
             DB = SFFTConfig[0]['DB']
             Fpq = int((DB+1)*(DB+2)/2)
             tSolution[-Fpq:] = 0.0
+
             _tmpI = ContamMask_I.astype(np.float64)
             _tmpJ = np.zeros(PixA_J.shape).astype(np.float64)
-
-            # NOTE Convolved_I is inverse DIFF
             _tmpD = ElementalSFFTSubtract.ESS(PixA_I=_tmpI, PixA_J=_tmpJ, \
                 SFFTConfig=SFFTConfig, SFFTSolution=tSolution, Subtract=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-                CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)[1]
-            ContamMask_CI = _tmpD < -0.001     # FIXME Customizable
+                NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)[1]
+            
+            FTHRESH = -0.001  # Emperical
+            ContamMask_CI = _tmpD < FTHRESH
         
         return Solution, PixA_DIFF, ContamMask_CI

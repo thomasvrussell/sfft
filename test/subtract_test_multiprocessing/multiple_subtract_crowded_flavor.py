@@ -4,7 +4,7 @@ import numpy as np
 import os.path as pa
 from sfft.MultiEasyCrowdedPacket import MultiEasy_CrowdedPacket
 CDIR = pa.dirname(pa.abspath(__file__))
-# sfft version: 1.3.2+
+# sfft version: 1.4.0+
 
 # * AN IMPORTANT WARNING (Oct 25, 2022)
 #   Please do not put the function MultiEasy_CrowdedPacket in a Python loop,
@@ -67,7 +67,8 @@ _MECP = MultiEasy_CrowdedPacket(FITS_REF_Queue=FITS_REF_Queue, FITS_SCI_Queue=FI
     BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, MaskSatContam=False, GAIN_KEY=GAIN_KEY, \
     SATUR_KEY=SATUR_KEY, BACK_TYPE='AUTO', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, \
     DETECT_THRESH=5.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
-    ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask_Queue=[])
+    ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask_Queue=[], \
+    CLEAN_GPU_MEMORY=False, VERBOSE_LEVEL=2)
 
 DICT_STATUS_BAR = _MECP.MESP_Cupy(NUM_THREADS_4PREPROC=NUM_THREADS_4PREPROC, NUM_THREADS_4SUBTRACT=NUM_THREADS_4SUBTRACT, \
     CUDA_DEVICES_4SUBTRACT=CUDA_DEVICES_4SUBTRACT, TIMEOUT_4PREPROC_EACHTASK=TIMEOUT_4PREPROC_EACHTASK, \
@@ -99,5 +100,11 @@ NEW PARAMETERS:
   >>>> -BACKPHOTO_TYPE (v1.2+)
   >>>> -ONLY_FLAGS (v1.2+)
   >>>> -BoundarySIZE (v1.2+)
+
+  (2) allows for cleaning GPU memory after all subtraction tasks done
+  >>>> CLEAN_GPU_MEMORY (v1.4+)
+
+  (3) allows for verbsose level control
+  >>>> VERBOSE_LEVEL (v1.4+)
 
 """

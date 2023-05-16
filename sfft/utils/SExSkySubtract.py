@@ -4,7 +4,7 @@ import numpy as np
 from astropy.io import fits
 from scipy.stats import iqr
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
-# version: Jan 1, 2023
+# version: Feb 4, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.4"
@@ -12,7 +12,7 @@ __version__ = "v1.4"
 class SEx_SkySubtract:
     @staticmethod
     def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
-        BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0):
+        BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, VERBOSE_LEVEL=2):
 
         """
         # Inputs & Outputs:
@@ -43,6 +43,11 @@ class SEx_SkySubtract:
         
         -DETECT_MAXAREA [0]             # SExtractor Parameter DETECT_MAXAREA
 
+        # Miscellaneous
+        
+        -VERBOSE_LEVEL [2]              # The level of verbosity, can be [0, 1, 2]
+                                        # 0/1/2: QUIET/NORMAL/FULL mode
+
         # Returns:
 
             SKYDIP                      # The flux peak of the sky image (outliers rejected)
@@ -61,11 +66,11 @@ class SEx_SkySubtract:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             # NOTE: GAIN, SATURATE, ANALYSIS_THRESH, DEBLEND_MINCONT, BACKPHOTO_TYPE do not affect the detection mask.
-            DETECT_MASK = PY_SEx.PS(FITS_obj=FITS_obj, PL=['X_IMAGE', 'Y_IMAGE'], GAIN_KEY='PHGAIN', SATUR_KEY=SATUR_KEY, \
+            DETECT_MASK = PY_SEx.PS(FITS_obj=FITS_obj, SExParam=['X_IMAGE', 'Y_IMAGE'], GAIN_KEY='PHGAIN', SATUR_KEY=SATUR_KEY, \
                 BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, DETECT_THRESH=DETECT_THRESH, \
                 ANALYSIS_THRESH=1.5, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=0.005, \
-                BACKPHOTO_TYPE='GLOBAL', CHECKIMAGE_TYPE='OBJECTS')[1][0].astype(bool)
-
+                BACKPHOTO_TYPE='GLOBAL', CHECKIMAGE_TYPE='OBJECTS', MDIR=None, VERBOSE_LEVEL=VERBOSE_LEVEL)[1][0].astype(bool)
+        
         # * Extract SExtractor SKY-MAP from the Unmasked Image
         PixA_obj = fits.getdata(FITS_obj, ext=0).T
         _PixA = PixA_obj.astype(np.float64, copy=True)    # default copy=True, just to emphasize
@@ -79,11 +84,11 @@ class SEx_SkySubtract:
 
         # * Make simple statistics for the SKY-MAP
         Q1 = np.percentile(PixA_sky, 25)
-        Q3 = np.percentile(PixA_sky, 55)
+        Q3 = np.percentile(PixA_sky, 75)
         IQR = iqr(PixA_sky)
         SKYDIP = Q1 - 1.5*IQR    # outlier rejected dip
         SKYPEAK = Q3 + 1.5*IQR   # outlier rejected peak
-
+        
         if FITS_skysub is not None:
             with fits.open(FITS_obj) as hdl:
                 hdl[0].header['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')

@@ -5,7 +5,7 @@ from astropy.io import fits
 import scipy.ndimage as ndimage
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-# version: Jan 1, 2023
+# version: Feb 4, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.4"
@@ -13,7 +13,7 @@ __version__ = "v1.4"
 class Auto_CrowdedPrep:
     def __init__(self, FITS_REF, FITS_SCI, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', BACK_TYPE='AUTO', BACK_VALUE=0.0, \
         BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=5.0, ANALYSIS_THRESH=5.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
-        DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=None, BoundarySIZE=0.0):
+        DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=None, BoundarySIZE=0.0, VERBOSE_LEVEL=2):
 
         self.FITS_REF = FITS_REF
         self.FITS_SCI = FITS_SCI
@@ -35,6 +35,7 @@ class Auto_CrowdedPrep:
 
         self.ONLY_FLAGS = ONLY_FLAGS
         self.BoundarySIZE = BoundarySIZE
+        self.VERBOSE_LEVEL = VERBOSE_LEVEL
     
     def AutoMask(self, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask=None):
 
@@ -58,13 +59,15 @@ class Auto_CrowdedPrep:
         def GenSatMask(FITS_obj):
 
             # ** trigger a very-cold SExtractor
-            PL = ['X_IMAGE', 'Y_IMAGE', 'FLUX_AUTO', 'FLUXERR_AUTO', 'FLUX_MAX', 'FWHM_IMAGE']
-            PYSEX_OP = PY_SEx.PS(FITS_obj=FITS_obj, PL=PL, GAIN_KEY=self.GAIN_KEY, SATUR_KEY=self.SATUR_KEY, \
-                BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, \
-                DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
-                DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, \
-                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, XBoundary=self.BoundarySIZE, \
-                YBoundary=self.BoundarySIZE, MDIR=None)
+            SExParam = ['X_IMAGE', 'Y_IMAGE', 'FLUX_AUTO', 'FLUXERR_AUTO', 'FLUX_MAX', 'FWHM_IMAGE']
+            PYSEX_OP = PY_SEx.PS(FITS_obj=FITS_obj, SExParam=SExParam, GAIN_KEY=self.GAIN_KEY, \
+                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
+                BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, \
+                ANALYSIS_THRESH=self.ANALYSIS_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
+                DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, \
+                BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, \
+                ONLY_FLAGS=self.ONLY_FLAGS, XBoundary=self.BoundarySIZE, YBoundary=self.BoundarySIZE, \
+                MDIR=None, VERBOSE_LEVEL=self.VERBOSE_LEVEL)
             AstSEx, PixA_SEG = PYSEX_OP[0], PYSEX_OP[1][0].astype(int)
             
             # *** Note on the crude estimate of FWHM ***
@@ -106,13 +109,15 @@ class Auto_CrowdedPrep:
         SATLEVEL_REF, FWHM_REF, SatMask_REF, NUM_SAT_REF, SatPROP_REF = GenSatMask(self.FITS_REF)
         SATLEVEL_SCI, FWHM_SCI, SatMask_SCI, NUM_SAT_SCI, SatPROP_SCI = GenSatMask(self.FITS_SCI)
 
-        _message = 'Estimated [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI)
-        print('\nMeLOn CheckPoint: %s' %_message)
+        if self.VERBOSE_LEVEL in [1, 2]:
+            _message = 'Estimated [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI)
+            print('\nMeLOn CheckPoint: %s' %_message)
 
-        _message = 'The SATURATED Regions --- Number (Pixel Proportion) '
-        _message += '[REF = %d (%s)] & ' %(NUM_SAT_REF, '{:.2%}'.format(SatPROP_REF))
-        _message += '[SCI = %d (%s)]!' %(NUM_SAT_SCI, '{:.2%}'.format(SatPROP_SCI))
-        print('\nMeLOn CheckPoint: %s' %_message)
+        if self.VERBOSE_LEVEL in [2]:
+            _message = 'The SATURATED Regions --- Number (Pixel Proportion) '
+            _message += '[REF = %d (%s)] & ' %(NUM_SAT_REF, '{:.2%}'.format(SatPROP_REF))
+            _message += '[SCI = %d (%s)]!' %(NUM_SAT_SCI, '{:.2%}'.format(SatPROP_SCI))
+            print('\nMeLOn CheckPoint: %s' %_message)
         
         # * Define ProhibitedZone
         NaNmask_U = None
@@ -127,15 +132,17 @@ class Auto_CrowdedPrep:
             ProZone[NaNmask_U] = True
 
         # * Make ActiveMask > PixA_mREF & PixA_mSCI
-        ActiveMask = ~ProZone
         PixA_mREF = PixA_REF.copy()
         PixA_mSCI = PixA_SCI.copy()
-        PixA_mREF[ProZone] = PixA_SBG_REF[ProZone]      # NOTE REF is not sky-subtracted yet
-        PixA_mSCI[ProZone] = PixA_SBG_SCI[ProZone]      # NOTE SCI is not sky-subtracted yet
-
+        
         # NOTE: The preparation can guarantee that mREF & mSCI are NaN-Free !
-        ActivePROP = np.sum(ActiveMask) / (ActiveMask.shape[0] * ActiveMask.shape[1])
-        print('\nMeLOn CheckPoint: Active-Mask Pixel Proportion [%s]' %('{:.2%}'.format(ActivePROP)))
+        PixA_mREF[ProZone] = PixA_SBG_REF[ProZone]      # NOTE REF is not sky-subtracted
+        PixA_mSCI[ProZone] = PixA_SBG_SCI[ProZone]      # NOTE SCI is not sky-subtracted
+
+        ActiveMask = ~ProZone
+        if self.VERBOSE_LEVEL in [1, 2]:
+            ActivePROP = np.sum(ActiveMask) / (ActiveMask.shape[0] * ActiveMask.shape[1])
+            print('\nMeLOn CheckPoint: Active-Mask Pixel Proportion [%s]' %('{:.2%}'.format(ActivePROP)))
 
         # * Create sfft-prep master dictionary
         SFFTPrepDict = {}

@@ -6,7 +6,7 @@ from astropy.io import fits
 from tempfile import mkdtemp
 from sfft.CustomizedPacket import Customized_Packet
 CDIR = pa.dirname(pa.abspath(__file__))
-# sfft version: 1.3.2+
+# sfft version: 1.4.0+
 
 # configuration: computing backend and resourse
 BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
@@ -66,7 +66,7 @@ if BACKEND_4SUBTRACT in ['Cupy', 'Pycuda']:
             FITS_mSCI=_FITS_mSCI, ForceConv=ForceConv, GKerHW=GKerHW, FITS_DIFF=None, FITS_Solution=None, \
             KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
             BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
-            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=2)
         os.system('rm -rf %s' %TDIR)
 
     print('MeLOn CheckPoint: GPU warming-up [END]!')
@@ -98,6 +98,10 @@ PARAMETERS NAME CHANGED:
 
 REMOVED PARAMETERS:
   -GLockFile (v1.0.*) >>>> REMOVED (v1.1+)
+
+NEW PARAMETERS:
+  (1) allows for verbsose level control
+  >>>> VERBOSE_LEVEL (v1.4+)
 
 """
 

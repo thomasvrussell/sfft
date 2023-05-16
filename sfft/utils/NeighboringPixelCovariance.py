@@ -1,36 +1,41 @@
 import numpy as np
+# version: Feb 5, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
-__version__ = "v1.0"
-
-# MeLOn Notes
-# @ Calculate Covariance of Neighboring Pixels
-# Consider 2 random variables
-# a: pixel value at coordinate (r, c)
-# b: pixel value at coordinate (r+1, c+1)
-# For given astronomical image, it is possible to do sampling from the joint probability distribution of a & b.
-# Each sample is a pair of pixels cross through the image, note we should pick such pairs on background 
-# if we only concern the Covariance of neighboring background pixels.
-# * One of the most efficient ways to get massive samples is rolling the image.
-#    Samples of (a, b): {image.flatten(), np.roll(image, 1, 1).flatten()}
-#    NOTE we denote a as (0, 0) and b (1, 1), here we concerns 25 random variables {(0, 0), (1, 0), (-1, 0) ...}
-#    NOTE image has physical boundary thus some samples above should be rejected.
-#               For a random variable denoted as (p, q)
-#               tmp = np.roll(image, p, q)
-#               tmp[:p, :] (p > 0) & tmp[p:, :] (p < 0)  are invalid 
-#               tmp[:, :q] (q > 0) & tmp[:, q:] (q < 0)  are invalid
+__version__ = "v1.4"
 
 class NeighboringPixel_Covariance:
     @staticmethod
     def NPC(PixA_obj):
-
+        
+        """
+        # MeLOn Notes
+        # @ Convariance Calculator of Neighboring Pixels
+        # (I) Consider two random vairbales: a is the pixel value at coordinate (r, c) and 
+        #     b is the pixel value at coordinate (r+1, c+1). 
+        #
+        # (II) For a given astronomical image, exhuasting all possible r, c would produce a large 
+        #      set of pairs (a, b), as sampled from the joint probability distribution of a & b.
+        #      NOTE: In general, we concern the background covariance so only background pixels used.
+        #       
+        # (III) Rolling the image can easily produce the large sample set.
+        #       Samples of (a, b): {image.flatten(), np.roll(image, 1, 1).flatten()}
+        #       NOTE: we can replace (+1, +1) with other neighboring position (p, q) 
+        #             here we concern 25 relative positions {(0, 0), (+1, 0), (-1, 0) ...}
+        #       NOTE: please reject the rolling samples out of image boundary.
+        #             tmp = np.roll(image, p, q)
+        #             tmp[:p, :] (p > 0) & tmp[p:, :] (p < 0)  are invalid 
+        #             tmp[:, :q] (q > 0) & tmp[:, q:] (q < 0)  are invalid
+        #
+        """
+        
         RVs = ([0, 0], \
-                    [1, 0], [-1, 0], [0, 1], [0, -1], \
-                    [1, 1], [1, -1], [-1, 1], [-1, -1], \
-                    [2, 0], [-2, 0], [0, 2], [0, -2], \
-                    [3, 0], [-3, 0], [0, 3], [0, -3], \
-                    [4, 0], [-4, 0], [0, 4], [0, -4], \
-                    [5, 0], [-5, 0], [0, 5], [0, -5])
+               [1, 0], [-1, 0], [0, 1], [0, -1], \
+               [1, 1], [1, -1], [-1, 1], [-1, -1], \
+               [2, 0], [-2, 0], [0, 2], [0, -2], \
+               [3, 0], [-3, 0], [0, 3], [0, -3], \
+               [4, 0], [-4, 0], [0, 4], [0, -4], \
+               [5, 0], [-5, 0], [0, 5], [0, -5])
 
         im = PixA_obj / PixA_obj.std()
         shiftedim_lst, rejmask_lst = [], []
@@ -46,14 +51,12 @@ class NeighboringPixel_Covariance:
             rejmask_lst.append(rejmask)
         
         RMask = np.logical_or.reduce(tuple(rejmask_lst))
-        SampleSet = np.array([shiftedim[~RMask].flatten() for shiftedim in shiftedim_lst])  # Shape (Ndim, Nsamp)
-        #print('MeLOn CheckPoint: SampleSet has shape (Ndim, Nsamp) = (%d, %d)' \
-        #    %(SampleSet.shape[0], SampleSet.shape[1]))
+        SampleSet = np.array([shiftedim[~RMask].flatten() for shiftedim in shiftedim_lst])  # (Ndim, Nsamp)
+        CovMatrix = np.cov(SampleSet, bias=True)
 
-        CovMatrix = np.cov(SampleSet, bias=True)   #TODO: Why do we use bias ?
         tmp_ = CovMatrix.copy()
         np.fill_diagonal(tmp_, np.NaN)
         tmp_ = np.abs(tmp_)
         CovLevel = (np.nansum(tmp_) / np.sum(np.diag(CovMatrix)))
+        
         return CovMatrix, CovLevel
-

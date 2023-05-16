@@ -1,32 +1,31 @@
 import re
 import os
-import sys
 import warnings
 import subprocess
 import numpy as np
 import os.path as pa
 from astropy.io import fits
-from astropy.wcs import WCS
 from tempfile import mkdtemp
 from astropy.table import Table, Column
+from sfft.utils.ReadWCS import Read_WCS
 from sfft.utils.StampGenerator import Stamp_Generator
-from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Jan 1, 2023
+from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
+# version: Mar 12, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.4"
 
 class PY_SEx:
     @staticmethod
-    def PS(FITS_obj, PSF_obj=None, FITS_ref=None, PL=None, CATALOG_TYPE='FITS_LDAC', \
+    def PS(FITS_obj, PSF_obj=None, FITS_ref=None, SExParam=None, CATALOG_TYPE='FITS_LDAC', \
         GAIN_KEY='GAIN', SATUR_KEY='SATURATE', PIXEL_SCALE=1.0, SEEING_FWHM=1.2, BACK_TYPE='AUTO', \
         BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, DETECT_THRESH=1.5, ANALYSIS_THRESH=1.5, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_NTHRESH=32, DEBLEND_MINCONT=0.005, CLEAN='Y', \
         BACKPHOTO_TYPE='LOCAL', PHOT_APERTURES=5.0, NegativeCorr=True, CHECKIMAGE_TYPE='NONE', \
-        VIGNET=None, StampImgSize=None, AddRD=False, ONLY_FLAGS=None, XBoundary=0.0, YBoundary=0.0, \
+        VIGNET=None, STAMP_IMGSIZE=None, AddRD=False, ONLY_FLAGS=None, XBoundary=0.0, YBoundary=0.0, \
         Coor4Match='XY_', XY_Quest=None, Match_xytol=2.0, RD_Quest=None, Match_rdtol=1.0, \
-        Preserve_NoMatch=False, MDIR=None, verbose='QUIET'):
+        Preserve_NoMatch=False, MDIR=None, VERBOSE_TYPE='QUIET', VERBOSE_LEVEL=2):
 
         """
         # Inputs & Outputs:
@@ -41,7 +40,7 @@ class PY_SEx:
                                         # (b) -FITS_ref != None mean dual image mode:
                                         #     SEx detection on -FITS_ref & SEx photometry on -FITS_obj
 
-        -PL [None]                      # Parameter List (Python list here) of SExtractor output catalog
+        -SExParam [None]               # Parameter List (Python list here) of SExtractor output catalog
                                         # one can use command line 'sex -dp' to find all available parameters
 
         # Configurations for SExtractor:
@@ -104,7 +103,7 @@ class PY_SEx:
                                         # can be NONE, BACKGROUND, BACKGROUND_RMS, MINIBACKGROUND, MINIBACK_RMS, 
                                         # -BACKGROUND, FILTERED, OBJECTS, -OBJECTS, SEGMENTATION, or APERTURES
 
-        -verbose ['QUIET']              # SExtractor Parameter VERBOSE_TYPE
+        -VERBOSE_TYPE ['QUIET']         # SExtractor Parameter VERBOSE_TYPE
                                         # can be QUIET, NORMAL or FULL
 
         # Other parameters
@@ -117,9 +116,9 @@ class PY_SEx:
                                         # e.g., set -VIGNET = (51, 51), PYSEx will add 'VIGNET(51, 51)' into 
                                         #       the SExtractor output parameter list.
 
-        -StampImgSize [None]            # PYSEx allows for making a stamp for each detected source on -FITS_obj,
+        -STAMP_IMGSIZE [None]            # PYSEx allows for making a stamp for each detected source on -FITS_obj,
                                         # the stamps will be saved in a new column named 'Stamp' in the output catalog.
-                                        # -StampImgSize is the stamp size, e.g., -StampImgSize = (31, 31)
+                                        # -STAMP_IMGSIZE is the stamp size, e.g., -STAMP_IMGSIZE = (31, 31)
 
         -AddRD [False]                  # Add columns for Ra. and Decl. in the output catalog?
                                         # P.S. The columns are X_WORLD, Y_WORLD or XWIN_WORLD, YWIN_WORLD.
@@ -164,7 +163,13 @@ class PY_SEx:
 
         -Preserve_NoMatch [False]       # Preserve the detected sources in SExtractor photometry catalog without cross match counterpart
 
-        -MDIR [None]                    # Directory for output files
+        -MDIR [None]                    # Parent Directory for output files
+                                        # PYSEx will generate a child directory with a random name under the paraent directory 
+                                        # all output files are stored in the child directory
+
+        -VERBOSE_LEVEL [2]              # The level of verbosity, can be [0, 1, 2]
+                                        # 0/1/2: QUIET/NORMAL/FULL mode
+                                        # NOTE: it only controls the verbosity out of SExtractor.
         
         # Returns:
 
@@ -185,8 +190,8 @@ class PY_SEx:
         # * SExtractor Inputs
         #    ** Array-Inputs:
         #       SEx works on one image for signal detection and another image for photometry 
-        #       @Individual Mode (Common): Image4detect and Image4phot are the same image (-FITS_obj).
-        #       @Dual Mode: Image4detect (-FITS_ref) and Image4phot (-FITS_obj) are different images .
+        #       @ Individual Mode (Common): Image4detect and Image4phot are the same image (-FITS_obj).
+        #       @ Dual Mode: Image4detect (-FITS_ref) and Image4phot (-FITS_obj) are different images .
         #    ** PSF-Input:
         #       SEx can accept given PSF model for PSF-Photometry (-PSF_obj).
         #    ** Parameter-Inputs: 
@@ -197,19 +202,20 @@ class PY_SEx:
         #       c. Give the criteria for SExtractor Source Detection
         #          (-DETECT_THRESH, -DETECT_MINAREA, -DETECT_MAXAREA, -DEBLEND_NTHRESH, -DEBLEND_MINCONT, -CLEAN).
         #       d. Which photometry method(s) used by SExtractor: 
-        #          (parameters in -PL, e.g., FLUX_AUTO, FLUX_APER, FLUX_PSF).
+        #          (parameters in -SExParam, e.g., FLUX_AUTO, FLUX_APER, FLUX_PSF).
         #       e. Specify output Check-Images: 
         #          (-CHECKIMAGE_TYPE).
         #       f. Specify output columns in output SExtractor photometry table: 
-        #          (-PL).
+        #          (-SExParam).
         #
         #    Remarks on Weight-Map:
         #       SExtractor allows users to feed a weight-map image. It is very useful for mosaic image, which has
         #       vairable effective GAIN and background noise level across the field due to different Num_Exposure.
         #       Weight-map would help SExtractor to calculate errors, such as, FLUXERR and MAGERR, more accurately.
-        #       For current version, PYSEx does not include this feature, and I would recommend users to set 
-        #       an average effective GAIN for mosaic image, and keep in mind it may, to some extent, 
-        #       cause inaccurate error estimations.
+        #
+        #       WARNING: For current version, PYSEx does not include this feature, and I would recommend users  
+        #                to set an average effective GAIN for mosaic image, and keep in mind it may, to some extent, 
+        #                cause inaccurate error estimations.
         #
         # * SExtractor Workflow (Background)
         #    ** Extract Global_Background_Map (GBMap) and its RMS (GBRMap) from Image4detect & Image4phot
@@ -220,22 +226,26 @@ class PY_SEx:
         #         b. Auto (e.g. BACK_TYPE='AUTO', BACK_SIZE=64, BACK_FILTERSIZE=3)
         #            SEx defines a mesh of a grid that covers the whole frame by [BACK_SIZE].
         #            i. Convergence-based sigma-clipping method on the flux histogram of each tile.
-        #               More specificly, the flux histogram is clipped iteratively until convergence at +/- 3sigma around its median.
+        #               More specificly, the flux histogram is clipped iteratively until convergence 
+        #               at +/- 3sigma around its median.
         #            ii. SEx compute local background estimator from the clipped histogram of each tile.
         #                If sigma is changed by less than 20% during clipping process (the tile is not crowded), 
         #                use the mean of the clipped histogram as estimator
         #                otherwise (the tile is crowded), mode = 2.5*median - 1.5*mean is employed instead.
         #            iii. Once the estimate grid is calculated, a median filter [BACK_FILTERSIZE] can be applied 
         #                 to suppress possible local overestimations.
-        #            iv. The resulting background map is them simply a bicubic-spline interpolation between the meshes of the grid.
+        #            iv. The resulting background map is them simply a bicubic-spline interpolation 
+        #                between the meshes of the grid.
         #
         #        @ Generate GBRMap
-        #            only Auto (e.g, BACK_SIZE=64, BACK_FILTERSIZE=3)
-        #            SEx produces the noise map by the same approach of Auto style of GBMap, where the only difference is that
-        #            SEx is [probably] use standard deviation as estimator of the clipped flux historgram, other than mean or mode.
+        #          only Auto (e.g, BACK_SIZE=64, BACK_FILTERSIZE=3)
+        #          SEx produces the noise map by the same approach of Auto style of GBMap, where the only 
+        #          difference is that SEx is [probably] use standard deviation as estimator of the 
+        #          clipped flux historgram, other than mean or mode.
         #        
         #        NOTE Abbr. GBMap / GBRMap from Image4detect: GBMap_4d / GBRMap_4d
         #             Abbr. GBMap / GBRMap from Image4phot: GBMap_4p / GBRMap_4p
+        #
         #        NOTE WARNING: Dual Mode have to use consistent control parameters for Image4detect & Image4phot, 
         #                      as it is not allowed to set some secondary configuration in SEx software framework, 
         #                      despite that it  is not necessarily reasonable in some cases.
@@ -243,38 +253,40 @@ class PY_SEx:
         # * SExtractor Workflow (Detection)
         #    ** a. SEx-Detect on Image4detect: SkySubtraction & Filtering & Thresholding & Deblending & AreaConstrain & Clean
         #          @ SkySubtraction & Filtering Process (e.g. FILTER='Y', FILTER_NAME='default.conv')
-        #              SEx Remove GBMap_4d from Image4detect and then perform a convolution to maximizes detectability. 
-        #              NOTE The power-spectrum of the noise and that of the superimposed signal can be signiﬁcantly different.
-        #              NOTE Although Filtering is a beneﬁt for detection, it distorts proﬁles and correlates the noise.
-        #              NOTE Filtering is applied 'on the ﬂy' to the image, and directly affects only the following 
-        #                   Thresholding process and Isophotal parameters.
+        #            SEx Remove GBMap_4d from Image4detect and then perform a convolution to maximizes detectability. 
+        #            NOTE The power-spectrum of the noise and that of the superimposed signal can be significantly different.
+        #            NOTE Although Filtering is a benefit for detection, it distorts profiles and correlates the noise.
+        #            NOTE Filtering is applied 'on the fly' to the image, and directly affects only the following 
+        #                 Thresholding process and Isophotal parameters.
         #
         #          @ Thresholding Process (e.g. DETECT_THRESH=1.5, THRESH_TYPE='RELATIVE')
-        #              SEx highlights the pixels in Filtered_Image with Threshold_Map = DETECT_THRESH * GBRMap_4d
-        #              We would be bettter to imagine SEx actually make a hovering mask.
+        #            SEx highlights the pixels in Filtered_Image with Threshold_Map = DETECT_THRESH * GBRMap_4d
+        #            We would be bettter to imagine SEx actually make a hovering mask.
         #
         #          @ Deblending Process (e.g. DEBLEND_MINCONT=0.005, DEBLEND_NTHRESH=32)
-        #              SEx triggers a deblending process to dentify signal islands from the hovering mask [probably] on Filtered_Image,
-        #              which converts the hovering mask to be a hovering label map.
+        #            SEx triggers a deblending process to dentify signal islands from the hovering 
+        #            mask [probably] on Filtered_Image,
+        #            which converts the hovering mask to be a hovering label map.
         #
         #          @ Put AreaConstrain (e.g. DETECT_MINAREA=5, DETECT_MAXAREA=0)
-        #              MinMax AreaContrain is applied and then iolated cases then lose their hovering labels. 
+        #            MinMax AreaContrain is applied and then iolated cases then lose their hovering labels. 
         #
         #          @ Clean Process (e.g. CLEAN='YES')
-        #              SEx will clean the list of objects of artifacts caused by bright objects.
-        #              As a correction process, all cleaned objects are subsequently removed from the hovering label map.
-        #              NOTE Now the hovering label map is the SEGMENTATION check image. One may refer to such label island as ISOIsland
-        #              NOTE These labels are consistent with the indices in the ouput photometry table.
-        #              NOTE SEx will report something like this: Objects: detected 514 / sextracted 397 
-        #                   SET CLEAN='N', you could find detected == sextracted.
+        #            SEx will clean the list of objects of artifacts caused by bright objects.
+        #            As a correction process, all cleaned objects are subsequently removed from the hovering label map.
+        #            NOTE Now the hovering label map is the SEGMENTATION check image. 
+        #                 One may refer to such label island as ISOIsland
+        #            NOTE These labels are consistent with the indices in the ouput photometry table.
+        #            NOTE SEx will report something like this: Objects: detected 514 / sextracted 397 
+        #                 SET CLEAN='N', you could find detected == sextracted.
         #
         #    ** b. Generate Positional & BasicShape Paramters from isophotal profile
         #          NOTE In this section 'pixel flux' means values of Filtered_Image.
-        #          i. XMIN, XMAX, YMIN, YMAX deﬁne a rectangle which encloses the ISOIsland.
+        #          i. XMIN, XMAX, YMIN, YMAX define a rectangle which encloses the ISOIsland.
         #          ii. Barycenter X_IMAGE, Y_IMAGE is the first order moments of the profile, where the pixel flux of
         #              ISOIsand is the corresponding weight for cacluatuing Barycenter.
         #          iii. Centered second-order moments X2_IMAGE, Y2_IMAGE, XY2_IMAGE are convenient for
-        #               measuring the spatial spread of a source proﬁle. likewise, pixel fluxs of ISOIsand are weights.
+        #               measuring the spatial spread of a source profile. likewise, pixel fluxs of ISOIsand are weights.
         #               (if a parameter can be fully expressed by them, we will use $ to indicate).
         #          iv. Describe ISOIsand as an elliptical shape, centred at Barycenter.
         #               $A_IMAGE, $B_IMAGE are ellipse semi-major and semi-minor axis lengths, respectively.
@@ -284,9 +296,11 @@ class PY_SEx:
         #
         #    ** c. Generate Positional & BasicShape Paramters from Window
         #          NOTE In this section 'pixel flux' [likely] means values of Image4phot !
-        #          NOTE It is designed for Refinement, NOT for Photometry, thereby all of these parameters are irrelevant to Photometry !
+        #          NOTE It is designed for Refinement, NOT for Photometry, thereby these parameters are irrelevant to Photometry!
+        #
         #          METHOD: The computations involved are roughly the same except that the domain is a circular Gaussian window,
         #                  (I don't know what is the window radius) as opposed to the object's isophotal footprint (ISOIsland).
+        #
         #          MOTIVATION: Parameters measured within an object's isophotal limit are sensitive to two main factors: 
         #                      + Changes in the detection threshold, which create a variable bias 
         #                      + Irregularities in the object's isophotal boundaries, which act as 
@@ -297,7 +311,7 @@ class PY_SEx:
         #                       The process will adjust window and finally its centroid converges 
         #                       at some point: XWIN_IMAGE, YWIN_IMAGE.
         #                       (If the process is failed then XWIN_IMAGE, YWIN_IMAGE = X_IMAGE, Y_IMAGE)
-        #                       It has been veriﬁed that for isolated, Gaussian-like PSFs, its accuracy is close to 
+        #                       It has been verified that for isolated, Gaussian-like PSFs, its accuracy is close to 
         #                       the theoretical limit set by image noise. 
         #                       NOTE: We preferably use it for point sources, like in transient detection. 
         #                             However it may not optimal for extended sources like glaxies.
@@ -318,26 +332,26 @@ class PY_SEx:
         #
         # * SExtractor Workflow (Photometry)
         #    ** Count Flux with various photometry methods
-        #          NOTE This process always works on Image4phot.
-        #          @ISO: SEx simply count flux according to the hovering label map (ISOIsland).
-        #          @APER: SEx count flux on a Circular Aperture with given PHOT_APERTURES (centred at Barycenter X_IMAGE, Y_IMAGE).
-        #          @AUTO: SEx count flux on a Elliptic Aperture, which is determined by the hovering isophotal ellipse 
-        #                 (centred at Barycenter X_IMAGE, Y_IMAGE). The leaked light fraction is typically less than 10%.
-        #          @PSF: SEx count flux according to the PSF fitting results (centred at XPSF_IMAGE and YPSF_IMAGE).
-        #                This is optimal for pointsource but fairly wrong for extended objects.
+        #       NOTE This process always works on Image4phot.
+        #       @ISO: SEx simply count flux according to the hovering label map (ISOIsland).
+        #       @APER: SEx count flux on a Circular Aperture with given PHOT_APERTURES (centred at Barycenter X_IMAGE, Y_IMAGE).
+        #       @AUTO: SEx count flux on a Elliptic Aperture, which is determined by the hovering isophotal ellipse 
+        #              (centred at Barycenter X_IMAGE, Y_IMAGE). The leaked light fraction is typically less than 10%.
+        #       @PSF: SEx count flux according to the PSF fitting results (centred at XPSF_IMAGE and YPSF_IMAGE).
+        #             This is optimal for pointsource but fairly wrong for extended objects.
         #
         #    ** Peel background contribution from Counted Flux
-        #          @BACKPHOTO_TYPE='LOCAL': background will take a rectangular annulus into account, 
-        #                                   which has a donnut shape around the object, measured on Image4phot.
-        #          @BACKPHOTO_TYPE='GLOBAL': background will directly use GBMap_4p,
-        #                                    which can be Manual-Flat or Auto.
+        #       @BACKPHOTO_TYPE='LOCAL': background will take a rectangular annulus into account, 
+        #                                which has a donnut shape around the object, measured on Image4phot.
+        #       @BACKPHOTO_TYPE='GLOBAL': background will directly use GBMap_4p,
+        #                                 which can be Manual-Flat or Auto.
         #
         #    ** Noise Estimation
-        #          METHOD: SEx estimate the photometric noise contributed from photon possion distribution and sky background.
-        #                  that is, FLUXERR^2 = FLUX / GAIN + Area * skysig^2
-        #          NOTE: Area means the pixel area of flux-count domain for various photometry methods.
-        #          NOTE: skysig^2 is [probably] the sum of GBRMap_4p within the flux-count domain.
-        #          NOTE: Bright Sources are Photon Noise Dominated cases, while Faint Sources are Sky Noise Dominated cases.
+        #       METHOD: SEx estimate the photometric noise contributed from photon possion distribution and sky background.
+        #               that is, FLUXERR^2 = FLUX / GAIN + Area * skysig^2
+        #       NOTE: Area means the pixel area of flux-count domain for various photometry methods.
+        #       NOTE: skysig^2 is [probably] the sum of GBRMap_4p within the flux-count domain.
+        #       NOTE: Bright Sources are Photon Noise Dominated cases, while Faint Sources are Sky Noise Dominated cases.
         #
         # * SExtractor Workflow (Check-Image)
         #    @BACKGROUND : GBMap_4p
@@ -433,14 +447,16 @@ class PY_SEx:
         #     We guess the problem is caused by the fact: the background value calculated from the annulus 
         #     around target might be a biased (over/under-) estimation. One observation supports our argument: 
         #     the flux bias is much more evident when we increase the aperture size.
-        #     NOTE:  As we have found the flux bias is basically a constant, we can do relative-calibration by calculate the compensation 
-        #            offset FLUX_APER_REF - FLUX_APER_SCI for a collection of sationary stars. It is 'relative' since we have just assumed 
-        #            background estimation of REF is correct, which is proper if we are going to derive the variability (light curve).
+        #     NOTE: As we have found the flux bias is basically a constant, we can do relative-calibration by 
+        #           calculating the compensation offset FLUX_APER_REF - FLUX_APER_SCI for a collection of sationary stars. 
+        #           It is 'relative' since we have just assumed background estimation of REF is correct, 
+        #           which is proper if we are going to derive the variability (light curve).
         #
-        #   @ In which cases, Re-Run SExtractor can get the same coordinate list ?
+        #   @ In which cases, Re-Run SExtractor can get the same coordinate list?
         #     a. Same configurations but only change photometric method, e.g. from AUTO to APER 
         #     b. Same configurations but from Single-Image Mode to Dual-Image Mode
-        #     NOTE: FLAGS is correlated to object image, if we add constraint FLAG=0 then we fail to get the same coordinate list.
+        #     NOTE: FLAGS is correlated to object image, if we add constraint FLAG=0
+        #           then we fail to get the same coordinate list.
         #
         """
 
@@ -453,32 +469,43 @@ class PY_SEx:
             except OSError:
                 continue
         else:
-            raise FileNotFoundError('Source Extractor command not found.')
+            raise FileNotFoundError('Source Extractor command NOT FOUND!')
         SEx_KEY = cmd
         del cmd
 
         # * Make Directory as workplace
+        objname = pa.basename(FITS_obj)
         TDIR = mkdtemp(suffix=None, prefix='PYSEx_', dir=MDIR)
-        print('\nMeLOn: Run Python Version of SExtractor on FITS file: %s' %FITS_obj)
+        if VERBOSE_LEVEL in [0, 1, 2]:
+            _message = 'Run Python Wrapper of SExtractor!'
+            print('\nMeLOn CheckPoint [%s]: %s' %(objname, _message))
 
         # * Keyword Configurations 
         phr_obj = fits.getheader(FITS_obj, ext=0)       
         if GAIN_KEY in phr_obj:
             GAIN = phr_obj[GAIN_KEY]
-            print('MeLOn CheckPoint: SEx use GAIN=%s [READ from FITS header %s]' %(GAIN, GAIN_KEY))
+            if VERBOSE_LEVEL in [1, 2]:
+                _message = 'SExtractor uses GAIN = [%s] from keyword [%s]!' %(GAIN, GAIN_KEY)
+                print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
         else: 
-            GAIN = 0.0 
-            warnings.warn('MeLOn WARNING: SEx use GAIN=%s [SExtractor default value]' %GAIN)
+            GAIN = 0.0  # infinite GAIN, Poission noise ignored
+            if VERBOSE_LEVEL in [0, 1, 2]:
+                _warn_message = 'SExtractor has to use default GAIN = 0!'
+                warnings.warn('MeLOn WARNING [%s]: %s' %(objname, _warn_message))
         
         if SATUR_KEY in phr_obj:
             SATURATION = phr_obj[SATUR_KEY]
-            print('MeLOn CheckPoint: SEx use SATURATION=%s [READ from FITS header %s]' %(SATURATION, SATUR_KEY))
+            if VERBOSE_LEVEL in [1, 2]:
+                _message = 'SExtractor uses SATURATION = [%s] from keyword [%s]!' %(SATURATION, SATUR_KEY)
+                print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
         else: 
             SATURATION = 50000.0
-            warnings.warn('MeLOn WARNING: SEx use SATURATION=%s [SExtractor default value]' %SATURATION)
+            if VERBOSE_LEVEL in [0, 1, 2]:
+                _warn_message = 'SExtractor has to use default SATURATION = 50000.0!'
+                warnings.warn('MeLOn WARNING [%s]: %s' %(objname, _warn_message))
         
         """
-        # some additional remarks
+        # A few additional remarks
         # [1] MAGERR/FLUXERR/SNR are very sensitive to GAIN value.
         # [2] PIXEL_SCALE (unit: arcsec) only works for surface brightness parameters, 
         #     FWHM (FWHM_WORLD) and star/galaxy separation. PIXEL_SCALE=0 uses FITS WCS info.
@@ -492,7 +519,7 @@ class PY_SEx:
         # * Main Configurations
         ConfigDict = {}
         ConfigDict['CATALOG_TYPE'] = CATALOG_TYPE
-        ConfigDict['VERBOSE_TYPE'] = '%s' %verbose
+        ConfigDict['VERBOSE_TYPE'] = '%s' %VERBOSE_TYPE
 
         ConfigDict['GAIN_KEY'] = '%s' %GAIN_KEY
         ConfigDict['SATUR_KEY'] = '%s' %SATUR_KEY
@@ -534,7 +561,7 @@ class PY_SEx:
             _cfile.close()
         
         USE_NNW = False
-        if 'CLASS_STAR' in PL: 
+        if 'CLASS_STAR' in SExParam: 
             USE_NNW = True
         
         if USE_NNW:
@@ -577,16 +604,16 @@ class PY_SEx:
             _cfile.close()
 
         # create configuration file .param
-        Param_lst = PL.copy()
-        if PL is None: Param_lst = []
-        if 'X_IMAGE' not in Param_lst: 
-            Param_lst.append('X_IMAGE')
-        if 'Y_IMAGE' not in Param_lst: 
-            Param_lst.append('Y_IMAGE')
+        USExParam = SExParam.copy()
+        if SExParam is None: USExParam = []
+        if 'X_IMAGE' not in USExParam: 
+            USExParam.append('X_IMAGE')
+        if 'Y_IMAGE' not in USExParam: 
+            USExParam.append('Y_IMAGE')
 
         Param_path = ''.join([TDIR, "/PYSEx.param"])
-        if VIGNET is not None: Param_lst += ['VIGNET(%d, %d)' %(VIGNET[0], VIGNET[1])]
-        Param_text = '\n'.join(Param_lst)
+        if VIGNET is not None: USExParam += ['VIGNET(%d, %d)' %(VIGNET[0], VIGNET[1])]
+        Param_text = '\n'.join(USExParam)
         pfile = open(Param_path, 'w')
         pfile.write(Param_text)
         pfile.close()
@@ -602,21 +629,23 @@ class PY_SEx:
         _cklst = re.split(',', CHECKIMAGE_TYPE)
         FITS_SExCheckLst = [''.join([TDIR, '/%s_PYSEx_CHECK_%s.fits' %(FNAME[:-5], ck)]) for ck in _cklst]
 
-        sexconfig_path = AMConfig_Maker.AMCM(MDIR=TDIR, AstroMatic_KEY=SEx_KEY, \
+        sex_config_path = AMConfig_Maker.AMCM(MDIR=TDIR, AstroMatic_KEY=SEx_KEY, \
             ConfigDict=ConfigDict, tag='PYSEx')
             
         # * Trigger SExtractor
         if FITS_ref is None:
-            os.system("cd %s && %s %s -c %s -CATALOG_NAME %s -CHECKIMAGE_NAME %s"\
-                %(pa.dirname(FITS_obj), SEx_KEY, FNAME, sexconfig_path, FITS_SExCat, ','.join(FITS_SExCheckLst)))
+            os.system("cd %s && %s %s -c %s -CATALOG_NAME %s -CHECKIMAGE_NAME %s" \
+                %(pa.dirname(FITS_obj), SEx_KEY, FNAME, sex_config_path, \
+                  FITS_SExCat, ','.join(FITS_SExCheckLst)))
         
         if FITS_ref is not None:
             # WARNING: more risky to fail due to the too long string.
-            os.system("%s %s,%s -c %s -CATALOG_NAME %s -CHECKIMAGE_NAME %s"\
-                %(SEx_KEY, FITS_ref, FITS_obj, sexconfig_path, FITS_SExCat, ','.join(FITS_SExCheckLst)))    
+            os.system("%s %s,%s -c %s -CATALOG_NAME %s -CHECKIMAGE_NAME %s" \
+                %(SEx_KEY, FITS_ref, FITS_obj, sex_config_path, \
+                  FITS_SExCat, ','.join(FITS_SExCheckLst)))    
         
         """
-        # deprecated as it requires WCSTools, and seems not very useful
+        # Deprecated as it requires WCSTools, and seems not very useful
         def record(FITS):
             os.system('sethead %s SOURCE=%s' %(FITS, FITS_obj))
             os.system('sethead %s RSOURCE=%s' %(FITS, FITS_ref))
@@ -625,6 +654,7 @@ class PY_SEx:
                 pack = ' : '.join(['Sex Parameters', key, value])
                 os.system('sethead %s HISTORY="%s"' %(FITS, pack))
             return None
+        
         """
 
         if CATALOG_TYPE == 'FITS_LDAC': tbhdu = 2
@@ -648,14 +678,15 @@ class PY_SEx:
         if AstSEx is not None:
             Modify_AstSEx = False
 
-            print('MeLOn CheckPoint: SExtractor finds [%d] sources | [%s]!' \
-                   %(len(AstSEx), pa.basename(FITS_obj)))
+            if VERBOSE_LEVEL in [1, 2]:
+                _message = 'SExtractor found [%d] sources!'  %(len(AstSEx))
+                print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
 
             # ** a. CORRECT the SExtractor bug on MAG & MAGERR due to negative flux count.
             #       For such cases, corresponding MAG & MAGERR will turn to be a trivial 99.
             #       PYSEx will re-calculate them from FLUX & FLUXERR if MAG & MAGERR in PL and NegativeCorr=True.
 
-            MAG_TYPES = [p for p in Param_lst if p[:4] == 'MAG_']
+            MAG_TYPES = [p for p in USExParam if p[:4] == 'MAG_']
             if len(MAG_TYPES) > 0:
                 if NegativeCorr:
                     MAGERR_TYPES = ['MAGERR_' + MAGT[4:] for MAGT in MAG_TYPES]
@@ -663,19 +694,22 @@ class PY_SEx:
                     FLUXERR_TYPES = ['FLUXERR_' + MAGT[4:] for MAGT in MAG_TYPES]
                     
                     for i in range(len(MAG_TYPES)):
-                        pcomplete = (MAGERR_TYPES[i] in Param_lst) & \
-                                    (FLUX_TYPES[i] in Param_lst) & \
-                                    (FLUXERR_TYPES[i] in Param_lst)
+
+                        pcomplete = (MAGERR_TYPES[i] in USExParam) & \
+                                    (FLUX_TYPES[i] in USExParam) & \
+                                    (FLUXERR_TYPES[i] in USExParam)
                         
                         if not pcomplete:
-                            sys.exit('MeLOn ERROR: NEGATIVE FLUX Correction requires ' + \
-                                     'complete FLUX FLUXERR MAG MAGERR columns')
+                            _error_message = 'Please use complete FLUX FLUXERR MAG MAGERR ' 
+                            _error_message += 'in SExParam for Negative Flux Correction!'
+                            raise Exception('MeLOn ERROR [%s]: %s' %(objname, _error_message))
 
                         FLUX = np.array(AstSEx[FLUX_TYPES[i]])
                         FLUXERR = np.array(AstSEx[FLUXERR_TYPES[i]])
                         Mask_NC = FLUX < 0.0
                         MAG_NC = -2.5*np.log10(np.abs(FLUX[Mask_NC]))
                         MAGERR_NC = 1.0857 * np.abs(FLUXERR[Mask_NC] / FLUX[Mask_NC])
+                        
                         AstSEx[MAG_TYPES[i]][Mask_NC] = MAG_NC
                         AstSEx[MAGERR_TYPES[i]][Mask_NC] = MAGERR_NC
                     Modify_AstSEx = True
@@ -694,24 +728,14 @@ class PY_SEx:
             #       (XWIN_IMAGE, YWIN_IMAGE) to (XWIN_WORLD, YWIN_WORLD)
 
             if AddRD:
-                def read_wcs(FITS_obj):
-                    phr = fits.getheader(FITS_obj, ext=0)
-                    if phr['CTYPE1'] == 'RA---TAN' and 'PV1_0' in phr:
-                        _hdr = phr.copy()
-                        _hdr['CTYPE1'] = 'RA---TPV'
-                        _hdr['CTYPE2'] = 'DEC--TPV'
-                        w = WCS(_hdr)
-                    else: w = WCS(phr)
-                    return w
-                
-                w_obj = read_wcs(FITS_obj)
+                w_obj = Read_WCS.RW(phr_obj, VERBOSE_LEVEL=VERBOSE_LEVEL)
                 _XY = np.array([AstSEx['X_IMAGE'], AstSEx['Y_IMAGE']]).T
                 _RD = w_obj.all_pix2world(_XY, 1)
                 AstSEx.add_column(Column(_RD[:, 0], name='X_WORLD'))          
                 AstSEx.add_column(Column(_RD[:, 1], name='Y_WORLD'))
 
-                if 'XWIN_IMAGE' in Param_lst:
-                    if 'YWIN_IMAGE' in Param_lst:
+                if 'XWIN_IMAGE' in USExParam:
+                    if 'YWIN_IMAGE' in USExParam:
                         _XY = np.array([AstSEx['XWIN_IMAGE'], AstSEx['YWIN_IMAGE']]).T
                         _RD = w_obj.all_pix2world(_XY, 1)
                         AstSEx.add_column(Column(_RD[:, 0], name='XWIN_WORLD'))          
@@ -720,48 +744,51 @@ class PY_SEx:
             
             # ** d. Restriction on FLAGS
             if ONLY_FLAGS is not None:
-                if 'FLAGS' not in PL:
-                    sys.exit('MeLOn ERROR: Restriction of FLAGS required column FLAGS!')
+                if 'FLAGS' not in SExParam:
+                    _error_message = 'FLAGS is required in SExParam to apply restriction on FLAGS!'
+                    raise Exception('MeLOn ERROR [%s]: %s' %(objname, _error_message))
                 else:
                     _OLEN = len(AstSEx)
                     AstSEx = AstSEx[np.in1d(AstSEx['FLAGS'], ONLY_FLAGS)]    
                     Modify_AstSEx = True
 
-                    print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources by FLAGS restriction | [%s]!' \
-                           %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
+                    if VERBOSE_LEVEL in [2]:
+                        _message = 'PYSEx excludes [%d / %d] sources by FLAGS restriction!' %(_OLEN - len(AstSEx), _OLEN)
+                        print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
             
             # ** e. Remove Boundary Sources
             if XBoundary != 0.0 or XBoundary != 0.0:
                 NX, NY = int(phr_obj['NAXIS1']), int(phr_obj['NAXIS2'])
                 _XY = np.array([AstSEx['X_IMAGE'], AstSEx['Y_IMAGE']]).T
+
                 InnerMask = np.logical_and.reduce((_XY[:, 0] > XBoundary + 0.5, \
                                                    _XY[:, 0] < NX - XBoundary + 0.5, \
                                                    _XY[:, 1] > YBoundary + 0.5, \
                                                    _XY[:, 1] < NY - YBoundary + 0.5))
+                
                 _OLEN = len(AstSEx)
                 AstSEx = AstSEx[InnerMask]
                 Modify_AstSEx = True
 
-                print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources close to boundary | [%s]!' \
-                   %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
-            
+                if VERBOSE_LEVEL in [2]:
+                    _message = 'PYSEx excludes [%d / %d] sources by boundary rejection!' %(_OLEN - len(AstSEx), _OLEN)
+                    print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
+
             # ** f. Only preserve the sources matched to the quest coordinates
             if Coor4Match == 'XY_':
                 Xcoln_4Match, Ycoln_4Match = 'X_IMAGE', 'Y_IMAGE'
                 RAcoln_4Match, DECcoln_4Match = 'X_WORLD', 'Y_WORLD'
 
             if Coor4Match == 'XYWIN_':
-                assert 'XWIN_IMAGE' in Param_lst
-                assert 'YWIN_IMAGE' in Param_lst
+                assert 'XWIN_IMAGE' in USExParam
+                assert 'YWIN_IMAGE' in USExParam
                 Xcoln_4Match, Ycoln_4Match = 'XWIN_IMAGE', 'YWIN_IMAGE'
                 RAcoln_4Match, DECcoln_4Match = 'XWIN_WORLD', 'YWIN_WORLD'
 
-            if XY_Quest is not None:
-                if RD_Quest is not None:
-                    sys.exit('MeLOn ERROR: Please feed only one type XY_Quest / RD_Quest!')
-            if RD_Quest is not None:
-                if not AddRD:
-                    sys.exit('MeLOn ERROR: RD_Quest requires AddRD!')
+            assert XY_Quest is None or RD_Quest is None
+            if RD_Quest is not None and not AddRD:
+                _error_message = 'AddRD is required in SExParam when RD_Quest is given!'
+                raise Exception('MeLOn ERROR [%s]: %s' %(objname, _error_message))
 
             Symm = None
             if XY_Quest is not None:
@@ -791,33 +818,35 @@ class PY_SEx:
                     QuestINDEX = Symm[:, 0]
                     AstSEx.add_column(Column(QuestINDEX, name='QuestINDEX'))
                     
-                    print('MeLOn CheckPoint: PYSEx excludes [%d / %d] sources by symmetric matching | [%s]!' \
-                           %(_OLEN - len(AstSEx), _OLEN, pa.basename(FITS_obj)))
+                    if VERBOSE_LEVEL in [2]:
+                        _message = 'PYSEx excludes [%d / %d] sources by symmetric matching!' %(_OLEN - len(AstSEx), _OLEN)
+                        print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
 
-            print('MeLOn CheckPoint: PYSEx output catalog contains [%d] sources | [%s]!' \
-                   %(len(AstSEx), pa.basename(FITS_obj)))
+            if VERBOSE_LEVEL in [1, 2]:
+                _message = 'PYSEx output catalog contains [%d] sources!' %(len(AstSEx))
+                print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
 
             # ** g. ADD-COLUMN Stamp
-            if StampImgSize is not None:
+            if STAMP_IMGSIZE is not None:
                 _XY = np.array([AstSEx['X_IMAGE'], AstSEx['Y_IMAGE']]).T
-                PixA_StpLst = Stamp_Generator.SG(FITS_obj=FITS_obj, StampImgSize=StampImgSize, \
-                    Coordinates=_XY, CoorType='Image', AutoFill='NaN', MDIR=None)[0]
+                PixA_StpLst = Stamp_Generator.SG(FITS_obj=FITS_obj, EXTINDEX=0, \
+                    COORD=_XY, COORD_TYPE='IMAGE', STAMP_IMGSIZE=STAMP_IMGSIZE, \
+                    FILL_VALUE=np.nan, FITS_StpLst=None, VERBOSE_LEVEL=VERBOSE_LEVEL)
                 AstSEx.add_column(Column(PixA_StpLst, name='Stamp'))
                 Modify_AstSEx = True
             
             # ** UPDATE the file FITS_SExCat
             if MDIR is not None and Modify_AstSEx:
+                tFITS_SExCat = ''.join([TDIR, '/TMPCAT_%s' %FNAME])
+                AstSEx.write(tFITS_SExCat, overwrite=True)
+
                 hdl = fits.open(FITS_SExCat)
-                FITS_tmp = ''.join([TDIR, '/TMP_SEX_%s' %FNAME])
-                AstSEx.write(FITS_tmp, overwrite=True)
-                hdl_tmp = fits.open(FITS_tmp)
-                if tbhdu == 2: 
-                    fits.HDUList([hdl[0], hdl[1], hdl_tmp[1]]).writeto(FITS_SExCat, overwrite=True)
-                if tbhdu == 1: 
-                    fits.HDUList([hdl[0], hdl_tmp[1]]).writeto(FITS_SExCat, overwrite=True)
+                thdl = fits.open(tFITS_SExCat)
+                if tbhdu == 2: fits.HDUList([hdl[0], hdl[1], thdl[1]]).writeto(FITS_SExCat, overwrite=True)
+                if tbhdu == 1: fits.HDUList([hdl[0], thdl[1]]).writeto(FITS_SExCat, overwrite=True)
                 hdl.close()
-                hdl_tmp.close()
-                os.system('rm %s' %FITS_tmp)
+                thdl.close()
+                os.system('rm %s' %tFITS_SExCat)
 
         # ** REMOVE temporary directory
         if MDIR is None: 

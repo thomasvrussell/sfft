@@ -8,7 +8,7 @@ from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.SymmetricMatch import Symmetric_Match
 from sfft.utils.HoughMorphClassifier import Hough_MorphClassifier
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-# version: Jan 1, 2023
+# version: Feb 10, 2023
 
 __author__ = "Lei Hu <hulei@pmo.ac.cn>"
 __version__ = "v1.4"
@@ -16,7 +16,7 @@ __version__ = "v1.4"
 class Auto_SparsePrep:
     def __init__(self, FITS_REF, FITS_SCI, GAIN_KEY='GAIN', SATUR_KEY='ESATUR', BACK_TYPE='MANUAL', \
         BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=2.0, ANALYSIS_THRESH=2.0, DETECT_MINAREA=5, \
-        DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30):
+        DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', ONLY_FLAGS=[0], BoundarySIZE=30, VERBOSE_LEVEL=2):
 
         self.FITS_REF = FITS_REF
         self.FITS_SCI = FITS_SCI
@@ -38,6 +38,7 @@ class Auto_SparsePrep:
 
         self.ONLY_FLAGS = ONLY_FLAGS
         self.BoundarySIZE = BoundarySIZE
+        self.VERBOSE_LEVEL = VERBOSE_LEVEL
 
     def run_image_mask(self, AstSEx_SS, PixA_SEGr, PixA_SEGs, StarExt_iter, XY_PriorBan):
         
@@ -100,24 +101,27 @@ class Auto_SparsePrep:
             SEGL_PB = SEGL_PB[SEGL_PB > 0] 
             PBMASK_SS = np.in1d(SEGL_SS, SEGL_PB)
             AstSEx_SS.add_column(Column(PBMASK_SS, name='MASK_PriorBan'))
-            _message = 'Find / Given [%d / %d] Prior-Banned ' %(np.sum(PBMASK_SS), XY_PriorBan.shape[0])
-            _message += 'in current [%d] SubSources!' %(len(AstSEx_SS))
-            print('MeLOn CheckPoint: %s' %_message)
-
+            
+            if self.VERBOSE_LEVEL in [1, 2]:
+                _message = 'Find / Given [%d / %d] Prior-Banned ' %(np.sum(PBMASK_SS), XY_PriorBan.shape[0])
+                _message += 'in current [%d] SubSources!' %(len(AstSEx_SS))
+                print('MeLOn CheckPoint: %s' %_message)
+            
             # ** Update Label Map (SFFTLmap) by inactivating the Prior-Banned SubSources
             _mappings = {label: -64 for label in SEGL_SS[PBMASK_SS]}
             fastremap.remap(SFFTLmap, _mappings, preserve_missing_labels=True, in_place=True)
         else:
-            _message = 'Find / Given [0 / 0] Prior-Banned '
-            _message += 'in current [%d] SubSources!' %(len(AstSEx_SS))
-            print('MeLOn CheckPoint: %s' %_message)
-        
+            if self.VERBOSE_LEVEL in [1, 2]:
+                print('MeLOn CheckPoint: SKIP, NO Prior-Banned Coordinates Given!')
+
         # * Create ActiveMask
         #   NOTE: The preparation can guarantee that mREF & mSCI are NaN-Free !
         ActiveMask = SFFTLmap > 0
-        ActivePROP = np.sum(ActiveMask) / (ActiveMask.shape[0] * ActiveMask.shape[1])
-        print('MeLOn CheckPoint: Active-Mask (Non-Prior-Banned SubSources) Pixel Proportion [%s]' \
-               %('{:.2%}'.format(ActivePROP)))
+        
+        if self.VERBOSE_LEVEL in [1, 2]:
+            ActivePROP = np.sum(ActiveMask) / (ActiveMask.shape[0] * ActiveMask.shape[1])
+            print('MeLOn CheckPoint: Active-Mask (Non-Prior-Banned SubSources) Pixel Proportion [%s]' \
+                   %('{:.2%}'.format(ActivePROP)))
 
         # * Produce masked images PixA_mREF & PixA_mSCI
         PixA_mREF = PixA_REF.copy()
@@ -144,29 +148,42 @@ class Auto_SparsePrep:
 
         return SFFTPrepDict
 
-    def HoughAutoMask(self, Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, PS_ELLIPThresh=0.3, \
+    def HoughAutoMask(self, Hough_MINFR=0.1, Hough_PeakClip=0.7, BeltHW=0.2, PointSource_MINELLIP=0.3, \
         MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, CVREJ_MAGD_THRESH=0.12, \
-        ELABO_VAR_REJECTION=False, EVREJ_RATIO_THREH=5.0, EVREJ_SAFE_MAGDEV=0.04, StarExt_iter=4, XY_PriorBan=None):
+        ELABO_VAR_REJECTION=False, EVREJ_RATIO_THREH=5.0, EVREJ_SAFE_MAGDEV=0.04, \
+        StarExt_iter=4, XY_PriorBan=None):
+
         # - Hough Transform is used to determine subtraction-sources
+        # TODO: change parameter names
+        # TODO: add a robust clipping on SNR & FR, use the DECam examples to determine ...
+        # TODO: allows PointSource_ELLIP_Thresh being None?
 
         # * Use Hough-MorphClassifer to identify GoodSources in REF & SCI
         def main_hough(FITS_obj):
             # NOTE: SEGMENTATION map is sensitive to DETECT_THRESH
-            Hmc = Hough_MorphClassifier.MakeCatalog(FITS_obj=FITS_obj, GAIN_KEY=self.GAIN_KEY, SATUR_KEY=self.SATUR_KEY, \
-                BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, \
-                DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
-                DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, \
-                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, BoundarySIZE=self.BoundarySIZE, AddSNR=False)
-            
-            Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], Hough_FRLowerLimit=Hough_FRLowerLimit, \
-                Hough_peak_clip=Hough_peak_clip, BeltHW=BeltHW, PS_ELLIPThresh=PS_ELLIPThresh)
-            AstSEx_GS, FHWM, PixA_SEG = Hmc[0][Hc[2]], Hc[0], Hmc[1][0].astype(int)
+            Hmc = Hough_MorphClassifier.MakeCatalog(FITS_obj=FITS_obj, GAIN_KEY=self.GAIN_KEY, \
+                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
+                BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, \
+                DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, \
+                DETECT_MINAREA=self.DETECT_MINAREA, DETECT_MAXAREA=self.DETECT_MAXAREA, \
+                DEBLEND_MINCONT=self.DEBLEND_MINCONT, BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, \
+                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, \
+                BoundarySIZE=self.BoundarySIZE, AddSNR=False, VERBOSE_LEVEL=self.VERBOSE_LEVEL)
+            PixA_SEG = Hmc[1][0].astype(int)
+
+            Hc = Hough_MorphClassifier.Classifier(AstSEx=Hmc[0], Hough_MINFR=Hough_MINFR, \
+                Hough_PeakClip=Hough_PeakClip, BeltHW=BeltHW, PointSource_MINELLIP=PointSource_MINELLIP, \
+                VERBOSE_LEVEL=self.VERBOSE_LEVEL)
+            FHWM = Hc[5]
+            AstSEx_GS = Hmc[0][Hc[3]]
             return AstSEx_GS, FHWM, PixA_SEG
         
         AstSEx_GSr, FWHM_REF, PixA_SEGr = main_hough(self.FITS_REF)
         AstSEx_GSs, FWHM_SCI, PixA_SEGs = main_hough(self.FITS_SCI)
-        _message = 'Estimated [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI)
-        print('\nMeLOn CheckPoint: %s' %_message)
+
+        if self.VERBOSE_LEVEL in [1, 2]:
+            _message = 'Estimated [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI)
+            print('\nMeLOn CheckPoint: %s' %_message)
 
         # * Determine Matched-GoodSources (abbr. MGS)
         XY_GSr = np.array([AstSEx_GSr['X_IMAGE'], AstSEx_GSr['Y_IMAGE']]).T
@@ -178,7 +195,9 @@ class Auto_SparsePrep:
             # - For very sparse fields where WCS is inaccurate, one can loosen MatchTolFactor to ~ 1.0
             # - WARNING NOTE: it can go wrong when the estimated FWHM is highly inaccurate.
             UMatchTol = np.sqrt((FWHM_REF / MatchTolFactor)**2 + (FWHM_SCI / MatchTolFactor)**2)
-        print('MeLOn CheckPoint: Tolerance [%.3f pix] For Source Cross-Match!' %UMatchTol)
+
+        if self.VERBOSE_LEVEL in [2]:
+            print('MeLOn CheckPoint: Tolerance [%.3f pix] For Source Cross-Match!' %UMatchTol)
 
         Symm = Symmetric_Match.SM(XY_A=XY_GSr, XY_B=XY_GSs, tol=UMatchTol, return_distance=False)
         AstSEx_MGSr = AstSEx_GSr[Symm[:, 0]]
@@ -197,15 +216,18 @@ class Auto_SparsePrep:
         NTE_4MO = 30  # NUM_TOP_END for MAG_OFFSET, default value used herein.
         MAG_OFFSETr = TopFlatten_Weighted_Quantile.TFWQ(values=MAGD_MGS, weights=FLUX_MGSr, \
             quantiles=[0.5], NUM_TOP_END=NTE_4MO)[0]
+        
         MAG_OFFSETs = TopFlatten_Weighted_Quantile.TFWQ(values=MAGD_MGS, weights=FLUX_MGSs, \
             quantiles=[0.5], NUM_TOP_END=NTE_4MO)[0]
         MAG_OFFSET = (MAG_OFFSETr + MAG_OFFSETs)/2.0
         
         if np.abs(MAG_OFFSET - MAG_OFFSET0) > 0.05:
-            _warn_message = 'Magnitude Offset Estimate --- WEIGHTED-MEDIAN IS HIGHLY DEVIATED FROM MEDIAN '
-            _warn_message += '[median: %.3f mag] >>> [weighted-median: %.3f mag]!' %(MAG_OFFSET0, MAG_OFFSET)
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
-        else:
+            if self.VERBOSE_LEVEL in [0, 1, 2]:
+                _warn_message = 'Magnitude Offset Estimate --- WEIGHTED-MEDIAN IS HIGHLY DEVIATED FROM MEDIAN '
+                _warn_message += '[median: %.3f mag] >>> [weighted-median: %.3f mag]!' %(MAG_OFFSET0, MAG_OFFSET)
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+        
+        if self.VERBOSE_LEVEL in [2]:
             _message = 'Magnitude Offset Estimate --- '
             _message += '[median: %.3f mag] >>> [weighted-median: %.3f mag]!' %(MAG_OFFSET0, MAG_OFFSET)
             print('\nMeLOn CheckPoint: %s' %_message)
@@ -215,18 +237,23 @@ class Auto_SparsePrep:
             CVREJ_MASK = np.abs(MAGD_MGS - MAG_OFFSET) > CVREJ_MAGD_THRESH
             AstSEx_iSSr = AstSEx_MGSr[~CVREJ_MASK]
             AstSEx_iSSs = AstSEx_MGSs[~CVREJ_MASK]
-            _message = 'Coarse Variable Rejection [magnitude deviation > %.3f mag] ' %CVREJ_MAGD_THRESH
-            _message += 'on Matched-GoodSources [%d / %d]!' %(np.sum(CVREJ_MASK), NUM_MGS)
-            print('\nMeLOn CheckPoint: %s' %_message)
+            
+            if self.VERBOSE_LEVEL in [1, 2]:
+                _message = 'Coarse Variable Rejection [magnitude deviation > %.3f mag] ' %CVREJ_MAGD_THRESH
+                _message += 'on Matched-GoodSources [%d / %d]!' %(np.sum(CVREJ_MASK), NUM_MGS)
+                print('\nMeLOn CheckPoint: %s' %_message)
         else:
             AstSEx_iSSr = AstSEx_MGSr
             AstSEx_iSSs = AstSEx_MGSs
-            print('\nMeLOn CheckPoint: SKIP Coarse Variable Rejection!')
+
+            if self.VERBOSE_LEVEL in [1, 2]:
+                print('\nMeLOn CheckPoint: SKIP Coarse Variable Rejection!')
 
         # * Apply a more elaborate variable rejection (abbr. EVREJ)
         if ELABO_VAR_REJECTION:
-            warnings.warn('\nMeLOn WARNING: Elaborate Variable Rejection requires CORRECT GAIN in FITS HEADER!')
-            # TODO: Incorporate weight-maps of the input image pair for more accurate SExtractor FLUXERR.
+
+            if self.VERBOSE_LEVEL in [2]:
+                warnings.warn('\nMeLOn WARNING: Elaborate Variable Rejection requires CORRECT GAIN in FITS HEADER!')
 
             """
             # Remarks on the Elaborate Variable Rejection
@@ -280,19 +307,24 @@ class Auto_SparsePrep:
             AstSEx_SSs = AstSEx_iSSs[~EVREJ_MASK]
 
             EVREJ_PERC = np.sum(EVREJ_MASK) / NUM_MGS
-            _message = 'Elaborate Variable Rejection [flux deviation > %.2f sigma] & ' %EVREJ_RATIO_THREH
-            _message += '[magnitude deviation > %.3f mag] ' %EVREJ_SAFE_MAGDEV
-            _message += 'on Matched-GoodSources [%d / %d] ' %(np.sum(EVREJ_MASK), NUM_MGS)
-            _message += 'or [%s]!' %('{:.2%}'.format(EVREJ_PERC))
-            print('\nMeLOn CheckPoint: %s' %_message)
+
+            if self.VERBOSE_LEVEL in [1, 2]:
+                _message = 'Elaborate Variable Rejection [flux deviation > %.2f sigma] & ' %EVREJ_RATIO_THREH
+                _message += '[magnitude deviation > %.3f mag] ' %EVREJ_SAFE_MAGDEV
+                _message += 'on Matched-GoodSources [%d / %d] ' %(np.sum(EVREJ_MASK), NUM_MGS)
+                _message += 'or [%s]!' %('{:.2%}'.format(EVREJ_PERC))
+                print('\nMeLOn CheckPoint: %s' %_message)
 
             if EVREJ_PERC > 0.1:
-                _warn_message = '[%s] Matched-GoodSources ARE REJECTED BY EVREJ!' %('{:.2%}'.format(EVREJ_PERC))
-                warnings.warn('\nMeLOn IMPORTANT WARNING: %s' %_warn_message)
+                if self.VERBOSE_LEVEL in [0, 1, 2]:
+                    _warn_message = '[%s] Matched-GoodSources ARE REJECTED BY EVREJ!' %('{:.2%}'.format(EVREJ_PERC))
+                    warnings.warn('\nMeLOn IMPORTANT WARNING: %s' %_warn_message)
         else:
             AstSEx_SSr = AstSEx_iSSr
             AstSEx_SSs = AstSEx_iSSs
-            print('\nMeLOn CheckPoint: SKIP Elaborate Variable Rejection!')
+            
+            if self.VERBOSE_LEVEL in [1, 2]:
+                print('\nMeLOn CheckPoint: SKIP Elaborate Variable Rejection!')
 
         # * Combine catalogs for survived MGS (i.e., SubSources)
         for coln in AstSEx_SSr.colnames:
@@ -302,7 +334,8 @@ class Auto_SparsePrep:
         
         # create unified segmentation label
         AstSEx_SS.add_column(Column(1+np.arange(len(AstSEx_SS)), name='SEGLABEL'), index=0)
-        print('\nMeLOn CheckPoint: SubSources out of Matched-GoodSources [%d / %d]!' %(len(AstSEx_SS), NUM_MGS))
+        if self.VERBOSE_LEVEL in [1, 2]:
+            print('\nMeLOn CheckPoint: SubSources out of Matched-GoodSources [%d / %d]!' %(len(AstSEx_SS), NUM_MGS))
         
         # * Run Image Masking (P.S. some SubSources might be marked as invalid by the Prior-Ban list)
         SFFTPrepDict = self.run_image_mask(AstSEx_SS=AstSEx_SS, PixA_SEGr=PixA_SEGr, \
@@ -315,19 +348,23 @@ class Auto_SparsePrep:
 
         return SFFTPrepDict
 
-    def SemiAutoMask(self, XY_PriorSelect=None, MatchTol=None, MatchTolFactor=3.0, StarExt_iter=4, XY_PriorBan=None):
+    def SemiAutoMask(self, XY_PriorSelect=None, MatchTol=None, MatchTolFactor=3.0, \
+        StarExt_iter=4, XY_PriorBan=None):
         # - We directly use given Prior-Selection to determine subtraction-sources
 
         def func4phot(FITS_obj):
             # run SExtractor photometry
-            PL = ['X_IMAGE', 'Y_IMAGE', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_AUTO', 'MAGERR_AUTO', \
-                  'FLAGS', 'FLUX_RADIUS', 'FWHM_IMAGE', 'A_IMAGE', 'B_IMAGE']
-            PYSEX_OP = PY_SEx.PS(FITS_obj=FITS_obj, PL=PL, GAIN_KEY=self.GAIN_KEY, SATUR_KEY=self.SATUR_KEY, \
-                BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, \
-                DETECT_THRESH=self.DETECT_THRESH, ANALYSIS_THRESH=self.ANALYSIS_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
-                DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, \
-                CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, ONLY_FLAGS=self.ONLY_FLAGS, XBoundary=self.BoundarySIZE, \
-                YBoundary=self.BoundarySIZE, MDIR=None)
+            SExParam = ['X_IMAGE', 'Y_IMAGE', 'FLUX_AUTO', 'FLUXERR_AUTO', 'MAG_AUTO', \
+                        'MAGERR_AUTO', 'FLAGS', 'FLUX_RADIUS', 'FWHM_IMAGE', 'A_IMAGE', 'B_IMAGE']
+            
+            PYSEX_OP = PY_SEx.PS(FITS_obj=FITS_obj, SExParam=SExParam, GAIN_KEY=self.GAIN_KEY, \
+                SATUR_KEY=self.SATUR_KEY, BACK_TYPE=self.BACK_TYPE, BACK_VALUE=self.BACK_VALUE, \
+                BACK_SIZE=self.BACK_SIZE, BACK_FILTERSIZE=self.BACK_FILTERSIZE, DETECT_THRESH=self.DETECT_THRESH, \
+                ANALYSIS_THRESH=self.ANALYSIS_THRESH, DETECT_MINAREA=self.DETECT_MINAREA, \
+                DETECT_MAXAREA=self.DETECT_MAXAREA, DEBLEND_MINCONT=self.DEBLEND_MINCONT, \
+                BACKPHOTO_TYPE=self.BACKPHOTO_TYPE, CHECKIMAGE_TYPE='SEGMENTATION', AddRD=False, \
+                ONLY_FLAGS=self.ONLY_FLAGS, XBoundary=self.BoundarySIZE, YBoundary=self.BoundarySIZE, \
+                MDIR=None, VERBOSE_LEVEL=self.VERBOSE_LEVEL)
             AstSEx, PixA_SEG = PYSEX_OP[0], PYSEX_OP[1][0].astype(int)
             
             # *** Note on the crude estimate of FWHM ***
@@ -336,15 +373,18 @@ class Auto_SparsePrep:
 
             NTE_4FWHM = 30  # NUM_TOP_END for FWHM, default value used herein.
             _values, _weights = np.array(AstSEx['FWHM_IMAGE']), np.array(AstSEx['FLUX_AUTO'])
-            _weights /= np.clip(_values, a_min=1.0, a_max=None)**2  
+            _weights /= np.clip(_values, a_min=1.0, a_max=None)**2
+
             FWHM = TopFlatten_Weighted_Quantile.TFWQ(values=_values, weights=_weights, \
                 quantiles=[0.5], NUM_TOP_END=NTE_4FWHM)[0]
             return AstSEx, FWHM, PixA_SEG
         
         AstSExr, FWHM_REF, PixA_SEGr = func4phot(self.FITS_REF)
         AstSExs, FWHM_SCI, PixA_SEGs = func4phot(self.FITS_SCI)
-        _message = 'Estimated [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI)
-        print('\nMeLOn CheckPoint: %s' %_message)
+        
+        if self.VERBOSE_LEVEL in [1, 2]:
+            _message = 'Estimated [FWHM_REF = %.3f pix] & [FWHM_SCI = %.3f pix]!' %(FWHM_REF, FWHM_SCI)
+            print('\nMeLOn CheckPoint: %s' %_message)
 
         # * Cross Match REF & SCI catalogs
         XYr = np.array([AstSExr['X_IMAGE'], AstSExr['Y_IMAGE']]).T
@@ -356,7 +396,10 @@ class Auto_SparsePrep:
             # - For very sparse fields where WCS is inaccurate, one can loosen MatchTolFactor to ~ 1.0
             # - WARNING NOTE: it can go wrong when the estimated FWHM is highly inaccurate.
             UMatchTol = np.sqrt((FWHM_REF / MatchTolFactor)**2 + (FWHM_SCI / MatchTolFactor)**2)
-        print('MeLOn CheckPoint: Tolerance [%.3f pix] For Source Cross-Match!' %UMatchTol)
+        
+        if self.VERBOSE_LEVEL in [2]:
+            print('MeLOn CheckPoint: Tolerance [%.3f pix] For Source Cross-Match!' %UMatchTol)
+
         _Symm = Symmetric_Match.SM(XY_A=XYr, XY_B=XYs, tol=UMatchTol, return_distance=False)
         AstSEx_Mr = AstSExr[_Symm[:, 0]]
         AstSEx_Ms = AstSExs[_Symm[:, 1]]
@@ -373,15 +416,18 @@ class Auto_SparsePrep:
         NTE_4MO = 30  # NUM_TOP_END for MAG_OFFSET, default value used herein.
         MAG_OFFSETr = TopFlatten_Weighted_Quantile.TFWQ(values=MAGD_M, weights=FLUX_Mr, \
             quantiles=[0.5], NUM_TOP_END=NTE_4MO)[0]
+        
         MAG_OFFSETs = TopFlatten_Weighted_Quantile.TFWQ(values=MAGD_M, weights=FLUX_Ms, \
             quantiles=[0.5], NUM_TOP_END=NTE_4MO)[0]
         MAG_OFFSET = (MAG_OFFSETr + MAG_OFFSETs)/2.0
-
+        
         if np.abs(MAG_OFFSET - MAG_OFFSET0) > 0.05:
-            _warn_message = 'Magnitude Offset Estimate --- HIGHLY DEVIATED FROM DIRECT MEDIAN '
-            _warn_message += '[%.3f mag -> %.3f mag]!' %(MAG_OFFSET0, MAG_OFFSET)
-            warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
-        else:
+            if self.VERBOSE_LEVEL in [0, 1, 2]:
+                _warn_message = 'Magnitude Offset Estimate --- HIGHLY DEVIATED FROM DIRECT MEDIAN '
+                _warn_message += '[%.3f mag -> %.3f mag]!' %(MAG_OFFSET0, MAG_OFFSET)
+                warnings.warn('\nMeLOn WARNING: %s' %_warn_message)
+
+        if self.VERBOSE_LEVEL in [2]:
             _message = 'Magnitude Offset Estimate --- '
             _message += '[%.3f mag -> %.3f mag]!' %(MAG_OFFSET0, MAG_OFFSET)
             print('\nMeLOn CheckPoint: %s' %_message)
@@ -408,8 +454,10 @@ class Auto_SparsePrep:
         # record matching and create unified segmentation label
         AstSEx_SS.add_column(Column(_Symm[:, 0], name='INDEX_PRIOR_SELECTION'), index=0)
         AstSEx_SS.add_column(Column(1+np.arange(len(AstSEx_SS)), name='SEGLABEL'), index=0)
-        print('MeLOn CheckPoint: Find / Given [%d / %d] Prior-Selected in [%d] Matched-Sources!' \
-               %(len(AstSEx_SS), XY_PriorSelect.shape[0], len(AstSEx_iSS)))
+
+        if self.VERBOSE_LEVEL in [1, 2]:
+            print('MeLOn CheckPoint: Find / Given [%d / %d] Prior-Selected in [%d] Matched-Sources!' \
+                   %(len(AstSEx_SS), XY_PriorSelect.shape[0], len(AstSEx_iSS)))
         
         # * Run Image Masking (P.S. some SubSources might be marked as invalid by the Prior-Ban list)
         SFFTPrepDict = self.run_image_mask(AstSEx_SS=AstSEx_SS, PixA_SEGr=PixA_SEGr, \

@@ -1,10 +1,10 @@
 import os.path as pa
 from sfft.EasyCrowdedPacket import Easy_CrowdedPacket
-# sfft version: 1.3.2+
+# sfft version: 1.4.0+
 
 # configuration: computing backend and resourse 
-BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use 'Numpy' if you only have CPUs
-CUDA_DEVICE_4SUBTRACT = '0'     # FIXME ONLY work for backend Pycuda / Cupy
+BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Cupy', 'Numpy'}, Use 'Numpy' if you only have CPUs
+CUDA_DEVICE_4SUBTRACT = '0'     # FIXME ONLY work for backend Cupy
 NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy   
 
 # configuration: how to subtract
@@ -37,7 +37,7 @@ Easy_CrowdedPacket.ECP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_DIFF=FITS_DIFF
     DETECT_THRESH=5.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
     ONLY_FLAGS=None, BoundarySIZE=0.0, BACK_SIZE_SUPER=128, StarExt_iter=2, PriorBanMask=None, \
     BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
-    NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
+    NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=2)
 print('MeLOn CheckPoint: TEST FOR CROWDED-FLAVOR-SFFT SUBTRACTION DONE!\n')
 
 """
@@ -64,6 +64,9 @@ NEW PARAMETERS:
   >>>> -BACKPHOTO_TYPE (v1.2+)
   >>>> -ONLY_FLAGS (v1.2+)
   >>>> -BoundarySIZE (v1.2+)
+
+  (2) allows for verbsose level control
+  >>>> VERBOSE_LEVEL (v1.4+)
 
 """
 

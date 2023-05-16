@@ -50,7 +50,7 @@ sfft has the following three backends to perform the image subtraction.
     pip install pycuda==2020.1 scikit-cuda==0.5.3  # PyCUDA backend
     pip install cupy-cuda101                       # CuPy backend
                    
-**Additional Remarks**: CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I strongly recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11.
+**Additional Remarks**: CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I strongly recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11. Note that PyCUDA backend is now deprecated since version 1.4.0, as I already optimized CuPy backend to be less GPU memory consuming.
 
 Dependencies
 -----------
@@ -159,11 +159,11 @@ What's new
 Todo list
 -----------
 
-- The total GPU memory usage is only optimized for KerPolyOrder = 2 & BGPolyOrder = 2, I will extend the optimization to other cases ASAP! In fact, I believe there is ample space for reducing the total GPU usage and I will explore it. [Lei, Nov 11, 2022]
+- The total GPU memory usage is only optimized for KerPolyOrder = 2 & BGPolyOrder = 2, I will extend the optimization to other cases ASAP! In fact, I believe there is ample space for reducing the total GPU usage and I will explore it. [Lei, Nov 11, 2022] **[ALREADY DONE]**
 
 - I will allows users to disable the hough detection for preprocessing when there are too few sources in the field in the next version sfft v1.3.5. [Lei, Nov 11, 2022]
 
-- Add a verbose argument for sfft so that users can get more clean printed messages. [Lei, Nov 9, 2022]
+- Add a verbose argument for sfft so that users can get more clean printed messages. [Lei, Nov 9, 2022] **[ALREADY DONE]**
 
 - Test if we can use sep to replace SExtractor in preprocessing to make sfft more Pythonic. [Lei, Nov 9, 2022] 
 

@@ -1,11 +1,11 @@
 import os.path as pa
 from sfft.EasySparsePacket import Easy_SparsePacket
-# sfft version: 1.3.2+
+# sfft version: 1.4.0+
 
 # configuration: computing backend and resourse
-BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
-CUDA_DEVICE_4SUBTRACT = '0'     # FIXME ONLY work for backend Pycuda / Cupy
-NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy   
+BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
+CUDA_DEVICE_4SUBTRACT = '0'     # FIXME ONLY work for backend Cupy
+NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy
 
 # configuration: how to subtract 
 ForceConv = 'REF'               # FIXME {'AUTO', 'REF', 'SCI'}
@@ -15,9 +15,8 @@ ForceConv = 'REF'               # FIXME {'AUTO', 'REF', 'SCI'}
 
 KerHWRatio = 2.0                # FIXME Ratio of kernel half-width to FWHM (typically, 1.5-2.5).
 KerPolyOrder = 2                # FIXME {0, 1, 2, 3}, Polynomial degree of kernel spatial variation.
-BGPolyOrder = 2                 # FIXME {0, 1, 2, 3}, Polynomial degree of differential background spatial variation.
+BGPolyOrder = 0                 # FIXME {0, 1, 2, 3}, Polynomial degree of differential background spatial variation.
                                 #       it is trivial here, as sparse-flavor-sfft requires sky subtraction in advance.
-                                # WARNING: I temporarily change it from 0 back to 2, as 0 is not optimized for GPU memory usage yet (22, Nov 16).
 ConstPhotRatio = True           # FIXME Constant photometric ratio between images?
 
 # configuration: required info in FITS header
@@ -40,11 +39,11 @@ Easy_SparsePacket.ESP(FITS_REF=FITS_REF, FITS_SCI=FITS_SCI, FITS_DIFF=FITS_DIFF,
     BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, MaskSatContam=False, GAIN_KEY=GAIN_KEY, \
     SATUR_KEY=SATUR_KEY, BACK_TYPE='MANUAL', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, \
     DETECT_THRESH=2.0, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='LOCAL', \
-    ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect=None, Hough_FRLowerLimit=0.1, Hough_peak_clip=0.7, BeltHW=0.2, \
-    PS_ELLIPThresh=0.3, MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, CVREJ_MAGD_THRESH=0.12, \
+    ONLY_FLAGS=[0], BoundarySIZE=30, XY_PriorSelect=None, Hough_MINFR=0.1, Hough_PeakClip=0.7, BeltHW=0.2, \
+    PointSource_MINELLIP=0.3, MatchTol=None, MatchTolFactor=3.0, COARSE_VAR_REJECTION=True, CVREJ_MAGD_THRESH=0.12, \
     ELABO_VAR_REJECTION=True, EVREJ_RATIO_THREH=5.0, EVREJ_SAFE_MAGDEV=0.04, StarExt_iter=4, \
     XY_PriorBan=None, PostAnomalyCheck=False, PAC_RATIO_THRESH=5.0, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-    CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT)
+    CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=2)
 print('MeLOn CheckPoint: TEST FOR SPARSE-FLAVOR-SFFT SUBTRACTION DONE!\n')
 
 """
@@ -58,6 +57,9 @@ PARAMETERS NAME CHANGED:
   -MAGD_THRESH (v1.0, v1.1, v1.2) >>>> -CVREJ_MAGD_THRESH (v1.3+)
   -CheckPostAnomaly (v1.0, v1.1, v1.2) >>>> -PostAnomalyCheck (v1.3+)
   -PARATIO_THRESH (v1.0, v1.1, v1.2) >>>> -PAC_RATIO_THRESH (v1.3+)
+  -Hough_FRLowerLimit (v1.0.6 - v1.3.4)  > Hough_MINFR (v1.4+)
+  -Hough_peak_clip (v1.3.1 - v1.3.4) > Hough_PeakClip (v1.4+)
+  -PS_ELLIPThresh (v1.2* - v1.3.4) > PointSource_MINELLIP (v1.4+)
 
 PARAMETERS DEFUALT-VALUE CHANGED:
   -BGPolyOrder=2 (v1.0, v1.1, v1.2) >>>> -BGPolyOrder=0 (v1.3+)
@@ -94,7 +96,10 @@ NEW PARAMETERS:
   >>>> EVREJ_SAFE_MAGDEV (v1.3+)
 
   (6) allows for more detailed tunning on hough transformation
-  >>>> Hough_peak_clip (v1.3.1+)
+  >>>> Hough_peak_clip (v1.3.1 - v1.3.4)
+
+  (7) allows for verbsose level control
+  >>>> VERBOSE_LEVEL (v1.4+)
 
 """
 
