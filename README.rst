@@ -35,22 +35,24 @@ Or alternatively, install any desired version of sfft from Github `<https://gith
 
     python setup.py install
 
-sfft has the following three backends to perform the image subtraction.
+sfft now has the following two backends to perform the image subtraction.
 
-.. [#] **NumPy backend** : sfft will totally run on the CPU devices. NO GPU devices and CUDA dependencies are required for this backend.
-.. [#] **PyCUDA backend** : The core functions of sfft are written in `PyCUDA <https://github.com/inducer/pycuda>`_ and `Scikit-Cuda <https://github.com/lebedov/scikit-cuda>`_. Users need to install PyCUDA and Scikit-Cuda according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
 .. [#] **CuPy backend** : The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
+.. [#] **NumPy backend** : sfft will totally run on the CPU devices. NO GPU devices and CUDA dependencies are required for this backend.
+
+- CUDA 12: E.g, you may enable the CuPy backend for CUDA 12.0 via: ::
+
+    pip install cupy-cuda12x
 
 - CUDA 11: E.g, you may enable the CuPy backend for CUDA 11.5 via: ::
 
-    pip install cupy-cuda115  # CuPy backend
+    pip install cupy-cuda115
 
-- CUDA 10: E.g, you may enable the GPU backends (i.e., PyCUDA backend and CuPy backend) for CUDA 10.1 via: ::
+- CUDA 10: E.g, you may enable the CuPy backend for CUDA 10.1 via: ::
 
-    pip install pycuda==2020.1 scikit-cuda==0.5.3  # PyCUDA backend
-    pip install cupy-cuda101                       # CuPy backend
-                   
-**Additional Remarks**: CuPy backend is faster than PyCUDA backend, while it consumes more GPU memory. Generally, I strongly recommend users to adopt CuPy backend as long as it does not incur GPU out-of-memory issue. Note that PyCUDA backend is still not compatiable with CUDA 11. Note that PyCUDA backend is now deprecated since version 1.4.0, as I already optimized CuPy backend to be less GPU memory consuming.
+    pip install cupy-cuda101
+
+**Additional Remarks**: There was a PyCUDA backend in sfft but now deprecated since v1.4.0. For sfft < v1.4.0, PyCUDA backend was preserved as it consumes less GPU memory. However, the CuPy backend is now more optimized for GPU memory allocation, making the PyCUDA backend no longer useful.
 
 Dependencies
 -----------
@@ -195,7 +197,7 @@ information:
 
 - OS platform.
 - Python version.
-- CUDA, PyCUDA and CuPy version.
+- CUDA and CuPy (or PyCUDA) version.
 - Version of sfft.
 
 Citing
