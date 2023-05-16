@@ -52,7 +52,7 @@ sfft now has the following two backends to perform the image subtraction.
 
     pip install cupy-cuda101
 
-**Additional Remarks**: There was a PyCUDA backend in sfft but now deprecated since v1.4.0. For sfft < v1.4.0, PyCUDA backend was preserved as it consumes less GPU memory. However, the CuPy backend is now more optimized for GPU memory allocation, making the PyCUDA backend no longer useful.
+**Additional Remarks**: There was a PyCUDA backend in sfft but now deprecated since v1.4.0. For sfft < v1.4.0, PyCUDA backend was preserved as it consumes less GPU memory. However, the CuPy backend is now better implemented for GPU memory allocation, making the PyCUDA backend no longer useful.
 
 Dependencies
 -----------
