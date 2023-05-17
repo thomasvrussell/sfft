@@ -652,7 +652,7 @@ class MultiEasy_SparsePacket:
                             Solution, PixA_DIFF, ContamMask_CI = _tmp
                             if self.VERBOSE_LEVEL in [1, 2]:
                                 _message = 'THREAD-4SUBTRACT-[%d] & TASK-[%d]: ' %(INDEX_THREAD_4SUBTRACT, taskidx_acquired)
-                                _message += 'Function Executions of SFFT-SUBTRACTION'
+                                _message += 'Function Executions of SFFT-SUBTRACTION '
                                 _message += 'TAKES [%.3f s]!' %(time.time() - Tsub_start)
                                 print('\nMeLOn Report: %s' %_message)
 
