@@ -3,7 +3,6 @@ import time
 import math
 import warnings
 import threading
-import cupy as cp
 import numpy as np
 import os.path as pa
 from astropy.io import fits
@@ -260,6 +259,8 @@ class MultiEasy_CrowdedPacket:
     def MESP_Cupy(self, NUM_THREADS_4PREPROC=8, NUM_THREADS_4SUBTRACT=1, CUDA_DEVICES_4SUBTRACT=['0'], \
         TIMEOUT_4PREPROC_EACHTASK=300, TIMEOUT_4SUBTRACT_EACHTASK=300):
 
+        import cupy as cp
+        
         # * define task-oriented dictionaries of status-bar and products
         #   status 0: Initial State
         #   status 1: Preprocessing SUCCESS || status -1: Preprocessing FAIL

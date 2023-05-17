@@ -1,5 +1,4 @@
 import time
-import cupy as cp
 import numpy as np
 import os.path as pa
 from astropy.io import fits
@@ -123,6 +122,7 @@ class Customized_Packet:
 
         # * Choose GPU device for Cupy backend
         if BACKEND_4SUBTRACT == 'Cupy':
+            import cupy as cp
             device = cp.cuda.Device(int(CUDA_DEVICE_4SUBTRACT))
             device.use()
 
