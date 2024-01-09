@@ -12,16 +12,16 @@ MAINTAINER_EMAIL = "hulei@pmo.ac.cn"
 DOWNLOAD_URL = 'https://github.com/thomasvrussell/sfft'
 
 LICENSE = 'MIT Licence'
-VERSION = '1.4.1'
+VERSION = '1.4.2'
 
 install_reqs = ['scipy>=1.5.2',
                 'astropy>=3.2.3',
                 'scikit-image>=0.16.2,<=0.18.3',
                 'fastremap>=1.7.0',
                 'sep>=1.0.3',
-                'numba==0.53.1',
-                'llvmlite==0.36.0',
-                'pyfftw==0.12.0']
+                'numba>=0.53.1',
+                'llvmlite>=0.36.0',
+                'pyfftw>=0.12.0']
 
 setup(name = NAME,
       version = VERSION,
@@ -43,7 +43,7 @@ setup(name = NAME,
         'Environment :: Console',
         'Intended Audience :: Science/Research',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3 :: Only',
         'Topic :: Scientific/Engineering :: Astronomy'],
      )
