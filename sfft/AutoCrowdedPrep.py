@@ -7,7 +7,7 @@ from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
 # version: Feb 4, 2023
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
 class Auto_CrowdedPrep:

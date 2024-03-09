@@ -6,13 +6,13 @@ DESCRIPTION = "Image Subtraction in Fourier Space"
 LONG_DESCRIPTION = open('README.rst').read()
 NAME = "sfft"
 AUTHOR = "Lei Hu"
-AUTHOR_EMAIL = "hulei@pmo.ac.cn"
+AUTHOR_EMAIL = "leihu@andrew.cmu.edu"
 MAINTAINER = "Lei Hu"
-MAINTAINER_EMAIL = "hulei@pmo.ac.cn"
+MAINTAINER_EMAIL = "leihu@andrew.cmu.edu"
 DOWNLOAD_URL = 'https://github.com/thomasvrussell/sfft'
 
 LICENSE = 'MIT Licence'
-VERSION = '1.4.2'
+VERSION = '1.5.0'
 
 install_reqs = ['scipy>=1.5.2',
                 'astropy>=3.2.3',

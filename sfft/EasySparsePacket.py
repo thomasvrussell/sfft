@@ -11,7 +11,7 @@ from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
 from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
 # version: Mar 18, 2023
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
 class Easy_SparsePacket:
