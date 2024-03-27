@@ -15,7 +15,8 @@ class PY_SWarp:
     @staticmethod
     def PS(FITS_obj, FITS_ref, FITS_resamp=None, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
         GAIN_DEFAULT=1.0, SATLEV_DEFAULT=100000., NAXIS1_VAL=None, NAXIS2_VAL=None, \
-        OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', FILL_VALUE=None, \
+        RESAMPLE='Y', IMAGE_SIZE=0, 
+        OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', FILL_VALUE=None, 
         VERBOSE_TYPE='NORMAL', VERBOSE_LEVEL=2):
         
         """
@@ -37,7 +38,17 @@ class PY_SWarp:
 
         -GAIN_DEFAULT                       # Gain value if no header keyword available
 
-        -SATLEV_DEFAULT                      # Saturation value if no header keyword available
+        -SATLEV_DEFAULT                     # Saturation value if no header keyword available
+
+        -NAXIS1_VAL                         # NAXIS1 value if no header keyword available
+        
+        -NAXIS2_VAL                         # NAXIS2 value if no header keyword available
+        
+        -RESAMPLE                           # Toggle resampling. Default 'Y'. Other option 'N'.
+
+        -IMAGE_SIZE                         # Size of output image. Default '0', meaning automatic.
+
+
 
         -OVERSAMPLING [1]                   # SWarp Parameter OVERSAMPLING
                                             # Oversampling in each dimension
@@ -129,6 +140,9 @@ class PY_SWarp:
 
         ConfigDict['GAIN_DEFAULT'] = '%s' %GAIN_DEFAULT
         ConfigDict['SATLEV_DEFAULT'] = '%s' %SATLEV_DEFAULT
+
+        ConfigDict['RESAMPLE'] = '%s' %RESAMPLE
+        ConfigDict['IMAGE_SIZE'] = '%d' %IMAGE_SIZE
 
         ConfigDict['OVERSAMPLING'] = '%d' %OVERSAMPLING
         ConfigDict['RESAMPLING_TYPE'] = '%s' %RESAMPLING_TYPE
