@@ -178,10 +178,8 @@ class PY_SWarp:
         hdr_op = Combine_Header.CH(hdr_base=phr_obj, hdr_wcs=phr_ref, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         # * update header by the SWarp generated saturation level
-        # NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
-        # hdr_op[SATUR_KEY] = (NEW_SATUR, 'MeLOn: PYSWarp')
-
-        print(fits.getheader(tFITS_resamp, ext=0))
+        NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
+        hdr_op[SATUR_KEY] = (NEW_SATUR, 'MeLOn: PYSWarp')
 
         # * add history
         hdr_op['SWARP_O'] = (pa.basename(FITS_obj), 'MeLOn: PYSWarp')
