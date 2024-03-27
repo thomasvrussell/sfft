@@ -14,6 +14,7 @@ __version__ = "v1.4"
 class PY_SWarp:
     @staticmethod
     def PS(FITS_obj, FITS_ref, FITS_resamp=None, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
+        GAIN_DEFAULT=1.0, SATLEV_DEFAULT=100000., NAXIS1_VAL=None, NAXIS2_VAL=None, \
         OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', FILL_VALUE=None, \
         VERBOSE_TYPE='NORMAL', VERBOSE_LEVEL=2):
         
@@ -33,6 +34,10 @@ class PY_SWarp:
 
         -SATUR_KEY ['SATURATE']             # SWarp Parameter SATLEV_KEYWORD
                                             # i.e., keyword of the saturation level in the FITS image header
+
+        -GAIN_DEFAULT                       # Gain value if no header keyword available
+
+        -SATLEV_DEFAULT                      # Saturation value if no header keyword available
 
         -OVERSAMPLING [1]                   # SWarp Parameter OVERSAMPLING
                                             # Oversampling in each dimension
@@ -101,7 +106,6 @@ class PY_SWarp:
         # * check FITS_obj header
         objname = pa.basename(FITS_obj)
         phr_obj = fits.getheader(FITS_obj, ext=0)
-        assert GAIN_KEY in phr_obj and SATUR_KEY in phr_obj
 
         # a mild warning
         if VERBOSE_LEVEL in [1, 2]:
@@ -122,6 +126,9 @@ class PY_SWarp:
         ConfigDict = {}
         ConfigDict['GAIN_KEYWORD'] = '%s' %GAIN_KEY
         ConfigDict['SATLEV_KEYWORD'] = '%s' %SATUR_KEY
+
+        ConfigDict['GAIN_DEFAULT'] = '%s' %GAIN_DEFAULT
+        ConfigDict['SATLEV_DEFAULT'] = '%s' %SATLEV_DEFAULT
 
         ConfigDict['OVERSAMPLING'] = '%d' %OVERSAMPLING
         ConfigDict['RESAMPLING_TYPE'] = '%s' %RESAMPLING_TYPE
@@ -144,31 +151,45 @@ class PY_SWarp:
         # * build .head file from FITS_ref
         phr_ref = fits.getheader(FITS_ref, ext=0)
         w_ref = Read_WCS.RW(phr_ref, VERBOSE_LEVEL=VERBOSE_LEVEL)
+
         _headfile = tFITS_resamp[:-5] + '.head'
         wcshdr_ref = w_ref.to_header(relax=True)   # SIP distorsion requires relax=True
 
         wcshdr_ref['BITPIX'] = phr_ref['BITPIX']
         wcshdr_ref['NAXIS'] = phr_ref['NAXIS']
-        wcshdr_ref['NAXIS1'] = phr_ref['NAXIS1']
-        wcshdr_ref['NAXIS2'] = phr_ref['NAXIS2']
+
+        try:
+            wcshdr_ref['NAXIS1'] = phr_ref['NAXIS1']
+            wcshdr_ref['NAXIS2'] = phr_ref['NAXIS2']
+        except KeyError:
+            wcshdr_ref['NAXIS1'] = NAXIS1_VAL
+            wcshdr_ref['NAXIS2'] = NAXIS2_VAL
+
         wcshdr_ref.tofile(_headfile)
 
         # * trigger SWarp 
         os.system('cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s' \
+            %(TDIR, FITS_obj, tFITS_resamp, tFITS_resamp_weight, swarp_config_path))
+
+        print('cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s' \
             %(TDIR, FITS_obj, tFITS_resamp, tFITS_resamp_weight, swarp_config_path))
         
         # * make a combined header for output FITS
         hdr_op = Combine_Header.CH(hdr_base=phr_obj, hdr_wcs=phr_ref, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         # * update header by the SWarp generated saturation level
-        NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
-        hdr_op[SATUR_KEY] = (NEW_SATUR, 'MeLOn: PYSWarp')
+        # NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
+        # hdr_op[SATUR_KEY] = (NEW_SATUR, 'MeLOn: PYSWarp')
+
+        print(fits.getheader(tFITS_resamp, ext=0))
 
         # * add history
         hdr_op['SWARP_O'] = (pa.basename(FITS_obj), 'MeLOn: PYSWarp')
         hdr_op['SWARP_R'] = (pa.basename(FITS_ref), 'MeLOn: PYSWarp')
         for key in ConfigDict:
             value = ConfigDict[key]
+            print('key: ', key)
+            print('value:', value)
             pack = ' : '.join(['SWarp Parameter', key, value])
             hdr_op.add_history(pack)
 
