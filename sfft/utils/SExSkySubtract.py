@@ -12,7 +12,7 @@ __version__ = "v1.4"
 class SEx_SkySubtract:
     @staticmethod
     def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
-        BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, VERBOSE_LEVEL=2):
+        SATUR_DEFAULT=100000., BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, VERBOSE_LEVEL=2):
 
         """
         # Inputs & Outputs:
@@ -27,6 +27,8 @@ class SEx_SkySubtract:
 
         -ESATUR_KEY ['ESATUR']          # Keyword for the effective saturation level of sky-subtracted image
                                         # P.S. the value will be saved in the primary header of -FITS_skysub
+                            
+        -SATUR_DEFAULT                  # Default saturation value if keyword not available in FITS header. 
 
         # Configurations for SExtractor:
         
@@ -93,7 +95,10 @@ class SEx_SkySubtract:
             with fits.open(FITS_obj) as hdl:
                 hdl[0].header['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
                 hdl[0].header['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
-                ESATUR = float(hdl[0].header[SATUR_KEY]) - SKYPEAK    # use a conservative value
+                try:
+                    ESATUR = float(hdl[0].header[SATUR_KEY]) - SKYPEAK    # use a conservative value
+                except KeyError: 
+                    ESATUR = float(SATUR_DEFAULT - SKYPEAK)
                 hdl[0].header[ESATUR_KEY] = (ESATUR, 'MeLOn: Effective SATURATE after SEx-SKY-SUB')
                 hdl[0].data[:, :] = PixA_skysub.T
                 hdl.writeto(FITS_skysub, overwrite=True)
