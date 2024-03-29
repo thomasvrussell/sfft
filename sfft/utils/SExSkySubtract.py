@@ -11,7 +11,7 @@ __version__ = "v1.4"
 
 class SEx_SkySubtract:
     @staticmethod
-    def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
+    def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, PIXEL_SCALE=1.0, SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
         SATUR_DEFAULT=100000., BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, VERBOSE_LEVEL=2):
 
         """
@@ -25,10 +25,12 @@ class SEx_SkySubtract:
         
         -FITS_skyrms [None]             # FITS file path of the output sky RMS image
 
+        -PIXEL_SCALE [1.0]              # Pixel scale of image in arcsec/px. 
+
         -ESATUR_KEY ['ESATUR']          # Keyword for the effective saturation level of sky-subtracted image
                                         # P.S. the value will be saved in the primary header of -FITS_skysub
                             
-        -SATUR_DEFAULT                  # Default saturation value if keyword not available in FITS header. 
+        -SATUR_DEFAULT [100000]         # Default saturation value if keyword not available in FITS header. 
 
         # Configurations for SExtractor:
         
