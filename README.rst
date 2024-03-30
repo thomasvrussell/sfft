@@ -208,7 +208,7 @@ information:
 Citing
 -------------------
 
-*Image Subtraction in Fourier Space. Hu, L., Wang, L., Chen, X., & Yang, J. 2022, The Astrophysical Journal, 936, 157*
+*Image Subtraction in Fourier Space, Lei Hu et al. 2022, The Astrophysical Journal, 936, 157*
 
 Arxiv link: `<https://arxiv.org/abs/2109.09334>`_.
 
