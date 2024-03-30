@@ -1,7 +1,7 @@
 ..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_logo_gwbkg.png
 
 Package Description
--------------------
+---------------------
 
 .. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.6576426.svg
    :target: https://doi.org/10.5281/zenodo.6576426
@@ -57,7 +57,7 @@ sfft now has the following two backends to perform the image subtraction.
 **Additional Remarks**: There was a PyCUDA backend in sfft but now deprecated since v1.4.0. For sfft < v1.4.0, PyCUDA backend was preserved as it consumes less GPU memory. However, the CuPy backend is now better implemented for GPU memory allocation, making the PyCUDA backend no longer useful.
 
 Dependencies
------------
+--------------
 
 You need further to install additional astronomical software for sfft.
 
@@ -70,7 +70,7 @@ You need further to install additional astronomical software for sfft.
     conda install -c conda-forge astromatic-swarp
 
 Quick start guide
------------
+------------------
 We have prepared several examples in the test directory so that you can familar with the usage of the main functions in our software:
 
 .. [*] **sfft subtraction for crowded field** : The example in subdirectory named subtract_test_crowded_flavor. We use crowded-flavor-sfft (module ``sfft.EasyCrowdedPacket``) to perform image subtraction for ZTF M31 observations. More detailed explanations of this module, see help(``sfft.EasyCrowdedPacket``).
@@ -88,7 +88,7 @@ We have prepared several examples in the test directory so that you can familar 
 - More specificially, the built-in preprocessing in sfft consists of two steps: [1] identify the distraction pixels in the input image-pair [2] create the masked version of the input image-pair via replacing the identified distraction pixels by proper flux values. In sparse-flavor-sfft, we designed a source-selection based on SExtractor catalogs and identify the unselected regions as distraction pixels. Given that the input images are required to be sky-subtracted in sparse-flavor-sfft, we simply replace the distraction pixels by zeros; In crowded-flavor-sfft, we only identify the pixels contaminated by saturated sources as distraction pixels using SExtractor, and then replace the distraction pixels by local background flux. 
 
 Customized usage
------------
+------------------
 
 The built-in **preprocessing** in sfft (based on SExtractor) is only designed to provide a safe and generic approach which can adapt to diverse imaging data. In contrast to the high speed of the image subtraction, the computing performance of the built-in **preprocessing** is much less remarkable (says, 10 times more computing time). Given a particular time-domain program, we do believe there is plenty of room for further optimization of the computing expense on the **preprocessing**. The two suggestions below might be helpful for users who would like to incorporate sfft in their pipeline efficiently:
 
@@ -105,7 +105,7 @@ Our software provides a customized module which allows users to feed their own i
 **Additional Remarks**: If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of sfft subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find in above test that the GPU warming-up is quite slow. Fortunately, this problem can be esaily solved by running a trivial subtraction (e.g., on empty images) in advance and making the pipe waiting for the subsequent observations (see above test).
 
 Parallel Computing
------------
+--------------------
 
 We have also developed modules to optimize the overall computing performance of sparse-flavor-sfft and crowded-flavor-sfft for the cases when you need to deal with multiple tasks simultaneously.
 
@@ -118,7 +118,7 @@ We have also developed modules to optimize the overall computing performance of 
 - Since version 1.1, sfft has allowed for multiple tasks without conflicting GPU usage, by using the modules ``sfft.MultiEasySparsePacket`` for sparse-flavor-sfft and ``sfft.MultiEasyCrowdedPacket`` for crowded-flavor-sfft, respectively. Please see the directory test/subtract_test_multiprocessing to find the examples. Note that ONLY the CuPy backend is supported in multiprocessing mode.
 
 Remarks on the direction of image subtraction
------------
+-----------------------------------------------
 
 There is a universal argument named -ForceConv to control the direction of image subtraction, which works on all image subtraction modules in sfft.
 
@@ -131,7 +131,7 @@ There is a universal argument named -ForceConv to control the direction of image
 Note that a transient on science image is always a positive signal on difference image whatever -ForceConv is.
 
 Additional Function
------------
+---------------------
 
 We also present a decorrelation module to whiten the background noise of the difference image.
 
@@ -139,12 +139,12 @@ We also present a decorrelation module to whiten the background noise of the dif
 
 
 Comments on Backward Compatiablity
------------
+------------------------------------
 
 We have tried our best to ensure the backward compatiablity, however, the rule was sometimes overrided in the development of sfft, e.g., some arguments might be deprecated in higher version of sfft. Users might get errors when they use old scripts but update sfft to a higher version. To solve the problem, I have been maintaining the test scripts on Github to make sure they can always work for the lastest version of sfft. You can also find the change log of arguments in the test scripts. 
 
 What's new
------------
+------------
 
 - New release sfft v1.4.2+ that can support Python 3.10! [Lei, Jan 9, 2024]
 
@@ -186,14 +186,14 @@ Todo list
 - Add a function for optimizing sfft on a given computing platform with multiple CPU threading and one/multiple GPU card(s). This would be very useful to reduce the overall time cost when users have a large set of image-pairs to be processed simultaneously (e.g., serve for DECam, each exposure produces 61 CCD images). [Lei, May 20, 2022] **[ALREADY DONE]**
 
 Common issues
------------
+---------------
 
 - If your Python environment already has some version of llvmlite (a package required by NumPy backend) before installing sfft. The setup.py in sfft cannot properly update llvmlite to the desired version, then you may get errors related to Numba or llvmlite. If so, please manually install llvmlite by: ::
 
     pip install llvmlite==0.36.0 --ignore-installed
 
 Development
------------
+-------------
 The latest source code can be obtained from
 `<https://github.com/thomasvrussell/sfft>`_.
 
@@ -207,7 +207,7 @@ information:
 - Version of sfft.
 
 Citing
-------
+--------
 
 *Image Subtraction in Fourier Space. Hu, L., Wang, L., Chen, X., & Yang, J. 2022, The Astrophysical Journal, 936, 157*
 
@@ -218,6 +218,6 @@ ApJ Publication link: `<https://doi.org/10.3847/1538-4357/ac7394>`_.
 Related DOI: 10.3847/1538-4357/ac7394
 
 Publications using SFFT method
-------
+--------------------------------
 
 See ADS Library: https://ui.adsabs.harvard.edu/public-libraries/lc4tiTR_T--92f9k0YrRQg
