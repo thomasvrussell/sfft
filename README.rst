@@ -5,9 +5,6 @@ Package Description
 
 .. image:: https://img.shields.io/badge/License-MIT-blue.svg
     :target: https://opensource.org/licenses/MIT
-.. image:: https://img.shields.io/pypi/v/sfft.svg
-    :target: https://pypi.python.org/pypi/sfft
-    :alt: Latest Version
 .. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=orange&left_text=Downloads
  :target: https://pepy.tech/project/sfft
     :target: https://pepy.tech/project/sfft
