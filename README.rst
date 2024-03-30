@@ -3,19 +3,18 @@
 Package Description
 -------------------
 
-.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.6576426.svg
-   :target: https://doi.org/10.5281/zenodo.6576426
 .. image:: https://img.shields.io/pypi/v/sfft.svg
     :target: https://pypi.python.org/pypi/sfft
     :alt: Latest Version
 .. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=orange&left_text=Downloads
  :target: https://pepy.tech/project/sfft
-.. image:: https://static.pepy.tech/personalized-badge/sfft?period=month&units=international_system&left_color=grey&right_color=yellow&left_text=Downloads/month
     :target: https://pepy.tech/project/sfft
 .. image:: https://img.shields.io/badge/python-3.7-green.svg
     :target: https://www.python.org/downloads/release/python-370/
 .. image:: https://img.shields.io/badge/License-MIT-blue.svg
     :target: https://opensource.org/licenses/MIT
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.6576426.svg
+   :target: https://doi.org/10.5281/zenodo.6576426
 |
 Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in Fourier space. SFFT brings about a remarkable improvement of computational performance of around an order of magnitude compared to other published image subtraction codes. 
 
@@ -26,6 +25,7 @@ To get a clear picture of our method, we summarize a variety of features from di
 ..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_features.png
 
 SFFT method is the transient detection engine for several ongoing time-domain programs, including the `DESIRT <https://ui.adsabs.harvard.edu/abs/2022TNSAN.107....1P/abstract>`_ survey based on DECam & DESI and the JWST Cycle 3 Archival program `AR 5965 <https://www.stsci.edu/jwst/science-execution/program-information?id=5965>`_.
+
 
 Installation
 -----------
