@@ -74,9 +74,9 @@ Quick start guide
 ------------------
 We have prepared several examples in the test directory so that you can familar with the usage of the main functions in our software:
 
-.. [*] **sfft subtraction for crowded field** : The example in subdirectory named subtract_test_crowded_flavor. We use crowded-flavor-sfft (module ``sfft.EasyCrowdedPacket``) to perform image subtraction for ZTF M31 observations. More detailed explanations of this module, see help(``sfft.EasyCrowdedPacket``).
+**sfft subtraction for crowded field** : The example in subdirectory named subtract_test_crowded_flavor. We use crowded-flavor-sfft (module ``sfft.EasyCrowdedPacket``) to perform image subtraction for ZTF M31 observations. More detailed explanations of this module, see help(``sfft.EasyCrowdedPacket``).
 
-.. [*] **sfft subtraction for sparse field** : The example in subdirectory named subtract_test_sparse_flavor. We use sparse-flavor-sfft (module ``sfft.EasySparsePacket``) to perform image subtraction for CTIO-4m DECam observations. More detailed explanations of this module, see help(``sfft.EasySparsePacket``).
+**sfft subtraction for sparse field** : The example in subdirectory named subtract_test_sparse_flavor. We use sparse-flavor-sfft (module ``sfft.EasySparsePacket``) to perform image subtraction for CTIO-4m DECam observations. More detailed explanations of this module, see help(``sfft.EasySparsePacket``).
 
 - **IMPORTANT NOTICE: the input images of sparse-flavor-sfft should be SKY-SUBTRACTED!** One can make use of SExtractor to subtract the sky background, which has been also wrapped in this package, please use the module ``sfft.utils.SExSkySubtract`` and type help(``sfft.utils.SExSkySubtract``) to find its usage. There is an additional example in subtract_test_sparse_flavor (see directory prepare_data_example), that shows how to prepare the input image pair for sparse-flavor-sfft by ``sfft.utils.SExSkySubtract`` for sky subtraction and ``sfft.utils.pyAstroMatic.PYSWarp`` for image alignment, respecitvely.
 
@@ -101,7 +101,7 @@ Besides, we encourage users to design dedicated image-masking strategies for the
 
 Our software provides a customized module which allows users to feed their own image-masking results, i.e., the module only perform the sfft subtraction. In this test, you would see the lightning fast speed of sfft subtraction on GPU devices!
 
-.. [*] **customized sfft subtraction** : The example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket``. More detailed explanations of the module: help(``sfft.CustomizedPacket``).
+**customized sfft subtraction** : The example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket``. More detailed explanations of the module: help(``sfft.CustomizedPacket``).
 
 **Additional Remarks**: If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of sfft subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find in above test that the GPU warming-up is quite slow. Fortunately, this problem can be esaily solved by running a trivial subtraction (e.g., on empty images) in advance and making the pipe waiting for the subsequent observations (see above test).
 
@@ -136,7 +136,7 @@ Additional Function
 
 We also present a decorrelation module to whiten the background noise of the difference image.
 
-.. [*] **difference noise decorrelation** : The example in subdirectory named difference_noise_decorrelation. We use noise-decorrelation toolkit (module ``sfft.utils.DeCorrelationCalculator``) to whiten the background noise on difference image. In this test, the difference image is generated from image subtraction (by sfft) between a coadded reference image and a coadded science image, each stacked from 5 DECam individual observations with PSF homogenization (by sfft). The toolkit can be also applied to whiten a coadded image as long as convolution is involved in the stacking process.
+**difference noise decorrelation** : The example in subdirectory named difference_noise_decorrelation. We use noise-decorrelation toolkit (module ``sfft.utils.DeCorrelationCalculator``) to whiten the background noise on difference image. In this test, the difference image is generated from image subtraction (by sfft) between a coadded reference image and a coadded science image, each stacked from 5 DECam individual observations with PSF homogenization (by sfft). The toolkit can be also applied to whiten a coadded image as long as convolution is involved in the stacking process.
 
 
 Comments on Backward Compatiablity
@@ -210,7 +210,7 @@ information:
 Citing
 --------
 
-*Image Subtraction in Fourier Space. Hu, L., Wang, L., Chen, X., & Yang, J. 2022, The Astrophysical Journal, 936, 157*
+*Image Subtraction in Fourier Space. Lei Hu et al. 2022, The Astrophysical Journal, 936, 157*
 
 Arxiv link: `<https://arxiv.org/abs/2109.09334>`_.
 
