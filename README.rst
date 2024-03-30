@@ -39,8 +39,9 @@ Or alternatively, install any desired version of sfft from Github `<https://gith
 
 sfft now has the following two backends to perform the image subtraction.
 
-[#] **CuPy backend** : The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
-[#] **NumPy backend** : sfft will totally run on the CPU devices. NO GPU devices and CUDA dependencies are required for this backend.
+**CuPy backend** : The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
+
+**NumPy backend** : sfft will totally run on the CPU devices. NO GPU devices and CUDA dependencies are required for this backend.
 
 - CUDA 12: E.g, you may enable the CuPy backend for CUDA 12.0 via: ::
 
