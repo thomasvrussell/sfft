@@ -24,10 +24,10 @@ To get a clear picture of our method, we summarize a variety of features from di
 
 ..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_features.png
 
-SFFT method is the transient detection engine for several ongoing time-domain programs, including the `DESIRT <https://ui.adsabs.harvard.edu/abs/2022TNSAN.107....1P/abstract>`_ survey based on DECam & DESI and the JWST Cycle 3 Archival program 
+SFFT method is the transient detection engine for several ongoing time-domain programs, including the `DESIRT <https://ui.adsabs.harvard.edu/abs/2022TNSAN.107....1P/abstract>`_ survey based on DECam & DESI and the JWST Cycle 3 Archival program `AR 5965 <https://www.stsci.edu/jwst/science-execution/program-information?id=5965>`_.
 
 Installation
------------
+-------------------
 One can install the latest stable version of sfft from pip (recommended): ::
     
     pip install sfft
