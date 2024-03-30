@@ -217,6 +217,6 @@ ApJ Publication link: `<https://doi.org/10.3847/1538-4357/ac7394>`_.
 Related DOI: 10.3847/1538-4357/ac7394
 
 Publications using SFFT method
--------------------
+--------------------------------
 
 See ADS Library: https://ui.adsabs.harvard.edu/public-libraries/lc4tiTR_T--92f9k0YrRQg
