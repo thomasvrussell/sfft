@@ -28,7 +28,7 @@ To get a clear picture of our method, we summarize a variety of features from di
 SFFT method is the transient detection engine for several ongoing time-domain programs, including the `DESIRT <https://ui.adsabs.harvard.edu/abs/2022TNSAN.107....1P/abstract>`_ survey based on DECam & DESI and the JWST Cycle 3 Archival program `AR 5965 <https://www.stsci.edu/jwst/science-execution/program-information?id=5965>`_.
 
 Installation
------------
+--------------
 One can install the latest stable version of sfft from pip (recommended): ::
     
     pip install sfft
@@ -39,8 +39,8 @@ Or alternatively, install any desired version of sfft from Github `<https://gith
 
 sfft now has the following two backends to perform the image subtraction.
 
-.. [#] **CuPy backend** : The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
-.. [#] **NumPy backend** : sfft will totally run on the CPU devices. NO GPU devices and CUDA dependencies are required for this backend.
+[#] **CuPy backend** : The core functions of sfft are written in `CuPy <https://github.com/cupy/cupy>`_. Users need to install CuPy according to their CUDA version to enable this backend. Note this backend require GPU device(s) with double-precision support.
+[#] **NumPy backend** : sfft will totally run on the CPU devices. NO GPU devices and CUDA dependencies are required for this backend.
 
 - CUDA 12: E.g, you may enable the CuPy backend for CUDA 12.0 via: ::
 
