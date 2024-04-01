@@ -25,7 +25,8 @@ class PY_SEx:
         BACKPHOTO_TYPE='LOCAL', PHOT_APERTURES=5.0, NegativeCorr=True, CHECKIMAGE_TYPE='NONE', \
         VIGNET=None, STAMP_IMGSIZE=None, AddRD=False, ONLY_FLAGS=None, XBoundary=0.0, YBoundary=0.0, \
         Coor4Match='XY_', XY_Quest=None, Match_xytol=2.0, RD_Quest=None, Match_rdtol=1.0, \
-        Preserve_NoMatch=False, MDIR=None, VERBOSE_TYPE='QUIET', VERBOSE_LEVEL=2):
+        Preserve_NoMatch=False, MDIR=None, VERBOSE_TYPE='QUIET', VERBOSE_LEVEL=2,
+        FITS_DATA_EXT=0):
 
         """
         # Inputs & Outputs:
@@ -170,6 +171,8 @@ class PY_SEx:
         -VERBOSE_LEVEL [2]              # The level of verbosity, can be [0, 1, 2]
                                         # 0/1/2: QUIET/NORMAL/FULL mode
                                         # NOTE: it only controls the verbosity out of SExtractor.
+
+        -FITS_DATA_EXT [0]              # The extension where the image is located in the FITS file, e.g., the 0 in hdu[0].data. 
         
         # Returns:
 
@@ -669,7 +672,7 @@ class PY_SEx:
         for k, FITS_SExCheck in enumerate(FITS_SExCheckLst):
             if pa.exists(FITS_SExCheck):
                 #if MDIR is not None: record(FITS_SExCheck)
-                PixA_SExCheck = fits.getdata(FITS_SExCheck, ext=0).T
+                PixA_SExCheck = fits.getdata(FITS_SExCheck, ext=FITS_DATA_EXT).T
             else: PixA_SExCheck, FtmpLst[k]  = None, None
             PixA_SExCheckLst.append(PixA_SExCheck)
         FITS_SExCheckLst = FtmpLst

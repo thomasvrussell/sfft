@@ -12,7 +12,8 @@ __version__ = "v1.4"
 class SEx_SkySubtract:
     @staticmethod
     def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, PIXEL_SCALE=1.0, SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
-        SATUR_DEFAULT=100000., BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, VERBOSE_LEVEL=2):
+        SATUR_DEFAULT=100000., BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, VERBOSE_LEVEL=2,
+        FITS_DATA_EXT=0):
 
         """
         # Inputs & Outputs:
@@ -52,6 +53,8 @@ class SEx_SkySubtract:
         -VERBOSE_LEVEL [2]              # The level of verbosity, can be [0, 1, 2]
                                         # 0/1/2: QUIET/NORMAL/FULL mode
 
+        -FITS_DATA_EXT [0]              # The extension where the image is located in the FITS file, e.g., the 0 in hdu[0].data. 
+
         # Returns:
 
             SKYDIP                      # The flux peak of the sky image (outliers rejected)
@@ -73,10 +76,10 @@ class SEx_SkySubtract:
             DETECT_MASK = PY_SEx.PS(FITS_obj=FITS_obj, SExParam=['X_IMAGE', 'Y_IMAGE'], GAIN_KEY='PHGAIN', SATUR_KEY=SATUR_KEY, \
                 BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, DETECT_THRESH=DETECT_THRESH, \
                 ANALYSIS_THRESH=1.5, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=0.005, \
-                BACKPHOTO_TYPE='GLOBAL', CHECKIMAGE_TYPE='OBJECTS', MDIR=None, VERBOSE_LEVEL=VERBOSE_LEVEL)[1][0].astype(bool)
+                BACKPHOTO_TYPE='GLOBAL', CHECKIMAGE_TYPE='OBJECTS', MDIR=None, VERBOSE_LEVEL=VERBOSE_LEVEL, FITS_DATA_EXT=FITS_DATA_EXT)[1][0].astype(bool)
         
         # * Extract SExtractor SKY-MAP from the Unmasked Image
-        PixA_obj = fits.getdata(FITS_obj, ext=0).T
+        PixA_obj = fits.getdata(FITS_obj, ext=FITS_DATA_EXT).T
         _PixA = PixA_obj.astype(np.float64, copy=True)    # default copy=True, just to emphasize
         _PixA[DETECT_MASK] = np.nan
         if not _PixA.flags['C_CONTIGUOUS']: _PixA = np.ascontiguousarray(_PixA)
@@ -102,7 +105,7 @@ class SEx_SkySubtract:
                 except KeyError: 
                     ESATUR = float(SATUR_DEFAULT - SKYPEAK)
                 hdl[0].header[ESATUR_KEY] = (ESATUR, 'MeLOn: Effective SATURATE after SEx-SKY-SUB')
-                hdl[0].data[:, :] = PixA_skysub.T
+                hdl[FITS_DATA_EXT].data[:, :] = PixA_skysub.T
                 hdl.writeto(FITS_skysub, overwrite=True)
         
         if FITS_sky is not None:
