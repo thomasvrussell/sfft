@@ -6,6 +6,7 @@ import numpy as np
 import os.path as pa
 from astropy.io import fits
 from tempfile import mkdtemp
+from shutil import rmtree
 from astropy.table import Table, Column
 from sfft.utils.ReadWCS import Read_WCS
 from sfft.utils.StampGenerator import Stamp_Generator
@@ -18,15 +19,14 @@ __version__ = "v1.4"
 
 class PY_SEx:
     @staticmethod
-    def PS(FITS_obj, PSF_obj=None, FITS_ref=None, SExParam=None, CATALOG_TYPE='FITS_LDAC', \
+    def PS(FITS_obj, PSF_obj=None, FITS_ref=None, SExParam=None, FITS_DATA_EXT=0, CATALOG_TYPE='FITS_LDAC', \
         GAIN_KEY='GAIN', SATUR_KEY='SATURATE', PIXEL_SCALE=1.0, SEEING_FWHM=1.2, BACK_TYPE='AUTO', \
         BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, DETECT_THRESH=1.5, ANALYSIS_THRESH=1.5, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_NTHRESH=32, DEBLEND_MINCONT=0.005, CLEAN='Y', \
         BACKPHOTO_TYPE='LOCAL', PHOT_APERTURES=5.0, NegativeCorr=True, CHECKIMAGE_TYPE='NONE', \
         VIGNET=None, STAMP_IMGSIZE=None, AddRD=False, ONLY_FLAGS=None, XBoundary=0.0, YBoundary=0.0, \
         Coor4Match='XY_', XY_Quest=None, Match_xytol=2.0, RD_Quest=None, Match_rdtol=1.0, \
-        Preserve_NoMatch=False, MDIR=None, VERBOSE_TYPE='QUIET', VERBOSE_LEVEL=2,
-        FITS_DATA_EXT=0):
+        Preserve_NoMatch=False, MDIR=None, VERBOSE_TYPE='QUIET', VERBOSE_LEVEL=2):
 
         """
         # Inputs & Outputs:
@@ -43,6 +43,8 @@ class PY_SEx:
 
         -SExParam [None]               # Parameter List (Python list here) of SExtractor output catalog
                                         # one can use command line 'sex -dp' to find all available parameters
+
+        -FITS_DATA_EXT [0]              # The extension where the image is located in the FITS file, e.g., the 0 in hdu[0].data. 
 
         # Configurations for SExtractor:
 
@@ -172,7 +174,6 @@ class PY_SEx:
                                         # 0/1/2: QUIET/NORMAL/FULL mode
                                         # NOTE: it only controls the verbosity out of SExtractor.
 
-        -FITS_DATA_EXT [0]              # The extension where the image is located in the FITS file, e.g., the 0 in hdu[0].data. 
         
         # Returns:
 
