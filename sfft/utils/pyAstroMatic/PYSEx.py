@@ -6,7 +6,6 @@ import numpy as np
 import os.path as pa
 from astropy.io import fits
 from tempfile import mkdtemp
-from shutil import rmtree
 from astropy.table import Table, Column
 from sfft.utils.ReadWCS import Read_WCS
 from sfft.utils.StampGenerator import Stamp_Generator
@@ -19,7 +18,7 @@ __version__ = "v1.4"
 
 class PY_SEx:
     @staticmethod
-    def PS(FITS_obj, PSF_obj=None, FITS_ref=None, SExParam=None, FITS_DATA_EXT=0, CATALOG_TYPE='FITS_LDAC', \
+    def PS(FITS_obj, PSF_obj=None, FITS_ref=None, SExParam=None, CATALOG_TYPE='FITS_LDAC', \
         GAIN_KEY='GAIN', SATUR_KEY='SATURATE', PIXEL_SCALE=1.0, SEEING_FWHM=1.2, BACK_TYPE='AUTO', \
         BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, DETECT_THRESH=1.5, ANALYSIS_THRESH=1.5, \
         DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_NTHRESH=32, DEBLEND_MINCONT=0.005, CLEAN='Y', \
@@ -43,8 +42,6 @@ class PY_SEx:
 
         -SExParam [None]               # Parameter List (Python list here) of SExtractor output catalog
                                         # one can use command line 'sex -dp' to find all available parameters
-
-        -FITS_DATA_EXT [0]              # The extension where the image is located in the FITS file, e.g., the 0 in hdu[0].data. 
 
         # Configurations for SExtractor:
 
@@ -673,7 +670,7 @@ class PY_SEx:
         for k, FITS_SExCheck in enumerate(FITS_SExCheckLst):
             if pa.exists(FITS_SExCheck):
                 #if MDIR is not None: record(FITS_SExCheck)
-                PixA_SExCheck = fits.getdata(FITS_SExCheck, ext=FITS_DATA_EXT).T
+                PixA_SExCheck = fits.getdata(FITS_SExCheck, ext=0).T
             else: PixA_SExCheck, FtmpLst[k]  = None, None
             PixA_SExCheckLst.append(PixA_SExCheck)
         FITS_SExCheckLst = FtmpLst

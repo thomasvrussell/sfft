@@ -13,9 +13,9 @@ __version__ = "v1.4"
 
 class PY_SWarp:
     @staticmethod
-    def PS(FITS_obj, FITS_ref, FITS_resamp=None,  FITS_DATA_EXT=0, \
+    def PS(FITS_obj, FITS_ref, FITS_resamp=None, \
         GAIN_KEY='GAIN', SATUR_KEY='SATURATE', GAIN_DEFAULT=1.0, SATLEV_DEFAULT=100000., \
-        NAXIS1_VAL=None, NAXIS2_VAL=None, RESAMPLE='Y', IMAGE_SIZE=0, OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', \
+        RESAMPLE='Y', IMAGE_SIZE=0, OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', \
         SUBTRACT_BACK='N', FILL_VALUE=None, VERBOSE_TYPE='NORMAL', VERBOSE_LEVEL=2,TMPDIR_ROOT=None):
         
         """
@@ -26,8 +26,6 @@ class PY_SWarp:
         -FITS_ref []                        # FITS file path of the input image as resampling reference
 
         -FITS_resamp [None]                 # FITS file path of the output image of resampled -FITS_obj
-
-        -FITS_DATA_EXT [0]                  # The extension where the image is located in the FITS file, e.g., the 0 in hdu[0].data. 
 
         # SWarp parameters:
 
@@ -41,10 +39,6 @@ class PY_SWarp:
 
         -SATLEV_DEFAULT                     # Saturation value if no header keyword available
 
-        -NAXIS1_VAL                         # NAXIS1 value if no header keyword available
-        
-        -NAXIS2_VAL                         # NAXIS2 value if no header keyword available
-        
         -RESAMPLE                           # Toggle resampling. Default 'Y'. Other option 'N'.
 
         -IMAGE_SIZE                         # Size of output image. Default '0', meaning automatic.
@@ -135,7 +129,6 @@ class PY_SWarp:
 
         # * make directory as a workplace
         TDIR = mkdtemp(suffix=None, prefix='PYSWarp_', dir=TMPDIR_ROOT)
-        print('TDIR', TDIR)
 
         # * create SWarp configuration file in TDIR
         ConfigDict = {}
@@ -176,12 +169,8 @@ class PY_SWarp:
         wcshdr_ref['BITPIX'] = phr_ref['BITPIX']
         wcshdr_ref['NAXIS'] = phr_ref['NAXIS']
 
-        try:
-            wcshdr_ref['NAXIS1'] = phr_ref['NAXIS1']
-            wcshdr_ref['NAXIS2'] = phr_ref['NAXIS2']
-        except KeyError:
-            wcshdr_ref['NAXIS1'] = NAXIS1_VAL
-            wcshdr_ref['NAXIS2'] = NAXIS2_VAL
+        wcshdr_ref['NAXIS1'] = phr_ref['NAXIS1']
+        wcshdr_ref['NAXIS2'] = phr_ref['NAXIS2']
 
         wcshdr_ref.tofile(_headfile)
 
@@ -206,16 +195,14 @@ class PY_SWarp:
         hdr_op['SWARP_R'] = (pa.basename(FITS_ref), 'MeLOn: PYSWarp')
         for key in ConfigDict:
             value = ConfigDict[key]
-            print('key: ', key)
-            print('value:', value)
             pack = ' : '.join(['SWarp Parameter', key, value])
             hdr_op.add_history(pack)
 
         # * fill the missing data in resampled image [SWarp default 0]
         PixA_resamp, MissingMask = None, None
         try: 
-            PixA_resamp = fits.getdata(tFITS_resamp, ext=FITS_DATA_EXT).T
-            PixA_resamp_weight = fits.getdata(tFITS_resamp_weight, ext=FITS_DATA_EXT).T
+            PixA_resamp = fits.getdata(tFITS_resamp, ext=0).T
+            PixA_resamp_weight = fits.getdata(tFITS_resamp_weight, ext=0).T
             MissingMask = PixA_resamp_weight == 0
             if FILL_VALUE is not None:
                 PixA_resamp[MissingMask] = FILL_VALUE
