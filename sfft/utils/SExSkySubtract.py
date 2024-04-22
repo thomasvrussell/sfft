@@ -6,6 +6,7 @@ from scipy.stats import iqr
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 # version: Apr 22, 2024
 
+# improved by Lauren Aldoroty (Duke Univ.)
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 

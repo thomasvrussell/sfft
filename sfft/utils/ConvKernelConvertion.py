@@ -1,6 +1,6 @@
 import numpy as np
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.0"
 
 # * Remarks on Convolution Theorem

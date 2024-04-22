@@ -3,7 +3,7 @@ import numpy as np
 from sfft.utils.ConvKernelConvertion import ConvKernel_Convertion
 # version: Mar 10, 2023
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
 class DeCorrelation_Calculator:

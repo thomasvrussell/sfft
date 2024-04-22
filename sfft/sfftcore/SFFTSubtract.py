@@ -2,7 +2,7 @@ import time
 import numpy as np
 # version: Feb 25, 2023
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
 class ElementalSFFTSubtract_Cupy:

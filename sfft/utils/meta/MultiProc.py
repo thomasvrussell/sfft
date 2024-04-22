@@ -3,7 +3,7 @@ import threading
 import multiprocessing
 # version: Feb 6, 2023
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
 class Multi_Proc:

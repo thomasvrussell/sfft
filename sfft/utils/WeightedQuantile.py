@@ -2,7 +2,7 @@ import warnings
 import numpy as np
 # version: Aug 17, 2022
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.3"
 
 class Weighted_Quantile:

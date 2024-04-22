@@ -13,7 +13,7 @@ from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
 # version: Mar 12, 2023
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
 class PY_SEx:

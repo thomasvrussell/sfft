@@ -8,6 +8,7 @@ from sfft.utils.CombineHeader import Combine_Header
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
 # version: Apr 22, 2024
 
+# improved by Lauren Aldoroty (Duke Univ.)
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 

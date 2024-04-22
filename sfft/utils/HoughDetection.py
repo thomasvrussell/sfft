@@ -7,7 +7,7 @@ from pkg_resources import parse_version
 from skimage.transform import hough_line, hough_line_peaks
 # version: Feb 4, 2023
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
 class Hough_Detection:

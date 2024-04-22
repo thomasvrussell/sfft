@@ -1,7 +1,7 @@
 import signal
 import threading, time, ctypes
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.1"
 
 class Timeout():

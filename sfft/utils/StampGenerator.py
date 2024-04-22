@@ -6,7 +6,8 @@ from astropy.nddata.utils import Cutout2D
 from sfft.utils.ReadWCS import Read_WCS
 # version: Feb 6, 2023
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+# improved by Lauren Aldoroty (Duke Univ.)
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
 class Stamp_Generator:
