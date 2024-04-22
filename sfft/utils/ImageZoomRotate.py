@@ -5,7 +5,10 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from tempfile import mkdtemp
 from sfft.utils.pyAstroMatic.PYSWarp import PY_SWarp
-# version: Apr 11, 2023
+# version: Apr 22, 2024
+
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
+__version__ = "v1.4"
 
 class Image_ZoomRotate:
     @staticmethod

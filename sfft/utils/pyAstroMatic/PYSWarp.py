@@ -6,17 +6,17 @@ from tempfile import mkdtemp
 from sfft.utils.ReadWCS import Read_WCS
 from sfft.utils.CombineHeader import Combine_Header
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Apr 7, 2023
+# version: Apr 22, 2024
 
-__author__ = "Lei Hu <hulei@pmo.ac.cn>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
 class PY_SWarp:
     @staticmethod
     def PS(FITS_obj, FITS_ref, FITS_resamp=None, \
-        GAIN_KEY='GAIN', SATUR_KEY='SATURATE', GAIN_DEFAULT=1.0, SATLEV_DEFAULT=100000., \
-        RESAMPLE='Y', IMAGE_SIZE=0, OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', \
-        SUBTRACT_BACK='N', FILL_VALUE=None, VERBOSE_TYPE='NORMAL', VERBOSE_LEVEL=2,TMPDIR_ROOT=None):
+        GAIN_KEY='GAIN', SATUR_KEY='SATURATE', GAIN_DEFAULT=0.0, SATLEV_DEFAULT=50000.0, \
+        OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', FILL_VALUE=None, \
+        TMPDIR_ROOT=None, VERBOSE_TYPE='NORMAL', VERBOSE_LEVEL=2):
         
         """
         # Inputs & Outputs:
@@ -35,15 +35,9 @@ class PY_SWarp:
         -SATUR_KEY ['SATURATE']             # SWarp Parameter SATLEV_KEYWORD
                                             # i.e., keyword of the saturation level in the FITS image header
 
-        -GAIN_DEFAULT                       # Gain value if no header keyword available
+        -GAIN_DEFAULT [0.0]                 # Gain value if no header keyword available
 
-        -SATLEV_DEFAULT                     # Saturation value if no header keyword available
-
-        -RESAMPLE                           # Toggle resampling. Default 'Y'. Other option 'N'.
-
-        -IMAGE_SIZE                         # Size of output image. Default '0', meaning automatic.
-
-
+        -SATLEV_DEFAULT [50000.0]           # Saturation value if no header keyword available
 
         -OVERSAMPLING [1]                   # SWarp Parameter OVERSAMPLING
                                             # Oversampling in each dimension
@@ -63,14 +57,14 @@ class PY_SWarp:
         -VERBOSE_TYPE ['NORMAL']            # SWarp Parameter VERBOSE_TYPE
                                             # QUIET,LOG,NORMAL, or FULL
 
-        -VERBOSE_LEVEL [2]                  # The level of verbosity, can be [0, 1, 2]
-                                            # 0/1/2: QUIET/NORMAL/FULL mode
-                                            # NOTE: it only controls the verbosity out of SWarp.
-
         # Other parameters:
 
         -FILL_VALUE [None]                  # How to fill the invalid (boundary) pixels in -FITS_resamp and -FITS_resamp_weight
                                             # e.g., -FILL_VALUE = 0.0, -FILL_VALUE = np.nan
+
+        -VERBOSE_LEVEL [2]                  # The level of verbosity, can be [0, 1, 2]
+                                            # 0/1/2: QUIET/NORMAL/FULL mode
+                                            # NOTE: it only controls the verbosity out of SWarp.
 
         -TMPDIR_ROOT [None]                 # Specify root directory of temporary working directory. 
 
@@ -138,9 +132,6 @@ class PY_SWarp:
         ConfigDict['GAIN_DEFAULT'] = '%s' %GAIN_DEFAULT
         ConfigDict['SATLEV_DEFAULT'] = '%s' %SATLEV_DEFAULT
 
-        ConfigDict['RESAMPLE'] = '%s' %RESAMPLE
-        ConfigDict['IMAGE_SIZE'] = '%d' %IMAGE_SIZE
-
         ConfigDict['OVERSAMPLING'] = '%d' %OVERSAMPLING
         ConfigDict['RESAMPLING_TYPE'] = '%s' %RESAMPLING_TYPE
         ConfigDict['SUBTRACT_BACK'] = '%s' %SUBTRACT_BACK
@@ -156,8 +147,9 @@ class PY_SWarp:
             AstroMatic_KEY='swarp', ConfigDict=ConfigDict, tag='PYSWarp')
 
         # * make temporary FITS_resamp & FIT_resamp_weight in TDIR
-        tFITS_resamp = os.path.join(TDIR, '%s.tmp_resamp.fits' %pa.basename(FITS_obj)[:-5])
-        tFITS_resamp_weight = os.path.join(TDIR, '%s.tmp_resamp_weight.fits' %pa.basename(FITS_obj)[:-5])
+        fname_obj = pa.basename(FITS_obj)[:-5]
+        tFITS_resamp = os.path.join(TDIR, '%s.tmp_resamp.fits' %fname_obj)
+        tFITS_resamp_weight = os.path.join(TDIR, '%s.tmp_resamp_weight.fits' %fname_obj)
 
         # * build .head file from FITS_ref
         phr_ref = fits.getheader(FITS_ref, ext=0)
@@ -175,20 +167,18 @@ class PY_SWarp:
         wcshdr_ref.tofile(_headfile)
 
         # * trigger SWarp 
-        os.system('cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s' \
-            %(TDIR, FITS_obj, tFITS_resamp, tFITS_resamp_weight, swarp_config_path))
+        command = "cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s"  \
+            %(TDIR, FITS_obj, tFITS_resamp, tFITS_resamp_weight, swarp_config_path)
+        print('MeLOn CheckPoint: Run SWarp Command ... \n %s' %command)
+        os.system(command)
 
-        print('cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s' \
-            %(TDIR, FITS_obj, tFITS_resamp, tFITS_resamp_weight, swarp_config_path))
-        
         # * make a combined header for output FITS
         hdr_op = Combine_Header.CH(hdr_base=phr_obj, hdr_wcs=phr_ref, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         # * update header by the SWarp generated saturation level
-
-        # NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
-        NEW_SATUR = fits.open(tFITS_resamp)
-        hdr_op[SATUR_KEY] = (NEW_SATUR[0].header['SATURATE'], 'MeLOn: PYSWarp')
+        NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
+        if SATUR_KEY in hdr_op:
+            hdr_op[SATUR_KEY] = (NEW_SATUR, 'MeLOn: PYSWarp')
 
         # * add history
         hdr_op['SWARP_O'] = (pa.basename(FITS_obj), 'MeLOn: PYSWarp')

@@ -171,7 +171,6 @@ class PY_SEx:
                                         # 0/1/2: QUIET/NORMAL/FULL mode
                                         # NOTE: it only controls the verbosity out of SExtractor.
 
-        
         # Returns:
 
             AstSEx                      # astropy Table of SExtractor photometry catalog
@@ -184,8 +183,7 @@ class PY_SEx:
 
             FITS_SExCheckLst            # List of file path of SExtractor check images
                                         # P.S. only for -MDIR is not None
-
-
+        
         # ---------------- MORE DESCRIPTION ON HOW SEXTRACTOR WORK ---------------- 
         #
         # * SExtractor Inputs
