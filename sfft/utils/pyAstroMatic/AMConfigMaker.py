@@ -27,10 +27,11 @@ class AMConfig_Maker:
         """
 
         # * Creat default configuration file and extract keywords
+
         os.system("%s -dd > %s" %(AstroMatic_KEY, config_path))    # WARNING: may be invalid for other os-platform
         config_lst = open(config_path).read().split('\n')
         Keys = [re.split("\s+", line)[0] for line in config_lst]   # WARNING: invalid lines will get '' or '#'
-        
+
         # * Modify the configuration 
         for key in ConfigDict:
             value = ConfigDict[key]
@@ -48,6 +49,7 @@ class AMConfig_Maker:
             config_lst[index] = '    '.join([key, value, comment])
 
         string = "\n".join(config_lst)
+
         sfile = open(config_path, 'w')
         sfile.write(string)
         sfile.close()

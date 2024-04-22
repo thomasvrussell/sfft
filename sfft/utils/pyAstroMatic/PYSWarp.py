@@ -13,9 +13,10 @@ __version__ = "v1.4"
 
 class PY_SWarp:
     @staticmethod
-    def PS(FITS_obj, FITS_ref, FITS_resamp=None, GAIN_KEY='GAIN', SATUR_KEY='SATURATE', \
-        OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', FILL_VALUE=None, \
-        VERBOSE_TYPE='NORMAL', VERBOSE_LEVEL=2):
+    def PS(FITS_obj, FITS_ref, FITS_resamp=None, \
+        GAIN_KEY='GAIN', SATUR_KEY='SATURATE', GAIN_DEFAULT=1.0, SATLEV_DEFAULT=100000., \
+        RESAMPLE='Y', IMAGE_SIZE=0, OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', \
+        SUBTRACT_BACK='N', FILL_VALUE=None, VERBOSE_TYPE='NORMAL', VERBOSE_LEVEL=2,TMPDIR_ROOT=None):
         
         """
         # Inputs & Outputs:
@@ -33,6 +34,16 @@ class PY_SWarp:
 
         -SATUR_KEY ['SATURATE']             # SWarp Parameter SATLEV_KEYWORD
                                             # i.e., keyword of the saturation level in the FITS image header
+
+        -GAIN_DEFAULT                       # Gain value if no header keyword available
+
+        -SATLEV_DEFAULT                     # Saturation value if no header keyword available
+
+        -RESAMPLE                           # Toggle resampling. Default 'Y'. Other option 'N'.
+
+        -IMAGE_SIZE                         # Size of output image. Default '0', meaning automatic.
+
+
 
         -OVERSAMPLING [1]                   # SWarp Parameter OVERSAMPLING
                                             # Oversampling in each dimension
@@ -60,6 +71,8 @@ class PY_SWarp:
 
         -FILL_VALUE [None]                  # How to fill the invalid (boundary) pixels in -FITS_resamp and -FITS_resamp_weight
                                             # e.g., -FILL_VALUE = 0.0, -FILL_VALUE = np.nan
+
+        -TMPDIR_ROOT [None]                 # Specify root directory of temporary working directory. 
 
         # Returns:
 
@@ -101,7 +114,6 @@ class PY_SWarp:
         # * check FITS_obj header
         objname = pa.basename(FITS_obj)
         phr_obj = fits.getheader(FITS_obj, ext=0)
-        assert GAIN_KEY in phr_obj and SATUR_KEY in phr_obj
 
         # a mild warning
         if VERBOSE_LEVEL in [1, 2]:
@@ -116,12 +128,18 @@ class PY_SWarp:
                 warnings.warn('MeLOn WARNING: %s' %_warn_message)
 
         # * make directory as a workplace
-        TDIR = mkdtemp(suffix=None, prefix='PYSWarp_', dir=None)
+        TDIR = mkdtemp(suffix=None, prefix='PYSWarp_', dir=TMPDIR_ROOT)
 
         # * create SWarp configuration file in TDIR
         ConfigDict = {}
         ConfigDict['GAIN_KEYWORD'] = '%s' %GAIN_KEY
         ConfigDict['SATLEV_KEYWORD'] = '%s' %SATUR_KEY
+
+        ConfigDict['GAIN_DEFAULT'] = '%s' %GAIN_DEFAULT
+        ConfigDict['SATLEV_DEFAULT'] = '%s' %SATLEV_DEFAULT
+
+        ConfigDict['RESAMPLE'] = '%s' %RESAMPLE
+        ConfigDict['IMAGE_SIZE'] = '%d' %IMAGE_SIZE
 
         ConfigDict['OVERSAMPLING'] = '%d' %OVERSAMPLING
         ConfigDict['RESAMPLING_TYPE'] = '%s' %RESAMPLING_TYPE
@@ -138,31 +156,39 @@ class PY_SWarp:
             AstroMatic_KEY='swarp', ConfigDict=ConfigDict, tag='PYSWarp')
 
         # * make temporary FITS_resamp & FIT_resamp_weight in TDIR
-        tFITS_resamp = TDIR + '/%s.tmp_resamp.fits' %pa.basename(FITS_obj)[:-5]
-        tFITS_resamp_weight = TDIR + '/%s.tmp_resamp_weight.fits' %pa.basename(FITS_obj)[:-5]
+        tFITS_resamp = os.path.join(TDIR, '%s.tmp_resamp.fits' %pa.basename(FITS_obj)[:-5])
+        tFITS_resamp_weight = os.path.join(TDIR, '%s.tmp_resamp_weight.fits' %pa.basename(FITS_obj)[:-5])
 
         # * build .head file from FITS_ref
         phr_ref = fits.getheader(FITS_ref, ext=0)
         w_ref = Read_WCS.RW(phr_ref, VERBOSE_LEVEL=VERBOSE_LEVEL)
+
         _headfile = tFITS_resamp[:-5] + '.head'
         wcshdr_ref = w_ref.to_header(relax=True)   # SIP distorsion requires relax=True
 
         wcshdr_ref['BITPIX'] = phr_ref['BITPIX']
         wcshdr_ref['NAXIS'] = phr_ref['NAXIS']
+
         wcshdr_ref['NAXIS1'] = phr_ref['NAXIS1']
         wcshdr_ref['NAXIS2'] = phr_ref['NAXIS2']
+
         wcshdr_ref.tofile(_headfile)
 
         # * trigger SWarp 
         os.system('cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s' \
+            %(TDIR, FITS_obj, tFITS_resamp, tFITS_resamp_weight, swarp_config_path))
+
+        print('cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s' \
             %(TDIR, FITS_obj, tFITS_resamp, tFITS_resamp_weight, swarp_config_path))
         
         # * make a combined header for output FITS
         hdr_op = Combine_Header.CH(hdr_base=phr_obj, hdr_wcs=phr_ref, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         # * update header by the SWarp generated saturation level
-        NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
-        hdr_op[SATUR_KEY] = (NEW_SATUR, 'MeLOn: PYSWarp')
+
+        # NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
+        NEW_SATUR = fits.open(tFITS_resamp)
+        hdr_op[SATUR_KEY] = (NEW_SATUR[0].header['SATURATE'], 'MeLOn: PYSWarp')
 
         # * add history
         hdr_op['SWARP_O'] = (pa.basename(FITS_obj), 'MeLOn: PYSWarp')

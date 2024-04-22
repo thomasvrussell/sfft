@@ -188,6 +188,10 @@ class Stamp_Generator:
             
             for i in range(NPOS):
                 PixA_Stp, hdr_Stp = PixA_StpLst[i], hdr_StpLst[i]
-                fits.HDUList([fits.PrimaryHDU(PixA_Stp.T, header=hdr_Stp)]).writeto(FITS_StpLst[i], overwrite=True)
+                if isinstance(FITS_StpLst, list):
+                    savename = FITS_StpLst[i]
+                elif isinstance(FITS_StpLst, str):
+                    savename = FITS_StpLst
+                fits.HDUList([fits.PrimaryHDU(PixA_Stp.T, header=hdr_Stp)]).writeto(savename, overwrite=True)
 
         return PixA_StpLst

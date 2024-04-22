@@ -170,6 +170,7 @@ class PY_SEx:
         -VERBOSE_LEVEL [2]              # The level of verbosity, can be [0, 1, 2]
                                         # 0/1/2: QUIET/NORMAL/FULL mode
                                         # NOTE: it only controls the verbosity out of SExtractor.
+
         
         # Returns:
 
