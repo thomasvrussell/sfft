@@ -3,8 +3,6 @@
 Package Description
 ---------------------
 
-.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.6576426.svg
-   :target: https://doi.org/10.5281/zenodo.6576426
 .. image:: https://img.shields.io/pypi/v/sfft.svg
     :target: https://pypi.python.org/pypi/sfft
     :alt: Latest Version
@@ -25,7 +23,7 @@ To get a clear picture of our method, we summarize a variety of features from di
 
 ..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_features.png
 
-SFFT method is the transient detection engine for several ongoing time-domain programs, including the `DESIRT <https://ui.adsabs.harvard.edu/abs/2022TNSAN.107....1P/abstract>`_ survey based on DECam & DESI and the JWST Cycle 3 Archival program `AR 5965 <https://www.stsci.edu/jwst/science-execution/program-information?id=5965>`_.
+SFFT method is the transient detection engine for several ongoing time-domain programs, including the `DESIRT <https://ui.adsabs.harvard.edu/abs/2022TNSAN.107....1P/abstract>`_ survey based on DECam & DESI, the DECam GW-MMADS Survey for GW Follow-ups and the JWST Cycle 3 Archival program `AR 5965 <https://www.stsci.edu/jwst/science-execution/program-information?id=5965>`_.
 
 Installation
 --------------
