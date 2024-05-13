@@ -6,14 +6,6 @@ Package Description
 .. image:: https://img.shields.io/pypi/v/sfft.svg
     :target: https://pypi.python.org/pypi/sfft
     :alt: Latest Version
-.. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=orange&left_text=Downloads
-    :target: https://pepy.tech/project/sfft
-.. image:: https://static.pepy.tech/personalized-badge/sfft?period=month&units=international_system&left_color=grey&right_color=yellow&left_text=Downloads/month
-    :target: https://pepy.tech/project/sfft
-.. image:: https://img.shields.io/badge/python-3.7-green.svg
-    :target: https://www.python.org/downloads/release/python-370/
-.. image:: https://img.shields.io/badge/License-MIT-blue.svg
-    :target: https://opensource.org/licenses/MIT
 
 Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in Fourier space. SFFT brings about a remarkable improvement of computational performance of around an order of magnitude compared to other published image subtraction codes. 
 
@@ -27,6 +19,9 @@ SFFT method is the transient detection engine for several ongoing time-domain pr
 
 Installation
 --------------
+.. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=orange&left_text=Downloads
+    :target: https://pepy.tech/project/sfft
+
 One can install the latest stable version of sfft from pip (recommended): ::
     
     pip install sfft
