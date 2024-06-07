@@ -40,7 +40,7 @@ class PY_SEx:
                                         # (b) -FITS_ref != None mean dual image mode:
                                         #     SEx detection on -FITS_ref & SEx photometry on -FITS_obj
 
-        -SExParam [None]               # Parameter List (Python list here) of SExtractor output catalog
+        -SExParam [None]                # Parameter List (Python list here) of SExtractor output catalog
                                         # one can use command line 'sex -dp' to find all available parameters
 
         # Configurations for SExtractor:

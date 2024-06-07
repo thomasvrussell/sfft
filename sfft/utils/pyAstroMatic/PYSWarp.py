@@ -14,20 +14,11 @@ __version__ = "v1.4"
 
 class PY_SWarp:
     @staticmethod
-    def PS(FITS_obj, FITS_ref, FITS_resamp=None, \
-        GAIN_KEY='GAIN', SATUR_KEY='SATURATE', GAIN_DEFAULT=0.0, SATLEV_DEFAULT=50000.0, \
-        OVERSAMPLING=1, RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', FILL_VALUE=None, \
-        TMPDIR_ROOT=None, VERBOSE_TYPE='NORMAL', VERBOSE_LEVEL=2):
-        
+    def Mk_ConfigDict(GAIN_KEY='GAIN', SATUR_KEY='SATURATE', GAIN_DEFAULT=0.0, SATLEV_DEFAULT=50000.0, OVERSAMPLING=1, \
+                      RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', PROJECTION_TYPE='TAN', COMBINE='Y', \
+                      COMBINE_TYPE='MEDIAN', WEIGHT_SUFFIX='.weight.fits', WRITE_XML='N', VERBOSE_TYPE='NORMAL'):
+
         """
-        # Inputs & Outputs:
-
-        -FITS_obj []                        # FITS file path of the input image to be resampled
-
-        -FITS_ref []                        # FITS file path of the input image as resampling reference
-
-        -FITS_resamp [None]                 # FITS file path of the output image of resampled -FITS_obj
-
         # SWarp parameters:
 
         -GAIN_KEY ['GAIN']                  # SWarp Parameter GAIN_KEYWORD
@@ -54,9 +45,50 @@ class PY_SWarp:
         -SUBTRACT_BACK ['N']                # SWarp Parameter SUBTRACT_BACK 
                                             # Subtraction sky background (Y/N)? (all or for each image)
                                             # P.S. Here I changed the default value from 'Y' to 'N'
+
+        -PROJECTION_TYPE ['TAN']            # SWarp Parameter PROJECTION_TYPE
                                        
         -VERBOSE_TYPE ['NORMAL']            # SWarp Parameter VERBOSE_TYPE
-                                            # QUIET,LOG,NORMAL, or FULL
+                                            # QUIET, LOG, NORMAL, or FULL
+
+        """
+
+        ConfigDict = {}
+        ConfigDict['GAIN_KEYWORD'] = '%s' %GAIN_KEY
+        ConfigDict['SATLEV_KEYWORD'] = '%s' %SATUR_KEY
+
+        ConfigDict['GAIN_DEFAULT'] = '%s' %GAIN_DEFAULT
+        ConfigDict['SATLEV_DEFAULT'] = '%s' %SATLEV_DEFAULT
+
+        ConfigDict['OVERSAMPLING'] = '%d' %OVERSAMPLING
+        ConfigDict['RESAMPLING_TYPE'] = '%s' %RESAMPLING_TYPE
+        ConfigDict['SUBTRACT_BACK'] = '%s' %SUBTRACT_BACK
+
+        ConfigDict['PROJECTION_TYPE'] = '%s' %PROJECTION_TYPE
+
+        ConfigDict['COMBINE'] = '%s' %COMBINE  # trivial here
+        ConfigDict['COMBINE_TYPE'] = '%s' %COMBINE_TYPE  # trivial here
+        
+        ConfigDict['WEIGHT_SUFFIX'] = '%s' %WEIGHT_SUFFIX  # trivial here
+        ConfigDict['WRITE_XML'] = 'N'
+        ConfigDict['VERBOSE_TYPE'] = '%s' %VERBOSE_TYPE
+        
+        return ConfigDict
+
+    @staticmethod
+    def PS(FITS_obj, FITS_ref, ConfigDict, FITS_resamp=None, \
+        FILL_VALUE=None, TMPDIR_ROOT=None, VERBOSE_LEVEL=2):
+        
+        """
+        # Inputs & Outputs:
+
+        -FITS_obj []                        # FITS file path of the input image to be resampled
+
+        -FITS_ref []                        # FITS file path of the input image as resampling reference
+
+        -ConfigDict []                      # Dictionary for config file, input from PY_SWarp.Mk_ConfigDict(). 
+
+        -FITS_resamp [None]                 # FITS file path of the output image of resampled -FITS_obj
 
         # Other parameters:
 
@@ -125,25 +157,7 @@ class PY_SWarp:
         # * make directory as a workplace
         TDIR = mkdtemp(suffix=None, prefix='PYSWarp_', dir=TMPDIR_ROOT)
 
-        # * create SWarp configuration file in TDIR
-        ConfigDict = {}
-        ConfigDict['GAIN_KEYWORD'] = '%s' %GAIN_KEY
-        ConfigDict['SATLEV_KEYWORD'] = '%s' %SATUR_KEY
-
-        ConfigDict['GAIN_DEFAULT'] = '%s' %GAIN_DEFAULT
-        ConfigDict['SATLEV_DEFAULT'] = '%s' %SATLEV_DEFAULT
-
-        ConfigDict['OVERSAMPLING'] = '%d' %OVERSAMPLING
-        ConfigDict['RESAMPLING_TYPE'] = '%s' %RESAMPLING_TYPE
-        ConfigDict['SUBTRACT_BACK'] = '%s' %SUBTRACT_BACK
-
-        ConfigDict['COMBINE'] = 'Y'  # trivial here
-        ConfigDict['COMBINE_TYPE'] = 'MEDIAN'  # trivial here
-        
-        ConfigDict['WEIGHT_SUFFIX'] = '.weight.fits'  # trivial here
-        ConfigDict['WRITE_XML'] = 'N'
-        ConfigDict['VERBOSE_TYPE'] = '%s' %VERBOSE_TYPE
-        
+        # * create SWarp configuration file in TDIR        
         swarp_config_path = AMConfig_Maker.AMCM(MDIR=TDIR, \
             AstroMatic_KEY='swarp', ConfigDict=ConfigDict, tag='PYSWarp')
 
@@ -178,8 +192,8 @@ class PY_SWarp:
         
         # * update header by the SWarp generated saturation level
         NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
-        if SATUR_KEY in hdr_op:
-            hdr_op[SATUR_KEY] = (NEW_SATUR, 'MeLOn: PYSWarp')
+        if ConfigDict['SATLEV_KEYOWRD'] in hdr_op:
+            hdr_op[ConfigDict['SATLEV_KEYWORD']] = (NEW_SATUR, 'MeLOn: PYSWarp')
 
         # * add history
         hdr_op['SWARP_O'] = (pa.basename(FITS_obj), 'MeLOn: PYSWarp')
