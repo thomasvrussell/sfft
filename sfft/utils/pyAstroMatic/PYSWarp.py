@@ -194,7 +194,7 @@ class PY_SWarp:
         
         # * update header by the SWarp generated saturation level
         NEW_SATUR = fits.getheader(tFITS_resamp, ext=0)['SATURATE']
-        if ConfigDict['SATLEV_KEYOWRD'] in hdr_op:
+        if ConfigDict['SATLEV_KEYWORD'] in hdr_op:
             hdr_op[ConfigDict['SATLEV_KEYWORD']] = (NEW_SATUR, 'MeLOn: PYSWarp')
 
         # * add history
