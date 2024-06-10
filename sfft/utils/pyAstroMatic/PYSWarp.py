@@ -157,6 +157,8 @@ class PY_SWarp:
         # * make directory as a workplace
         TDIR = mkdtemp(suffix=None, prefix='PYSWarp_', dir=TMPDIR_ROOT)
 
+        # Add **kwargs so you don't have to change existing code to
+        # add the extra configdict line 
         # * create SWarp configuration file in TDIR        
         swarp_config_path = AMConfig_Maker.AMCM(MDIR=TDIR, \
             AstroMatic_KEY='swarp', ConfigDict=ConfigDict, tag='PYSWarp')

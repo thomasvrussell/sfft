@@ -174,9 +174,10 @@ class Image_ZoomRotate:
 
         # * run SWarp to perform the image resampling
         FITS_resamp = TDIR + '/resampled_image.fits'
-        PY_SWarp.PS(FITS_obj=FITS_ORI, FITS_ref=FITS_TARG, FITS_resamp=FITS_resamp, \
-            GAIN_KEY='GAIN', SATUR_KEY='SATURATE', OVERSAMPLING=1, RESAMPLING_TYPE=RESAMPLING_TYPE, \
-            SUBTRACT_BACK='N', FILL_VALUE=FILL_VALUE, VERBOSE_LEVEL=VERBOSE_LEVEL)
+        ConfigDict = PY_SWarp.Mk_ConfigDict(GAIN_KEY='GAIN', SATUR_KEY='SATURATE', OVERSAMPLING=1, \
+                                        RESAMPLING_TYPE=RESAMPLING_TYPE, SUBTRACT_BACK='N')
+        PY_SWarp.PS(FITS_obj=FITS_ORI, FITS_ref=FITS_TARG, ConfigDict=ConfigDict, FITS_resamp=FITS_resamp, \
+            FILL_VALUE=FILL_VALUE, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         PixA_resamp = fits.getdata(FITS_resamp, ext=0).T
         os.system('rm -rf %s' %TDIR)
