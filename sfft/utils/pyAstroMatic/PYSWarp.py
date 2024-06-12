@@ -309,7 +309,21 @@ class PY_SWarp:
         os.system(command)
         os.system('rm -rf %s'%TDIR)
 
-        PixA_resamp = fits.getdata(OUT_path, ext=0).T
-        PixA_resamp_weight = fits.getdata(weightOUT_path, ext=0).T
+        # * fill the missing data in resampled image [SWarp default 0]
+        PixA_resamp, MissingMask = None, None
+        try: 
+            PixA_resamp = fits.getdata(OUT_path, ext=0).T
+            PixA_resamp_weight = fits.getdata(weightOUT_path, ext=0).T
+            MissingMask = PixA_resamp_weight == 0
+            if FILL_VALUE is not None:
+                PixA_resamp[MissingMask] = FILL_VALUE
+            if OUT_path is not None:
+                hdr_op = fits.getheader(OUT_path, ext=0)
+                hdl_op = fits.HDUList(fits.PrimaryHDU(PixA_resamp.T, header=hdr_op))
+                hdl_op.writeto(OUT_path, overwrite=True)
+        except:
+            if VERBOSE_LEVEL in [0, 1, 2]:
+                _warn_message = 'SWarp FAILED on [%s]!' %FITS_obj
+                warnings.warn('MeLOn WARNING: %s' %_warn_message)
 
         return PixA_resamp, PixA_resamp_weight
