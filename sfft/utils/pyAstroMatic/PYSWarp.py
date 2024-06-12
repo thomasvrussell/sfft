@@ -157,8 +157,6 @@ class PY_SWarp:
         # * make directory as a workplace
         TDIR = mkdtemp(suffix=None, prefix='PYSWarp_', dir=TMPDIR_ROOT)
 
-        # Add **kwargs so you don't have to change existing code to
-        # add the extra configdict line 
         # * create SWarp configuration file in TDIR        
         swarp_config_path = AMConfig_Maker.AMCM(MDIR=TDIR, \
             AstroMatic_KEY='swarp', ConfigDict=ConfigDict, tag='PYSWarp')
@@ -224,3 +222,94 @@ class PY_SWarp:
         os.system('rm -rf %s'%TDIR)
 
         return PixA_resamp, MissingMask
+
+    @staticmethod
+    def Coadd(FITS_obj, FITS_ref, ConfigDict, OUT_path, \
+        FILL_VALUE=None, TMPDIR_ROOT=None, VERBOSE_LEVEL=2):
+
+        """
+        # Inputs & Outputs:
+
+        -FITS_obj []                        # List of FITS file paths of the input images to be resampled
+
+        -FITS_ref []                        # FITS file path of the input image as resampling reference
+
+        -ConfigDict []                      # Dictionary for config file, input from PY_SWarp.Mk_ConfigDict(). 
+
+        -FITS_resamp [None]                 # FITS file path of the output image of resampled, coadded -FITS_obj
+
+        # Other parameters:
+
+        -FILL_VALUE [None]                  # How to fill the invalid (boundary) pixels in -FITS_resamp and -FITS_resamp_weight
+                                            # e.g., -FILL_VALUE = 0.0, -FILL_VALUE = np.nan
+
+        -VERBOSE_LEVEL [2]                  # The level of verbosity, can be [0, 1, 2]
+                                            # 0/1/2: QUIET/NORMAL/FULL mode
+                                            # NOTE: it only controls the verbosity out of SWarp.
+
+        -TMPDIR_ROOT [None]                 # Specify root directory of temporary working directory. 
+
+        # Returns:
+
+            PixA_resamp                     # Pixel array of the resampled, coadded image
+                                            # P.S. PixA_resamp = fits.getdata(OUT_path, ext=0).T
+            
+            PixA_resamp_weight              # Pixel array of the weight map
+        
+        # * Remarks on PYSWarp
+        #       
+        #   [1] In SWarp, one need provide a target WCS-frame stored in fname.head, with name coincident with FITS_resamp.
+        #       If no target WCS-frame is available, the output image will have a canonical N-E orientation.
+        #       However, the current python wrapper PYSWarp must read a target WCS-frame from a given FITS_ref.
+        #
+        #   [2] SWarp allows users to feed a corresponding weight map as input.
+        #       However, the current python wrapper PYSWarp does not support this feature.
+        #
+        #   [3] SWarp will automatically calculate the following keywords and set them into the output image.
+        #       > EXPTIME: sum of exposure times in the part of coadd with the most overlaps.
+        #       > GAIN: effective gain with flux and weighting applied.
+        #         Note that any change in pixel scale only redistribute the flux with total flux conservative,
+        #         therefore, the image resampling does not alter the GAIN value.
+        #       > SATURATE: Minimum of all input saturation levels with flux scaling applied.
+        #         Note that a change in pixel scale can alter the saturation level.
+        #       > MJD-OBS: MJD of earliest start of exposures 
+        #
+        """
+
+        # * check FITS_obj headers
+        for obj in FITS_obj:
+            phr_obj = fits.getheader(obj, ext=0)
+
+            # a mild warning
+            if VERBOSE_LEVEL in [1, 2]:
+                if 'EXPTIME' not in phr_obj:
+                    _warn_message = 'SWarp cannot find keyword EXPTIME in FITS header of [%s]!' %obj
+                    warnings.warn('MeLOn WARNING: %s' %_warn_message)
+            
+            # a mild warning
+            if VERBOSE_LEVEL in [1, 2]:
+                if 'MJD-OBS' not in phr_obj:
+                    _warn_message = 'SWarp cannot find keyword MJD-OBS in FITS header of [%s]!' %obj
+                    warnings.warn('MeLOn WARNING: %s' %_warn_message)
+
+        # * make directory as a workplace
+        TDIR = mkdtemp(suffix=None, prefix='PYSWarp_', dir=TMPDIR_ROOT)
+
+        # * create SWarp configuration file in TDIR        
+        swarp_config_path = AMConfig_Maker.AMCM(MDIR=TDIR, \
+            AstroMatic_KEY='swarp', ConfigDict=ConfigDict, tag='PYSWarp')
+
+        FITS_obj_str = ' '.join(FITS_obj)
+        weightOUT_path = OUT_path[:-5] + '.weight.fits'
+
+        # * trigger SWarp 
+        command = "cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s"  \
+            %(TDIR, FITS_obj_str, OUT_path, weightOUT_path, swarp_config_path)
+        print('MeLOn CheckPoint: Run SWarp Command ... \n %s' %command)
+        os.system(command)
+        os.system('rm -rf %s'%TDIR)
+
+        PixA_resamp = fits.getdata(OUT_path, ext=0).T
+        PixA_resamp_weight = fits.getdata(weightOUT_path, ext=0).T
+
+        return PixA_resamp, PixA_resamp_weight
