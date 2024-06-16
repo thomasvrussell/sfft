@@ -73,15 +73,11 @@ We have prepared several examples in the test directory so that you can familar 
 
 - **IMPORTANT NOTICE: the input images of sparse-flavor-sfft should be SKY-SUBTRACTED!** One can make use of SExtractor to subtract the sky background, which has been also wrapped in this package, please use the module ``sfft.utils.SExSkySubtract`` and type help(``sfft.utils.SExSkySubtract``) to find its usage. There is an additional example in subtract_test_sparse_flavor (see directory prepare_data_example), that shows how to prepare the input image pair for sparse-flavor-sfft by ``sfft.utils.SExSkySubtract`` for sky subtraction and ``sfft.utils.pyAstroMatic.PYSWarp`` for image alignment, respecitvely.
 
-
 - Our software provides two flavors for image subtraction, crowded-flavor-sfft and sparse-flavor-sfft, to accommodate the situations for the crowded and sparse fields, respectively. The two flavors actually follow the same routine for image subtraction and differ only in ways of masking the data. 
-
 
 - Proper image-masking is required in the current version of SFFT to identify the pixels that are not correctly modeled by SFFT (hereafter, distraction pixels), e.g., saturated sources, casual cosmic rays and moving objects, bad CCD pixels, optical ghosts, and even the variable objects and transients themselves. The pre-subtraction processing for image-masking is referred to as **preprocessing** in sfft.
 
-
 - Our software provides a generic and robust function to perform **preprocessing** of the data, which has been extensively tested with data from various transient surveys. When you run crowded-flavor-sfft and sparse-flavor-sfft, sfft actually performs the generic **preprocessing** for image-masking and do the sfft subtraction subsequently. 
-
 
 - More specificially, the built-in preprocessing in sfft consists of two steps: [1] identify the distraction pixels in the input image-pair [2] create the masked version of the input image-pair via replacing the identified distraction pixels by proper flux values. In sparse-flavor-sfft, we designed a source-selection based on SExtractor catalogs and identify the unselected regions as distraction pixels. Given that the input images are required to be sky-subtracted in sparse-flavor-sfft, we simply replace the distraction pixels by zeros; In crowded-flavor-sfft, we only identify the pixels contaminated by saturated sources as distraction pixels using SExtractor, and then replace the distraction pixels by local background flux. 
 
@@ -98,7 +94,7 @@ Besides, we encourage users to design dedicated image-masking strategies for the
 
 Our software provides a customized module which allows users to feed their own image-masking results, i.e., the module only perform the sfft subtraction. In this test, you would see the lightning fast speed of sfft subtraction on GPU devices!
 
-**customized sfft subtraction** : The example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket``. More detailed explanations of the module: help(``sfft.CustomizedPacket``).
+.. [*]  **customized sfft subtraction** : The example in subdirectory named subtract_test_customized. The test data is the same as those for crowded-flavor-sfft (ZTF-M31 observations), however, the built-in automatic image-masking has been skipped by using given customized masked images as inputs. Such *pure* version of sfft is conducted by the module ``sfft.CustomizedPacket``. More detailed explanations of the module: help(``sfft.CustomizedPacket``).
 
 **Additional Remarks**: If you are using GPU backends and you have a queue of observations to be processed, the first time in the loop of sfft subtraction can be very slow, and runtime is going to be stable after the first time. This might be due to some unknown initialization process in GPU devices. You can find in above test that the GPU warming-up is quite slow. Fortunately, this problem can be esaily solved by running a trivial subtraction (e.g., on empty images) in advance and making the pipe waiting for the subsequent observations (see above test).
 
