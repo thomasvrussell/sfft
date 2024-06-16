@@ -116,11 +116,11 @@ Remarks on the direction of image subtraction
 
 There is a universal argument named -ForceConv to control the direction of image subtraction, which works on all image subtraction modules in sfft.
 
-- 'AUTO' means sfft will determine the direction of image subtraction automatically according to the estimated FWHM of reference image and science image. The image which has smaller FWHM will be convolved in the image subtraction to avoid deconvolution. After comparing the FWHM, 'AUTO' becomes 'REF' or 'SCI' (see below). One can get to know which image is eventually convolved in image subtraction from the primary header of the difference image (see the keyword 'CONVD'). This mode does not supported in the Customized module ``sfft.CustomizedPacket``.
+.. [#]  'AUTO' means sfft will determine the direction of image subtraction automatically according to the estimated FWHM of reference image and science image. The image which has smaller FWHM will be convolved in the image subtraction to avoid deconvolution. After comparing the FWHM, 'AUTO' becomes 'REF' or 'SCI' (see below). One can get to know which image is eventually convolved in image subtraction from the primary header of the difference image (see the keyword 'CONVD'). This mode does not supported in the Customized module ``sfft.CustomizedPacket``.
 
-- 'REF' means sfft will convolve the reference image and DIFF = SCI - Convolved_REF. As a result, the psf and flux zero-point of difference image is consistent with the unconvolved image, i.e., the science image. One can perform PSF / Aperture photometry on the transients on difference image as if it is an object living in the science image: using the same psf model / aperture and magnitude zeropoint.
+.. [#]  'REF' means sfft will convolve the reference image and DIFF = SCI - Convolved_REF. As a result, the psf and flux zero-point of difference image is consistent with the unconvolved image, i.e., the science image. One can perform PSF / Aperture photometry on the transients on difference image as if it is an object living in the science image: using the same psf model / aperture and magnitude zeropoint.
 
-- 'SCI' means sfft will convolve the reference image and DIFF = Convolved_SCI - REF. Consequently, the psf and flux zero-point of difference image is consistent with the unconvolved image, i.e., the reference image. One can perform PSF / Aperture photometry on the transients on difference image as if it is an object living in the reference image: using the same psf model / aperture and magnitude zeropoint (but of course, not including the observation date!).
+.. [#]  'SCI' means sfft will convolve the reference image and DIFF = Convolved_SCI - REF. Consequently, the psf and flux zero-point of difference image is consistent with the unconvolved image, i.e., the reference image. One can perform PSF / Aperture photometry on the transients on difference image as if it is an object living in the reference image: using the same psf model / aperture and magnitude zeropoint (but of course, not including the observation date!).
 
 Note that a transient on science image is always a positive signal on difference image whatever -ForceConv is.
 
@@ -129,7 +129,7 @@ Additional Function
 
 We also present a decorrelation module to whiten the background noise of the difference image.
 
-**difference noise decorrelation** : The example in subdirectory named difference_noise_decorrelation. We use noise-decorrelation toolkit (module ``sfft.utils.DeCorrelationCalculator``) to whiten the background noise on difference image. In this test, the difference image is generated from image subtraction (by sfft) between a coadded reference image and a coadded science image, each stacked from 5 DECam individual observations with PSF homogenization (by sfft). The toolkit can be also applied to whiten a coadded image as long as convolution is involved in the stacking process.
+.. [*]  **difference noise decorrelation** : The example in subdirectory named difference_noise_decorrelation. We use noise-decorrelation toolkit (module ``sfft.utils.DeCorrelationCalculator``) to whiten the background noise on difference image. In this test, the difference image is generated from image subtraction (by sfft) between a coadded reference image and a coadded science image, each stacked from 5 DECam individual observations with PSF homogenization (by sfft). The toolkit can be also applied to whiten a coadded image as long as convolution is involved in the stacking process.
 
 
 Comments on Backward Compatiablity
