@@ -67,9 +67,9 @@ Quick start guide
 ------------------
 We have prepared several examples in the test directory so that you can familar with the usage of the main functions in our software:
 
-.. [*]  `**sfft subtraction for crowded field**`_ : The example in subdirectory named subtract_test_crowded_flavor. We use crowded-flavor-sfft (module ``sfft.EasyCrowdedPacket``) to perform image subtraction for ZTF M31 observations. More detailed explanations of this module, see help(``sfft.EasyCrowdedPacket``).
+.. [*] **sfft subtraction for crowded field** : The example in subdirectory named subtract_test_crowded_flavor. We use crowded-flavor-sfft (module ``sfft.EasyCrowdedPacket``) to perform image subtraction for ZTF M31 observations. More detailed explanations of this module, see help(``sfft.EasyCrowdedPacket``).
 
-.. [*] `**sfft subtraction for sparse field**`_ : The example in subdirectory named subtract_test_sparse_flavor. We use sparse-flavor-sfft (module ``sfft.EasySparsePacket``) to perform image subtraction for CTIO-4m DECam observations. More detailed explanations of this module, see help(``sfft.EasySparsePacket``).
+.. [*] **sfft subtraction for sparse field** : The example in subdirectory named subtract_test_sparse_flavor. We use sparse-flavor-sfft (module ``sfft.EasySparsePacket``) to perform image subtraction for CTIO-4m DECam observations. More detailed explanations of this module, see help(``sfft.EasySparsePacket``).
 
 - **IMPORTANT NOTICE: the input images of sparse-flavor-sfft should be SKY-SUBTRACTED!** One can make use of SExtractor to subtract the sky background, which has been also wrapped in this package, please use the module ``sfft.utils.SExSkySubtract`` and type help(``sfft.utils.SExSkySubtract``) to find its usage. There is an additional example in subtract_test_sparse_flavor (see directory prepare_data_example), that shows how to prepare the input image pair for sparse-flavor-sfft by ``sfft.utils.SExSkySubtract`` for sky subtraction and ``sfft.utils.pyAstroMatic.PYSWarp`` for image alignment, respecitvely.
 
