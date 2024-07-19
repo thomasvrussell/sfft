@@ -19,11 +19,11 @@ __version__ = "v1.4"
 class PY_SEx:
     @staticmethod
     def PS(FITS_obj, PSF_obj=None, FITS_ref=None, SExParam=None, CATALOG_TYPE='FITS_LDAC', \
-        GAIN_KEY='GAIN', SATUR_KEY='SATURATE', PIXEL_SCALE=1.0, SEEING_FWHM=1.2, BACK_TYPE='AUTO', \
-        BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, DETECT_THRESH=1.5, ANALYSIS_THRESH=1.5, \
-        DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_NTHRESH=32, DEBLEND_MINCONT=0.005, CLEAN='Y', \
-        BACKPHOTO_TYPE='LOCAL', PHOT_APERTURES=5.0, NegativeCorr=True, CHECKIMAGE_TYPE='NONE', \
-        VIGNET=None, STAMP_IMGSIZE=None, AddRD=False, ONLY_FLAGS=None, XBoundary=0.0, YBoundary=0.0, \
+        GAIN_KEY='GAIN', SATUR_KEY='SATURATE', DEFAULT_GAIN=0., DEFAULT_SATUR=50000., PIXEL_SCALE=1.0, 
+        SEEING_FWHM=1.2, BACK_TYPE='AUTO', BACK_VALUE=0.0, BACK_SIZE=64, BACK_FILTERSIZE=3, USE_FILT=True, \
+        DETECT_THRESH=1.5, ANALYSIS_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, DEBLEND_NTHRESH=32, \
+        DEBLEND_MINCONT=0.005, CLEAN='Y', BACKPHOTO_TYPE='LOCAL', PHOT_APERTURES=5.0, NegativeCorr=True, \
+        CHECKIMAGE_TYPE='NONE', VIGNET=None, STAMP_IMGSIZE=None, AddRD=False, ONLY_FLAGS=None, XBoundary=0.0, YBoundary=0.0, \
         Coor4Match='XY_', XY_Quest=None, Match_xytol=2.0, RD_Quest=None, Match_rdtol=1.0, \
         Preserve_NoMatch=False, MDIR=None, VERBOSE_TYPE='QUIET', VERBOSE_LEVEL=2):
 
@@ -54,6 +54,10 @@ class PY_SEx:
 
         -SATUR_KEY ['SATURATE']         # SExtractor Parameter SATUR_KEY
                                         # i.e., keyword of the saturation level in the FITS image header
+
+        -DEFAULT_GAIN [0.]              # Set default gain if GAIN_KEY not found
+
+        -DEFAULT_SATUR [50000.]           # Set default saturation if SATUR_KEY not found
 
         -PIXEL_SCALE [1.0]              # SExtractor Parameter PIXEL_SCALE
                                         # size of pixel in arcsec (0=use FITS WCS info)
@@ -487,9 +491,9 @@ class PY_SEx:
                 _message = 'SExtractor uses GAIN = [%s] from keyword [%s]!' %(GAIN, GAIN_KEY)
                 print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
         else: 
-            GAIN = 0.0  # infinite GAIN, Poission noise ignored
+            GAIN = DEFAULT_GAIN  # infinite GAIN, Poission noise ignored
             if VERBOSE_LEVEL in [0, 1, 2]:
-                _warn_message = 'SExtractor has to use default GAIN = 0!'
+                _warn_message = f'SExtractor has to use default GAIN = {DEFAULT_GAIN}!'
                 warnings.warn('MeLOn WARNING [%s]: %s' %(objname, _warn_message))
         
         if SATUR_KEY in phr_obj:
@@ -498,9 +502,9 @@ class PY_SEx:
                 _message = 'SExtractor uses SATURATION = [%s] from keyword [%s]!' %(SATURATION, SATUR_KEY)
                 print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
         else: 
-            SATURATION = 50000.0
+            SATURATION = DEFAULT_SATUR
             if VERBOSE_LEVEL in [0, 1, 2]:
-                _warn_message = 'SExtractor has to use default SATURATION = 50000.0!'
+                _warn_message = f'SExtractor has to use default SATURATION = {DEFAULT_SATUR}!'
                 warnings.warn('MeLOn WARNING [%s]: %s' %(objname, _warn_message))
         
         """

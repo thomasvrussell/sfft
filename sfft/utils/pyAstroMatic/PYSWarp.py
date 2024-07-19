@@ -15,7 +15,7 @@ __version__ = "v1.4"
 class PY_SWarp:
     @staticmethod
     def Mk_ConfigDict(GAIN_KEY='GAIN', SATUR_KEY='SATURATE', GAIN_DEFAULT=0.0, SATLEV_DEFAULT=50000.0, OVERSAMPLING=1, \
-                      RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', PROJECTION_TYPE='TAN', COMBINE='Y', \
+                      RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', PROJECTION_TYPE='TAN', RESCALE_WEIGHTS='Y', WEIGHT_TYPE='NONE', COMBINE='Y', \
                       COMBINE_TYPE='MEDIAN', WEIGHT_SUFFIX='.weight.fits', WRITE_XML='N', VERBOSE_TYPE='NORMAL'):
 
         """
@@ -47,6 +47,9 @@ class PY_SWarp:
                                             # P.S. Here I changed the default value from 'Y' to 'N'
 
         -PROJECTION_TYPE ['TAN']            # SWarp Parameter PROJECTION_TYPE
+
+        -RESCALE_WEIGHTS ['Y']              # SWarp Parameter RESCALE_WEIGHTS
+        -WEIGHT_TYPE ['NONE']               # SWarp Parameter WEIGHT_TYPE
                                        
         -VERBOSE_TYPE ['NORMAL']            # SWarp Parameter VERBOSE_TYPE
                                             # QUIET, LOG, NORMAL, or FULL
@@ -65,6 +68,8 @@ class PY_SWarp:
         ConfigDict['SUBTRACT_BACK'] = '%s' %SUBTRACT_BACK
 
         ConfigDict['PROJECTION_TYPE'] = '%s' %PROJECTION_TYPE
+        ConfigDict['WEIGHT_TYPE'] = '%s' %WEIGHT_TYPE
+        ConfigDict['RESCALE_WEIGHTS'] = '%s' %RESCALE_WEIGHTS
 
         ConfigDict['COMBINE'] = '%s' %COMBINE  # trivial here
         ConfigDict['COMBINE_TYPE'] = '%s' %COMBINE_TYPE  # trivial here
@@ -304,7 +309,7 @@ class PY_SWarp:
 
         # * trigger SWarp 
         command = "cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s"  \
-            %(TDIR, FITS_obj_str, OUT_path, weightOUT_path, swarp_config_path)
+        %(TDIR, FITS_obj_str, OUT_path, weightOUT_path, swarp_config_path)
         print('MeLOn CheckPoint: Run SWarp Command ... \n %s' %command)
         os.system(command)
         os.system('rm -rf %s'%TDIR)
