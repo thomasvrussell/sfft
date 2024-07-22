@@ -13,7 +13,7 @@ __version__ = "v1.4"
 class Image_ZoomRotate:
     @staticmethod
     def IZR(PixA_obj, ZOOM_SCALE_X=1.0, ZOOM_SCALE_Y=1.0, OUTSIZE_PARIRY_X='UNCHANGED', OUTSIZE_PARIRY_Y='UNCHANGED', \
-        PATTERN_ROTATE_ANGLE=0.0, RESAMPLING_TYPE='LANCZOS4', FILL_VALUE=0.0, VERBOSE_LEVEL=2):
+        PATTERN_ROTATE_ANGLE=0.0, RESAMPLING_TYPE='LANCZOS4', RETURN_IMG_ONLY=True, FILL_VALUE=0.0, VERBOSE_LEVEL=2):
         
         """
         # Remarks on Image Zoom & Rotate
@@ -180,6 +180,12 @@ class Image_ZoomRotate:
             FILL_VALUE=FILL_VALUE, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         PixA_resamp = fits.getdata(FITS_resamp, ext=0).T
-        os.system('rm -rf %s' %TDIR)
-        
-        return PixA_resamp, func_coordtrans
+
+        if RETURN_IMG_ONLY:
+            os.system('rm -rf %s' %TDIR)
+            return PixA_resamp, func_coordtrans
+
+        elif not RETURN_IMG_ONLY:
+            hdl_OUT = fits.getheader(FITS_resamp, ext=0)
+            os.system('rm -rf %s' %TDIR)
+            return PixA_resamp, hdl_OUT, func_coordtrans
