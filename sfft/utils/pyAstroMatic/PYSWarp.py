@@ -15,8 +15,10 @@ __version__ = "v1.4"
 class PY_SWarp:
     @staticmethod
     def Mk_ConfigDict(GAIN_KEY='GAIN', SATUR_KEY='SATURATE', GAIN_DEFAULT=0.0, SATLEV_DEFAULT=50000.0, OVERSAMPLING=1, \
-                      RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', PROJECTION_TYPE='TAN', RESCALE_WEIGHTS='Y', WEIGHT_TYPE='NONE', COMBINE='Y', \
-                      COMBINE_TYPE='MEDIAN', WEIGHT_SUFFIX='.weight.fits', WRITE_XML='N', VERBOSE_TYPE='NORMAL'):
+                      RESAMPLE='Y', RESAMPLING_TYPE='LANCZOS3', SUBTRACT_BACK='N', PROJECTION_TYPE='TAN', RESCALE_WEIGHTS='Y', 
+                      WEIGHT_TYPE='NONE', COMBINE='Y', CENTER_TYPE='ALL', CENTER = 0.0, CELESTIAL_TYPE='NATIVE', 
+                      PIXELSCALE_TYPE='MEDIAN', PIXEL_SCALE=0.0, NTHREADS=0, \
+                      COMBINE_TYPE='MEDIAN', IMAGE_SIZE=0, WEIGHT_SUFFIX='.weight.fits', WRITE_XML='N', VERBOSE_TYPE='NORMAL'):
 
         """
         # SWarp parameters:
@@ -37,6 +39,7 @@ class PY_SWarp:
                                             # P.S. Here I changed the default value from 0 to 1
                                             # NOTE: large OVERSAMPLING may cause higher pixel correlation
 
+        -RESAMPLE ['Y']                     # SWarp parameter RESAMPLE
         -RESAMPLING_TYPE ['LANCZOS3']       # SWarp Parameter RESAMPLING_TYPE
                                             # NEAREST,BILINEAR,LANCZOS2,LANCZOS3
                                             # LANCZOS4 (1 per axis) or FLAGS
@@ -48,8 +51,19 @@ class PY_SWarp:
 
         -PROJECTION_TYPE ['TAN']            # SWarp Parameter PROJECTION_TYPE
 
+        -CENTER_TYPE ['ALL']                # SWarp parameter CENTER_TYPE
+        -CENTER [0.0]                       # SWarp parameter CENTER
+        -CELESTIAL_TYPE ['NATIVE']          # SWarp parameter CELESTIAL_TYPE
+
+        -PIXELSCALE_TYPE ['MEDIAN']         # SWarp parameter PIXELSCALE_TYPE
+        -PIXEL_SCALE [0.0]                  # SWarp parameter PIXEL_SCALE
+
+        -NTHREADS [0]                       # SWarp parameter NTHREADS
+
         -RESCALE_WEIGHTS ['Y']              # SWarp Parameter RESCALE_WEIGHTS
         -WEIGHT_TYPE ['NONE']               # SWarp Parameter WEIGHT_TYPE
+
+        -IMAGE_SIZE [0]                     # SWarp parameter IMAGE_SIZE
                                        
         -VERBOSE_TYPE ['NORMAL']            # SWarp Parameter VERBOSE_TYPE
                                             # QUIET, LOG, NORMAL, or FULL
@@ -64,12 +78,23 @@ class PY_SWarp:
         ConfigDict['SATLEV_DEFAULT'] = '%s' %SATLEV_DEFAULT
 
         ConfigDict['OVERSAMPLING'] = '%d' %OVERSAMPLING
+        ConfigDict['RESAMPLE'] = '%s' %RESAMPLE
         ConfigDict['RESAMPLING_TYPE'] = '%s' %RESAMPLING_TYPE
         ConfigDict['SUBTRACT_BACK'] = '%s' %SUBTRACT_BACK
 
         ConfigDict['PROJECTION_TYPE'] = '%s' %PROJECTION_TYPE
+        ConfigDict['CENTER_TYPE'] = '%s' %CENTER_TYPE
+        ConfigDict['CENTER'] = '%s' %CENTER
+        ConfigDict['CELESTIAL_TYPE'] = '%s' %CELESTIAL_TYPE
+
+        ConfigDict['PIXELSCALE_TYPE'] = '%s' %PIXELSCALE_TYPE
+        ConfigDict['PIXEL_SCALE'] = '%d' %PIXEL_SCALE
+
+        ConfigDict['NTHREADS'] = '%s' %NTHREADS
+
         ConfigDict['WEIGHT_TYPE'] = '%s' %WEIGHT_TYPE
         ConfigDict['RESCALE_WEIGHTS'] = '%s' %RESCALE_WEIGHTS
+        ConfigDict['IMAGE_SIZE'] = '%d' %IMAGE_SIZE
 
         ConfigDict['COMBINE'] = '%s' %COMBINE  # trivial here
         ConfigDict['COMBINE_TYPE'] = '%s' %COMBINE_TYPE  # trivial here
