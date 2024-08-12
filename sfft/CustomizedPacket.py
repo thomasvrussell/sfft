@@ -1,3 +1,6 @@
+import tracemalloc
+import logging
+import sys
 import time
 import numpy as np
 import os.path as pa
@@ -13,7 +16,7 @@ class Customized_Packet:
     @staticmethod
     def CP(FITS_REF, FITS_SCI, FITS_mREF, FITS_mSCI, ForceConv, GKerHW, \
         FITS_DIFF=None, FITS_Solution=None, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
+        BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2, logger=None):
         
         """
         * Parameters for Customized SFFT
@@ -85,11 +88,20 @@ class Customized_Packet:
 
         """
 
+        # Configure logger (Rob)
+        _logger = logging.getLogger(f'sfft.CustomizedPacket.CP')
+        if not _logger.hasHandlers():
+            log_out = logging.StreamHandler(sys.stderr)
+            formatter = logging.Formatter(f'[%(asctime)s - %(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            log_out.setFormatter(formatter)
+            _logger.addHandler(log_out)
+            _logger.setLevel(logging.DEBUG) # ERROR, WARNING, INFO, or DEBUG (in that order by increasing detail)
+
         # * Read input images
-        PixA_REF = fits.getdata(FITS_REF, ext=0).T
-        PixA_SCI = fits.getdata(FITS_SCI, ext=0).T
-        PixA_mREF = fits.getdata(FITS_mREF, ext=0).T
-        PixA_mSCI = fits.getdata(FITS_mSCI, ext=0).T
+        PixA_REF = fits.getdata(FITS_REF, memmap=False, ext=0).T
+        PixA_SCI = fits.getdata(FITS_SCI, memmap=False, ext=0).T
+        PixA_mREF = fits.getdata(FITS_mREF, memmap=False, ext=0).T
+        PixA_mSCI = fits.getdata(FITS_mSCI, memmap=False, ext=0).T
 
         if not PixA_REF.flags['C_CONTIGUOUS']:
             PixA_REF = np.ascontiguousarray(PixA_REF, np.float64)
@@ -131,10 +143,18 @@ class Customized_Packet:
             print('MeLOn CheckPoint: TRIGGER Function Compilations of SFFT-SUBTRACTION!')
 
         Tcomp_start = time.time()
+
+        ### I ADDED DEBUG MEM TRACING STATEMENTS
+        tracemalloc.start()
         SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], KerHW=KerHW, \
             KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
             BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, \
             VERBOSE_LEVEL=VERBOSE_LEVEL)
+
+        size, peak = tracemalloc.get_traced_memory()
+        logger.debug(f'MEMORY IN CUSTOMIZEDPACKET FROM SFFTCONFIG size={size}, peak={peak}')
+        tracemalloc.clear_traces()
+        tracemalloc.stop()
 
         if VERBOSE_LEVEL in [1, 2]:
             _message = 'Function Compilations of SFFT-SUBTRACTION TAKES [%.3f s]' %(time.time() - Tcomp_start)
@@ -161,9 +181,17 @@ class Customized_Packet:
             print('MeLOn CheckPoint: TRIGGER SFFT-SUBTRACTION!')
 
         Tsub_start = time.time()
+
+        tracemalloc.start()
+
         _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
             SFFTConfig=SFFTConfig, ContamMask_I=None, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
             NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)
+
+        size, peak = tracemalloc.get_traced_memory()
+        logger.debug(f'MEMORY IN CUSTOMIZEDPACKET FROM GENERALSFFTSUBTRACT size={size}, peak={peak}')
+        tracemalloc.clear_traces()
+        tracemalloc.stop()
 
         Solution, PixA_DIFF = _tmp[:2]
         if VERBOSE_LEVEL in [1, 2]:
