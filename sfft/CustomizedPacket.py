@@ -145,16 +145,16 @@ class Customized_Packet:
         Tcomp_start = time.time()
 
         ### I ADDED DEBUG MEM TRACING STATEMENTS
-        tracemalloc.start()
+        # tracemalloc.start()
         SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], KerHW=KerHW, \
             KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
             BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, \
             VERBOSE_LEVEL=VERBOSE_LEVEL)
 
-        size, peak = tracemalloc.get_traced_memory()
-        logger.debug(f'MEMORY IN CUSTOMIZEDPACKET FROM SFFTCONFIG size={size}, peak={peak}')
-        tracemalloc.clear_traces()
-        tracemalloc.stop()
+        # size, peak = tracemalloc.get_traced_memory()
+        # logger.debug(f'MEMORY IN CUSTOMIZEDPACKET FROM SFFTCONFIG size={size}, peak={peak}')
+        # tracemalloc.clear_traces()
+        # tracemalloc.stop()
 
         if VERBOSE_LEVEL in [1, 2]:
             _message = 'Function Compilations of SFFT-SUBTRACTION TAKES [%.3f s]' %(time.time() - Tcomp_start)
@@ -182,16 +182,15 @@ class Customized_Packet:
 
         Tsub_start = time.time()
 
-        tracemalloc.start()
+        # tracemalloc.start()
 
         _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
             SFFTConfig=SFFTConfig, ContamMask_I=None, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
             NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)
 
-        size, peak = tracemalloc.get_traced_memory()
-        logger.debug(f'MEMORY IN CUSTOMIZEDPACKET FROM GENERALSFFTSUBTRACT size={size}, peak={peak}')
-        tracemalloc.clear_traces()
-        tracemalloc.stop()
+        # size, peak = tracemalloc.get_traced_memory()
+        # logger.debug(f'MEMORY IN CUSTOMIZEDPACKET FROM GENERALSFFTSUBTRACT size={size}, peak={peak}')
+        # tracemalloc.clear_traces()
 
         Solution, PixA_DIFF = _tmp[:2]
         if VERBOSE_LEVEL in [1, 2]:
