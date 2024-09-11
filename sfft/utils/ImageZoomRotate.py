@@ -4,7 +4,7 @@ import numpy as np
 from astropy.io import fits
 from astropy.wcs import WCS
 from tempfile import mkdtemp
-from CudaResampling import Cuda_Resampling
+from sfft.utils.CudaResampling import Cuda_Resampling
 #from sfft.utils.pyAstroMatic.PYSWarp import PY_SWarp
 
 __last_update__ = "2024-09-11"
