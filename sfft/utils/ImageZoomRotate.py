@@ -4,16 +4,16 @@ import numpy as np
 from astropy.io import fits
 from astropy.wcs import WCS
 from tempfile import mkdtemp
-from sfft.utils.pyAstroMatic.PYSWarp import PY_SWarp
-# version: Apr 22, 2024
+from CudaResampling import Cuda_Resampling
+#from sfft.utils.pyAstroMatic.PYSWarp import PY_SWarp
 
+__last_update__ = "2024-09-11"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
-__version__ = "v1.4"
 
 class Image_ZoomRotate:
     @staticmethod
     def IZR(PixA_obj, ZOOM_SCALE_X=1.0, ZOOM_SCALE_Y=1.0, OUTSIZE_PARIRY_X='UNCHANGED', OUTSIZE_PARIRY_Y='UNCHANGED', \
-        PATTERN_ROTATE_ANGLE=0.0, RESAMPLING_TYPE='LANCZOS4', RETURN_IMG_ONLY=True, FILL_VALUE=0.0, VERBOSE_LEVEL=2):
+        PATTERN_ROTATE_ANGLE=0.0, RESAMPLING_TYPE='LANCZOS3', FILL_VALUE=0.0, VERBOSE_LEVEL=2):
         
         """
         # Remarks on Image Zoom & Rotate
@@ -174,18 +174,19 @@ class Image_ZoomRotate:
 
         # * run SWarp to perform the image resampling
         FITS_resamp = TDIR + '/resampled_image.fits'
-        ConfigDict = PY_SWarp.Mk_ConfigDict(GAIN_KEY='GAIN', SATUR_KEY='SATURATE', OVERSAMPLING=1, \
-                                        RESAMPLING_TYPE=RESAMPLING_TYPE, WEIGHT_TYPE='NONE', SUBTRACT_BACK='N')
-        PY_SWarp.PS(FITS_obj=FITS_ORI, FITS_ref=FITS_TARG, ConfigDict=ConfigDict, FITS_resamp=FITS_resamp, \
-            FILL_VALUE=FILL_VALUE, VERBOSE_LEVEL=VERBOSE_LEVEL)
+        PixA_resamp = Cuda_Resampling.CR(FITS_obj=FITS_ORI, FITS_targ=FITS_TARG, FITS_resamp=FITS_resamp, 
+            METHOD=RESAMPLING_TYPE, FILL_ZEROPIX=False, VERBOSE_LEVEL=VERBOSE_LEVEL)
+        
+        PixA_resamp[np.isnan(PixA_resamp)] = FILL_VALUE
+        with fits.open(FITS_TARG) as hdl:
+            hdl[0].data[:, :] = PixA_resamp.T
+            hdl.writeto(FITS_resamp, overwrite=True)
+        
+        # PY_SWarp.PS(FITS_obj=FITS_ORI, FITS_ref=FITS_TARG, FITS_resamp=FITS_resamp, \
+        #     GAIN_KEY='GAIN', SATUR_KEY='SATURATE', OVERSAMPLING=1, RESAMPLING_TYPE=RESAMPLING_TYPE, \
+        #     SUBTRACT_BACK='N', FILL_VALUE=FILL_VALUE, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         PixA_resamp = fits.getdata(FITS_resamp, ext=0).T
-
-        if RETURN_IMG_ONLY:
-            os.system('rm -rf %s' %TDIR)
-            return PixA_resamp, func_coordtrans
-
-        elif not RETURN_IMG_ONLY:
-            hdl_OUT = fits.getheader(FITS_resamp, ext=0)
-            os.system('rm -rf %s' %TDIR)
-            return PixA_resamp, hdl_OUT, func_coordtrans
+        os.system('rm -rf %s' %TDIR)
+        
+        return PixA_resamp, func_coordtrans
