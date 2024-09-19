@@ -2,18 +2,138 @@ import time
 import warnings
 import cupy as cp
 import numpy as np
-from astropy.io import fits
-from math import ceil, floor
+from math import floor
 from astropy.wcs import WCS, FITSFixedWarning
+from sfft.utils.CupyWCSTransform import Cupy_WCS_Transform
 
-__last_update__ = "2024-09-11"
+__last_update__ = "2024-09-19"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 
 class Cuda_Resampling:
-    @staticmethod
-    def CR(FITS_obj, FITS_targ, FITS_resamp, METHOD="LANCZOS3", FILL_ZEROPIX=True, VERBOSE_LEVEL=2):
+    def __init__(self, RESAMP_METHOD="BILINEAR", VERBOSE_LEVEL=2):
+        """
+        Image resampling using CUDA.
+        """
+        self.RESAMP_METHOD = RESAMP_METHOD
+        self.VERBOSE_LEVEL = VERBOSE_LEVEL
+        return None
+    
+    def projection_cd(self, hdr_obj, hdr_targ, CDKEY="CD"):
+        """Mapping the target pixel centers to the object frame using Cupy for CD WCS (NO distortion)"""
+        NTX = int(hdr_targ["NAXIS1"]) 
+        NTY = int(hdr_targ["NAXIS2"])
 
-        def Read_WCS(hdr, VERBOSE_LEVEL=2):
+        XX_targ_GPU, YY_targ_GPU = cp.meshgrid(
+            cp.arange(0, NTX) + 1., 
+            cp.arange(0, NTY) + 1., 
+            indexing='ij'
+        )
+        
+        CWT = Cupy_WCS_Transform()
+        # * perform CD transformation through target WCS
+        if True:
+            # read header [target]
+            KEYDICT, CD_GPU = CWT.read_cd_wcs(hdr_wcs=hdr_targ, CDKEY=CDKEY)
+            CRPIX1_targ, CRPIX2_targ = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
+            
+            # relative to reference point [target]
+            u_GPU, v_GPU = XX_targ_GPU.flatten() - CRPIX1_targ, YY_targ_GPU.flatten() - CRPIX2_targ
+            
+            # CD transformation [target]
+            x_GPU, y_GPU = CWT.cd_transform(IMAGE_X_GPU=u_GPU, IMAGE_Y_GPU=v_GPU, CD_GPU=CD_GPU)
+
+        # * perform CD^-1 transformation through object WCS
+        if True:
+            # read header [object]
+            KEYDICT, CD_GPU = CWT.read_cd_wcs(hdr_wcs=hdr_obj, CDKEY=CDKEY)
+            CRPIX1_obj, CRPIX2_obj = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
+
+            # relative to reference point, consider offset between the WCS reference points [object]
+            # WARNING: the offset calculations may be wrong when the WCS reference points are very close to the N/S Poles!
+            x_GPU += (CRPIX1_targ - CRPIX1_obj + 180.0) % 360.0 - 180.0   # from using target reference point to object
+            y_GPU += CRPIX2_targ - CRPIX2_obj                             # ~
+
+            # inverse CD transformation [object]
+            u_GPU, v_GPU = CWT.cd_transform_inv(WORLD_X_GPU=x_GPU, WORLD_Y_GPU=y_GPU, CD_GPU=CD_GPU)
+            
+            # relative to image origin [object]
+            XX_proj_GPU = CRPIX1_obj + u_GPU.reshape((NTX, NTY))
+            YY_proj_GPU = CRPIX2_obj + v_GPU.reshape((NTX, NTY))
+        
+        return XX_proj_GPU, YY_proj_GPU
+
+    def projection_sip(self, hdr_obj, hdr_targ, Nsamp=1024, RANDOM_SEED=10086):
+        """Mapping the target pixel centers to the object frame using Cupy for SIP WCS"""
+        NTX = int(hdr_targ["NAXIS1"]) 
+        NTY = int(hdr_targ["NAXIS2"])
+
+        XX_targ_GPU, YY_targ_GPU = cp.meshgrid(
+            cp.arange(0, NTX) + 1., 
+            cp.arange(0, NTY) + 1., 
+            indexing='ij'
+        )
+        
+        CWT = Cupy_WCS_Transform()
+        # * perform forward transformation (+CD) through target WCS
+        if True:
+            # read header [target]
+            KEYDICT, CD_GPU, A_SIP_GPU, B_SIP_GPU = CWT.read_sip_wcs(hdr_wcs=hdr_targ)
+            CRPIX1_targ, CRPIX2_targ = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
+            CRVAL1_targ, CRVAL2_targ = KEYDICT["CRVAL1"], KEYDICT["CRVAL2"]
+            
+            # relative to reference point [target]
+            u_GPU, v_GPU = XX_targ_GPU.flatten() - CRPIX1_targ, YY_targ_GPU.flatten() - CRPIX2_targ
+            
+            # forward transformation for target grid of pixel centers [target]
+            U_GPU, V_GPU = CWT.sip_forward_transform(u_GPU=u_GPU, v_GPU=v_GPU, A_SIP_GPU=A_SIP_GPU, B_SIP_GPU=B_SIP_GPU)
+            
+            # plus CD transformation [target]
+            x_GPU, y_GPU = CWT.cd_transform(IMAGE_X_GPU=U_GPU, IMAGE_Y_GPU=V_GPU, CD_GPU=CD_GPU)
+        
+        # * perform backward transformation (+CD^-1) through object WCS
+        if True:
+            # read header [object]
+            KEYDICT, CD_GPU, A_SIP_GPU, B_SIP_GPU = CWT.read_sip_wcs(hdr_wcs=hdr_obj)
+            CRPIX1_obj, CRPIX2_obj = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
+            CRVAL1_obj, CRVAL2_obj = KEYDICT["CRVAL1"], KEYDICT["CRVAL2"]
+
+            # sampling random coordinates [object]
+            u_GPU, v_GPU = CWT.random_coord_sampling(N0=KEYDICT["N0"], N1=KEYDICT["N1"], 
+                CRPIX1=CRPIX1_obj, CRPIX2=CRPIX2_obj, Nsamp=Nsamp, RANDOM_SEED=RANDOM_SEED)
+            
+            # fit polynomial form backward transformation [object]
+            U_GPU, V_GPU = CWT.sip_forward_transform(u_GPU=u_GPU, v_GPU=v_GPU, A_SIP_GPU=A_SIP_GPU, B_SIP_GPU=B_SIP_GPU)
+            AP_lstsq_GPU, BP_lstsq_GPU = CWT.lstsq_sip_backward_transform(u_GPU=u_GPU, v_GPU=v_GPU, 
+                U_GPU=U_GPU, V_GPU=V_GPU, A_ORDER=KEYDICT["A_ORDER"], B_ORDER=KEYDICT["B_ORDER"])[2:4]
+
+            # relative to reference point, consider offset between the WCS reference points [object]
+            # WARNING: the offset calculations may be wrong when the WCS reference points are very close to the N/S Poles!
+            # TODO: this is not accruate, ~ 1pix.
+            offset1 = ((CRVAL1_targ - CRVAL1_obj + 180.0) % 360.0 - 180.0) * cp.cos(cp.deg2rad((CRVAL2_targ + CRVAL2_obj)/2.))
+            offset2 = CRVAL2_targ - CRVAL2_obj
+            x_GPU += offset1
+            y_GPU += offset2
+
+            # inverse CD transformation [object]
+            U_GPU, V_GPU = CWT.cd_transform_inv(WORLD_X_GPU=x_GPU, WORLD_Y_GPU=y_GPU, CD_GPU=CD_GPU)
+            
+            # backward transformation [object]
+            FP_UV_GPU = CWT.sip_backward_matrix(U_GPU=U_GPU, V_GPU=V_GPU, ORDER=KEYDICT["A_ORDER"])
+            GP_UV_GPU = CWT.sip_backward_matrix(U_GPU=U_GPU, V_GPU=V_GPU, ORDER=KEYDICT["B_ORDER"])
+
+            u_GPU, v_GPU = CWT.sip_backward_transform(U_GPU=U_GPU, V_GPU=V_GPU, 
+                FP_UV_GPU=FP_UV_GPU, GP_UV_GPU=GP_UV_GPU, AP_GPU=AP_lstsq_GPU, BP_GPU=BP_lstsq_GPU)
+            
+            # relative to image origin [object]
+            XX_proj_GPU = CRPIX1_obj + u_GPU.reshape((NTX, NTY))
+            YY_proj_GPU = CRPIX2_obj + v_GPU.reshape((NTX, NTY))
+
+        return XX_proj_GPU, YY_proj_GPU
+
+    def projection_astropy(self, hdr_obj, hdr_targ):
+        """Mapping the target pixel centers to the object frame using Astropy"""
+        # * read object WCS and target WCS
+        def _readWCS(hdr, VERBOSE_LEVEL=2):
             with warnings.catch_warnings():
                 if VERBOSE_LEVEL in [0, 1]: behavior = 'ignore'
                 if VERBOSE_LEVEL in [2]: behavior = 'default'
@@ -27,71 +147,90 @@ class Cuda_Resampling:
                 w = WCS(_hdr)
             return w
 
-        PixA_obj = fits.getdata(FITS_obj, ext=0).T
-        PixA_targ = fits.getdata(FITS_targ, ext=0).T
-
-        hdr_obj = fits.getheader(FITS_obj, ext=0)
-        hdr_targ = fits.getheader(FITS_targ, ext=0)
-
-        w_obj = Read_WCS(hdr=hdr_obj, VERBOSE_LEVEL=VERBOSE_LEVEL)
-        w_targ = Read_WCS(hdr=hdr_targ, VERBOSE_LEVEL=VERBOSE_LEVEL)
+        w_obj = _readWCS(hdr=hdr_obj, VERBOSE_LEVEL=self.VERBOSE_LEVEL)
+        w_targ = _readWCS(hdr=hdr_targ, VERBOSE_LEVEL=self.VERBOSE_LEVEL)
 
         # * maaping target pixel centers to the object frame
-        #   todo: not fast
         NTX = int(hdr_targ["NAXIS1"]) 
         NTY = int(hdr_targ["NAXIS2"])
-
-        _RR, _CC = np.mgrid[:NTX, :NTY]
-        XX_targ, YY_targ = _RR + 1., _CC + 1.
+        
+        XX_targ, YY_targ = np.meshgrid(np.arange(0, NTX)+1., np.arange(0, NTY)+1., indexing='ij')
         XY_targ = np.array([XX_targ.flatten(), YY_targ.flatten()]).T
-
-        # * get the projected coordinates
-        #   todo: this is too slow
         XY_proj = w_obj.all_world2pix(w_targ.all_pix2world(XY_targ, 1), 1)
+
         XX_proj = XY_proj[:, 0].reshape((NTX, NTY))
         YY_proj = XY_proj[:, 1].reshape((NTX, NTY))
 
+        XX_proj_GPU = cp.array(XX_proj, dtype=np.float64)
+        YY_proj_GPU = cp.array(YY_proj, dtype=np.float64)
+
+        return XX_proj_GPU, YY_proj_GPU
+
+    def frame_extension(self, XX_proj_GPU, YY_proj_GPU, PixA_obj_GPU):
+        """Extend the object frame for resampling"""
+        NTX, NTY = XX_proj_GPU.shape
+        NOX, NOY = PixA_obj_GPU.shape
+
         # * padding the object frame
-        if METHOD == 'BILINEAR':
+        if self.RESAMP_METHOD == 'BILINEAR':
             KERHW = (1, 1)
 
-        if METHOD == 'LANCZOS3':
+        if self.RESAMP_METHOD == 'LANCZOS3':
             KERHW = (3, 3)
-            
-        NOX = int(hdr_obj["NAXIS1"]) 
-        NOY = int(hdr_obj["NAXIS2"])
 
         # find the root index and shift with maximal kernel halfwidth (KERHW)
         # Note: the index ranges (RMIN --- RMAX) and (CMIN --- CMAX) can cover
         #       all pixels that interpolation may be use.
 
-        RMIN = (floor(XX_proj.min()) - 1) - KERHW[0]
-        RMAX = (floor(XX_proj.max()) - 1) + KERHW[0]
+        RMIN = (floor(XX_proj_GPU.min().item()) - 1) - KERHW[0]
+        RMAX = (floor(XX_proj_GPU.max().item()) - 1) + KERHW[0]
         RPAD = (-np.min([RMIN, 0]), np.max([RMAX - (NOX - 1), 0]))
 
-        CMIN = (floor(YY_proj.min()) - 1) - KERHW[1]
-        CMAX = (floor(YY_proj.max()) - 1) + KERHW[1]
+        CMIN = (floor(YY_proj_GPU.min().item()) - 1) - KERHW[1]
+        CMAX = (floor(YY_proj_GPU.max().item()) - 1) + KERHW[1]
         CPAD = (-np.min([CMIN, 0]), np.max([CMAX - (NOY - 1), 0]))
-        PAD_WIDTH = (RPAD, CPAD)
 
-        PixA_Eobj = np.pad(PixA_obj, PAD_WIDTH, mode='constant', constant_values=0.)
-        NEOX, NEOY = PixA_Eobj.shape
+        PAD_WIDTH = (RPAD, CPAD)    
+        PixA_Eobj_GPU = cp.pad(PixA_obj_GPU, PAD_WIDTH, mode='constant', constant_values=0.)
+        NEOX, NEOY = PixA_Eobj_GPU.shape
 
-        # * get the projected coordinates on extended object frame
-        XX_Eproj = XX_proj.copy()
-        XX_Eproj[:, :] += PAD_WIDTH[0][0]
+        XX_Eproj_GPU = XX_proj_GPU + PAD_WIDTH[0][0]
+        YY_Eproj_GPU = YY_proj_GPU + PAD_WIDTH[1][0]
 
-        YY_Eproj = YY_proj.copy()
-        YY_Eproj[:, :] += PAD_WIDTH[1][0]
+        RMIN_E = (floor(XX_Eproj_GPU.min().item()) - 1) - KERHW[0]
+        RMAX_E = (floor(XX_Eproj_GPU.max().item()) - 1) + KERHW[0]
 
-        RMIN_E = (floor(XX_Eproj.min()) - 1) - KERHW[0]
-        RMAX_E = (floor(XX_Eproj.max()) - 1) + KERHW[0]
-
-        CMIN_E = (floor(YY_Eproj.min()) - 1) - KERHW[1]
-        CMAX_E = (floor(YY_Eproj.max()) - 1) + KERHW[1]
+        CMIN_E = (floor(YY_Eproj_GPU.min().item()) - 1) - KERHW[1]
+        CMAX_E = (floor(YY_Eproj_GPU.max().item()) - 1) + KERHW[1]
 
         assert RMIN_E >= 0 and CMIN_E >= 0 
         assert RMAX_E < NEOX and CMAX_E < NEOY
+
+        EProjDict = {}
+        EProjDict['NTX'] = NTX
+        EProjDict['NTY'] = NTY
+
+        EProjDict['NOX'] = NOX
+        EProjDict['NOY'] = NOY
+
+        EProjDict['NEOX'] = NEOX
+        EProjDict['NEOY'] = NEOY
+
+        EProjDict['XX_Eproj_GPU'] = XX_Eproj_GPU
+        EProjDict['YY_Eproj_GPU'] = YY_Eproj_GPU
+
+        return PixA_Eobj_GPU, EProjDict
+    
+    def resampling(self, PixA_Eobj_GPU, EProjDict):
+        """Resampling the object frame to the target frame using CUDA"""
+        NTX = EProjDict['NTX']
+        NTY = EProjDict['NTY']
+
+        NEOX = EProjDict['NEOX']
+        NEOY = EProjDict['NEOY']
+
+        XX_Eproj_GPU = EProjDict['XX_Eproj_GPU']
+        YY_Eproj_GPU = EProjDict['YY_Eproj_GPU']
 
         # * Cupy configuration
         MaxThreadPerB = 8
@@ -100,24 +239,9 @@ class Cuda_Resampling:
         BpG_PIX1, TpB_PIX1 = GPUManage(NTY)
         BpG_PIX, TpB_PIX = (BpG_PIX0, BpG_PIX1), (TpB_PIX0, TpB_PIX1, 1)
 
-        if not XX_Eproj.flags['C_CONTIGUOUS']:
-            XX_Eproj = np.ascontiguousarray(XX_Eproj, np.float64)
-            XX_Eproj_GPU = cp.array(XX_Eproj)
-        else: XX_Eproj_GPU = cp.array(XX_Eproj.astype(np.float64))
-
-        if not YY_Eproj.flags['C_CONTIGUOUS']:
-            YY_Eproj = np.ascontiguousarray(YY_Eproj, np.float64)
-            YY_Eproj_GPU = cp.array(YY_Eproj)
-        else: YY_Eproj_GPU = cp.array(YY_Eproj.astype(np.float64))
-
-        if not PixA_Eobj.flags['C_CONTIGUOUS']:
-            PixA_Eobj = np.ascontiguousarray(PixA_Eobj, np.float64)
-            PixA_Eobj_GPU = cp.array(PixA_Eobj)
-        else: PixA_Eobj_GPU = cp.array(PixA_Eobj.astype(np.float64))
-
         PixA_resamp_GPU = cp.zeros((NTX, NTY), dtype=np.float64)
 
-        if METHOD == "BILINEAR":
+        if self.RESAMP_METHOD == "BILINEAR":
         
             # * perform bilinear resampling using CUDA
             # input: PixA_Eobj | (NEOX, NEOY)
@@ -166,10 +290,10 @@ class Cuda_Resampling:
             
             t0 = time.time()
             resamp_func(args=(XX_Eproj_GPU, YY_Eproj_GPU, PixA_Eobj_GPU, PixA_resamp_GPU), block=TpB_PIX, grid=BpG_PIX)
-            if VERBOSE_LEVEL in [1, 2]:
+            if self.VERBOSE_LEVEL in [1, 2]:
                 print('MeLOn CheckPoint: Cuda resampling takes [%.6f s]' %(time.time() - t0))
             
-        if METHOD == "LANCZOS3":
+        if self.RESAMP_METHOD == "LANCZOS3":
             
             # * perform LANCZOS-3 resampling using CUDA
             # input: XX_Eproj, YY_Eproj | (NTX, NTY)
@@ -278,19 +402,9 @@ class Cuda_Resampling:
             LKERNEL_X_GPU = cp.zeros((6, NTX, NTY), dtype=np.float64)
             LKERNEL_Y_GPU = cp.zeros((6, NTX, NTY), dtype=np.float64)
             weightkernel_func(args=(XX_Eproj_GPU, YY_Eproj_GPU, LKERNEL_X_GPU, LKERNEL_Y_GPU), block=TpB_PIX, grid=BpG_PIX)
-            resamp_func(args=(XX_Eproj_GPU, YY_Eproj_GPU, LKERNEL_X_GPU, LKERNEL_Y_GPU, PixA_Eobj_GPU, PixA_resamp_GPU), block=TpB_PIX, grid=BpG_PIX)
-            if VERBOSE_LEVEL in [1, 2]:
+            resamp_func(args=(XX_Eproj_GPU, YY_Eproj_GPU, LKERNEL_X_GPU, LKERNEL_Y_GPU, 
+                PixA_Eobj_GPU, PixA_resamp_GPU), block=TpB_PIX, grid=BpG_PIX)
+            if self.VERBOSE_LEVEL in [1, 2]:
                 print('MeLOn CheckPoint: Cuda resampling takes [%.6f s]' %(time.time() - t0))
 
-        # save the resampled image
-        PixA_resamp = cp.asnumpy(PixA_resamp_GPU)
-
-        # todo: refine the pixel filling
-        PixA_resamp[PixA_resamp == 0.] = np.nan
-        with fits.open(FITS_targ) as hdl:
-            hdl[0].data[:, :] = PixA_resamp.T
-            hdl.writeto(FITS_resamp, overwrite=True)
-        if VERBOSE_LEVEL in [1, 2]:
-            print('MeLOn CheckPoint: resampled fits file saved at \n # [%s]' %(FITS_resamp))
-
-        return PixA_resamp
+        return PixA_resamp_GPU

@@ -1,13 +1,13 @@
 import os
 import math
+import cupy as cp
 import numpy as np
 from astropy.io import fits
 from astropy.wcs import WCS
 from tempfile import mkdtemp
 from sfft.utils.CudaResampling import Cuda_Resampling
-#from sfft.utils.pyAstroMatic.PYSWarp import PY_SWarp
 
-__last_update__ = "2024-09-11"
+__last_update__ = "2024-09-19"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 
 class Image_ZoomRotate:
@@ -164,27 +164,57 @@ class Image_ZoomRotate:
         PixA_empty = np.zeros((wcsinfo_TARG['NAXIS1'], wcsinfo_TARG['NAXIS2'])).astype(float)
         hdl_TARG = fits.HDUList([fits.PrimaryHDU(data=PixA_empty.T, header=header_TARG)])
         
+        """
+        # DEPRECATED
         hdl_TARG[0].header['GAIN'] = (1.0, 'MeLOn: PlaceHolder')    
         hdl_TARG[0].header['SATURATE'] = (50000.0, 'MeLOn: PlaceHolder')   
         hdl_TARG[0].header['EXPTIME'] = (60.0, 'MeLOn: PlaceHolder')
         hdl_TARG[0].header['MJD-OBS'] = (58849.0, 'MeLOn: PlaceHolder')
+        
+        """
 
         FITS_TARG = TDIR + '/target_empty_image.fits'
         hdl_TARG.writeto(FITS_TARG, overwrite=True)
 
         # * run SWarp to perform the image resampling
         FITS_resamp = TDIR + '/resampled_image.fits'
-        PixA_resamp = Cuda_Resampling.CR(FITS_obj=FITS_ORI, FITS_targ=FITS_TARG, FITS_resamp=FITS_resamp, 
-            METHOD=RESAMPLING_TYPE, FILL_ZEROPIX=False, VERBOSE_LEVEL=VERBOSE_LEVEL)
+        """
+        # DEPRECATED
+        CR = Cuda_Resampling(FITS_obj=FITS_ORI, FITS_targ=FITS_TARG, 
+            METHOD=RESAMPLING_TYPE, VERBOSE_LEVEL=VERBOSE_LEVEL)
+        PixA_Eobj, MappingDICT = CR.mapping()
+        PixA_resamp = CR.resampling(PixA_Eobj=PixA_Eobj, MappingDICT=MappingDICT)
         
+        """
+        def run_resample(FITS_obj, FITS_targ):
+            """run resampling using CUDA"""
+            hdr_obj = fits.getheader(FITS_obj, ext=0)
+            hdr_targ = fits.getheader(FITS_targ, ext=0)
+
+            PixA_obj = fits.getdata(FITS_obj, ext=0).T
+            PixA_targ = fits.getdata(FITS_targ, ext=0).T
+
+            if not PixA_obj.flags['C_CONTIGUOUS']:
+                PixA_obj = np.ascontiguousarray(PixA_obj, np.float64)
+                PixA_obj_GPU = cp.array(PixA_obj)
+            else: PixA_obj_GPU = cp.array(PixA_obj.astype(np.float64))
+
+            if not PixA_targ.flags['C_CONTIGUOUS']:
+                PixA_targ = np.ascontiguousarray(PixA_targ, np.float64)
+                PixA_targ_GPU = cp.array(PixA_targ)
+            else: PixA_targ_GPU = cp.array(PixA_targ.astype(np.float64))
+
+            CR = Cuda_Resampling(RESAMP_METHOD='BILINEAR', VERBOSE_LEVEL=1)
+            XX_proj_GPU, YY_proj_GPU = CR.projection_cd(hdr_obj=hdr_obj, hdr_targ=hdr_targ, CDKEY="PC")
+            PixA_Eobj_GPU, EProjDict = CR.frame_extension(XX_proj_GPU=XX_proj_GPU, YY_proj_GPU=YY_proj_GPU, PixA_obj_GPU=PixA_obj_GPU)
+            PixA_resamp = cp.asnumpy(CR.resampling(PixA_Eobj_GPU=PixA_Eobj_GPU, EProjDict=EProjDict))
+            return PixA_resamp
+
+        PixA_resamp = run_resample(FITS_obj=FITS_ORI, FITS_targ=FITS_TARG)
         PixA_resamp[np.isnan(PixA_resamp)] = FILL_VALUE
         with fits.open(FITS_TARG) as hdl:
             hdl[0].data[:, :] = PixA_resamp.T
             hdl.writeto(FITS_resamp, overwrite=True)
-        
-        # PY_SWarp.PS(FITS_obj=FITS_ORI, FITS_ref=FITS_TARG, FITS_resamp=FITS_resamp, \
-        #     GAIN_KEY='GAIN', SATUR_KEY='SATURATE', OVERSAMPLING=1, RESAMPLING_TYPE=RESAMPLING_TYPE, \
-        #     SUBTRACT_BACK='N', FILL_VALUE=FILL_VALUE, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         PixA_resamp = fits.getdata(FITS_resamp, ext=0).T
         os.system('rm -rf %s' %TDIR)
