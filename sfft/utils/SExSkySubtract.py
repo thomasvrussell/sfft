@@ -119,4 +119,4 @@ class SEx_SkySubtract:
                 hdl[0].data[:, :] = PixA_skyrms.T
                 hdl.writeto(FITS_skyrms, overwrite=True)
 
-        return SKYDIP, SKYPEAK, PixA_skysub, PixA_sky, PixA_skyrms
+        return SKYDIP, SKYPEAK, PixA_skysub, PixA_sky, PixA_skyrms, DETECT_MASK
