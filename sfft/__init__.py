@@ -12,7 +12,7 @@ Remarks on Internal Packages Imports:
     from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
 """
 
-from .PureCupyCustomizedPacket import PureCupy_CustomizedPacket
+from .PureCupyCustomizedPacket import PureCupy_Customized_Packet
 from .CustomizedPacket import Customized_Packet
 from .AutoSparsePrep import Auto_SparsePrep
 from .AutoCrowdedPrep import Auto_CrowdedPrep

@@ -6,7 +6,7 @@ from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
 
 __last_update__ = "2024-09-21"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
-__version__ = "v1.5.2"
+__version__ = "v1.6.0"
 
 class PureCupy_Customized_Packet:
     @staticmethod

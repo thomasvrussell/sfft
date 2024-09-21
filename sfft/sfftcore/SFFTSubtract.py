@@ -3,7 +3,7 @@ import numpy as np
 
 __last_update__ = "2024-09-21"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
-__version__ = "v1.5.2"
+__version__ = "v1.6.0"
 
 class ElementalSFFTSubtract_Cupy:
     @staticmethod
@@ -877,7 +877,7 @@ class GeneralSFFTSubtract:
                      ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░         
         
                     Saccadic Fast Fourier Transform (SFFT) algorithm
-                    sfft (v1.*) supported by @LeiHu
+                    sfft supported by @LeiHu
         
                     GitHub: https://github.com/thomasvrussell/sfft
                     Related Paper: https://arxiv.org/abs/2109.09334
@@ -1319,7 +1319,7 @@ class ElementalSFFTSubtract_PureCupy:
                 print('/////   i   ///// Solve Linear System                 (%.4fs)' %dt8)
 
         # * Perform Subtraction 
-        PixA_DIFF = None
+        PixA_DIFF_GPU = None
         if Subtract:
             tc = time.time()
             t9 = time.time()
@@ -1404,7 +1404,7 @@ class GeneralSFFTSubtract_PureCupy:
                      ░░░░░░░░░  ░░░░░       ░░░░░          ░░░░░         
         
                     Saccadic Fast Fourier Transform (SFFT) algorithm
-                    sfft (v1.*) supported by @LeiHu
+                    sfft supported by @LeiHu
         
                     GitHub: https://github.com/thomasvrussell/sfft
                     Related Paper: https://arxiv.org/abs/2109.09334
