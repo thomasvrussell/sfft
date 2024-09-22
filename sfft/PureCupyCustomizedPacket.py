@@ -8,6 +8,32 @@ __last_update__ = "2024-09-21"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.6.0"
 
+#########################################################################
+#||                                                                   ||#
+#||                           Acknowledgment                          ||#
+#||                                                                   ||#
+#########################################################################
+#||                                                                   ||#
+#||   This code was developed during the NASA GPU Hackathon 2024      ||#
+#||   (https://www.nas.nasa.gov/hackathon/#home) as part of the       ||#
+#||   pipeline optimization efforts for the Roman Supernova PIT       ||#
+#||   team (https://github.com/Roman-Supernova-PIT). I extend my      ||#
+#||   sincere appreciation to my team members and our Hackathon       ||#
+#||   mentors for their valuable support and insightful               ||#
+#||   suggestions.                                                    ||#
+#||                                                                   ||#
+#||   I would like to specifically acknowledge the contributions      ||#
+#||   of the following team members: Lauren Aldoroty (Duke),          ||#
+#||   Robert Knop (LBNL), Shu Liu (Pitt), and Michael Wood-Vasey      ||#
+#||   (Pitt). Additionally, I am grateful for the guidance provided   ||#
+#||   by our mentors, Marcus Manos and Lucas Erlandson from NVIDIA.   ||#
+#||                                                                   ||#
+#||   The collaborative environment fostered by the NASA GPU          ||#
+#||   Hackathon and the Roman Supernova PIT team was essential for    ||#
+#||   the development and optimization of this code.                  ||#
+#||                                                                   ||#
+#########################################################################
+
 class PureCupy_Customized_Packet:
     @staticmethod
     def PCCP(PixA_REF_GPU, PixA_SCI_GPU, PixA_mREF_GPU, PixA_mSCI_GPU, 
