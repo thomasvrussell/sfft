@@ -12,6 +12,7 @@ Remarks on Internal Packages Imports:
     from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
 """
 
+__version__ = "1.6.1"
 from .PureCupyCustomizedPacket import PureCupy_Customized_Packet
 from .CustomizedPacket import Customized_Packet
 from .AutoSparsePrep import Auto_SparsePrep
