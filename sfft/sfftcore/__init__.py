@@ -5,4 +5,4 @@ Remarks on Internal Packages Imports:
 """
 
 from .SFFTConfigure import SingleSFFTConfigure
-from .SFFTSubtract import ElementalSFFTSubtract, GeneralSFFTSubtract
+from .SFFTSubtract import ElementalSFFTSubtract, GeneralSFFTSubtract, GeneralSFFTSubtract_PureCupy
