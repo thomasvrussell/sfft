@@ -1,3 +1,4 @@
+import cupy as cp
 import tracemalloc
 import logging
 import sys
@@ -160,6 +161,12 @@ class Customized_Packet:
             _message = 'Function Compilations of SFFT-SUBTRACTION TAKES [%.3f s]' %(time.time() - Tcomp_start)
             print('\nMeLOn Report: %s' %_message)
 
+        mempool = cp.get_default_memory_pool()
+        pinned_mempool = cp.get_default_pinned_memory_pool()
+        # print('MEMPOOL USED BYTES', mempool.used_bytes())
+        # print('MEMPOOL TOTAL BYTES', mempool.total_bytes())
+        # print('PINNED MEMPOOL FREE BLOCKS', pinned_mempool.n_free_blocks())
+
         # * Perform SFFT Subtraction
         if ConvdSide == 'REF':
             PixA_mI, PixA_mJ = PixA_mREF, PixA_mSCI
@@ -180,6 +187,10 @@ class Customized_Packet:
         if VERBOSE_LEVEL in [0, 1, 2]:
             print('MeLOn CheckPoint: TRIGGER SFFT-SUBTRACTION!')
 
+        # print('MEMPOOL USED BYTES', mempool.used_bytes())
+        # print('MEMPOOL TOTAL BYTES', mempool.total_bytes())
+        # print('PINNED MEMPOOL FREE BLOCKS', pinned_mempool.n_free_blocks())
+
         Tsub_start = time.time()
 
         # tracemalloc.start()
@@ -187,6 +198,10 @@ class Customized_Packet:
         _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
             SFFTConfig=SFFTConfig, ContamMask_I=None, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
             NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)
+
+        # print('MEMPOOL USED BYTES', mempool.used_bytes())
+        # print('MEMPOOL TOTAL BYTES', mempool.total_bytes())
+        # print('PINNED MEMPOOL FREE BLOCKS', pinned_mempool.n_free_blocks())
 
         # size, peak = tracemalloc.get_traced_memory()
         # logger.debug(f'MEMORY IN CUSTOMIZEDPACKET FROM GENERALSFFTSUBTRACT size={size}, peak={peak}')
