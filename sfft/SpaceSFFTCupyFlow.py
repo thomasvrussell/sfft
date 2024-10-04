@@ -7,8 +7,8 @@ from sfft.utils.PureCupyFFTKits import PureCupy_FFTKits
 from sfft.utils.PureCupyDeCorrelationCalculator import PureCupy_DeCorrelation_Calculator
 
 # loacal imports
-from ResampKits import Cupy_ZoomRotate
-from ResampKits import Cupy_Resampling
+from sfft.utils.ResampKits import Cupy_ZoomRotate
+from sfft.utils.ResampKits import Cupy_Resampling
 
 __last_update__ = "2024-09-22"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
@@ -16,9 +16,12 @@ __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 class SpaceSFFT_CupyFlow:
     """Run A Cupy WorkFlow for SFFT subtraction"""
 
-    def __init__(hdr_target, hdr_object, PixA_target_GPU, PixA_object_GPU, PixA_target_DMASK_GPU, PixA_object_DMASK_GPU, 
-                 PSF_target_GPU, PSF_object_GPU, GKerHW=9, KerPolyOrder=2, BGPolyOrder=0, ConstPhotRatio=True, 
-                 CUDA_DEVICE_4SUBTRACT='0', GAIN=1.0, which_convolve='object', RANDOM_SEED=10086):
+    def __init__(self, hdr_target, hdr_object, target_skyrms, object_skyrms, PixA_target_GPU, PixA_object_GPU,
+                 PixA_target_DMASK_GPU, PixA_object_DMASK_GPU, 
+                 PSF_target_GPU, PSF_object_GPU,
+                 sci_is_target=True,
+                 GKerHW=9, KerPolyOrder=2, BGPolyOrder=0, ConstPhotRatio=True, 
+                 CUDA_DEVICE_4SUBTRACT='0', GAIN=1.0, RANDOM_SEED=10086):
         """Do things.
 
         Parameters
@@ -28,6 +31,10 @@ class SpaceSFFT_CupyFlow:
 
            hdr_object: astropy header
               Original (unresampled) header of the image to be resampled to match target.
+
+           target_skyrms: float
+
+           object_skyrms: float
 
            PixA_target_GPU: cupy array (float64)
               2d image data of target, indexed by x, y.  (Note that raw
@@ -50,6 +57,9 @@ class SpaceSFFT_CupyFlow:
            PSF_object_GPU: cupy array (float64)
               object PSF
 
+           sci_is_target : bool
+              If True, will subtract object - target.  If false, will subtract target - object.
+
            GKerHW: int
               Matching kernel half-width (full width is 2*GkerHW + 1 )
            
@@ -70,9 +80,6 @@ class SpaceSFFT_CupyFlow:
            GAIN: float
               e-/ADU gain for both images.  (So, poisson noise, σ_adu = √(gain) * adu.)
 
-           which_convolve: str, default 'object'
-              Which image gets convolved in the sfft subtraction
-
            RANDOM_SEED: int default 10086
               Random seed to use to CR.resamp_projection_sip.  TODO :
               make it so that when this is None, a "real" random seed is
@@ -89,24 +96,27 @@ class SpaceSFFT_CupyFlow:
         assert PSF_target_GPU.flags['C_CONTIGUOUS']
         assert PSF_object_GPU.flags['C_CONTIGUOUS']
 
-        assert "BKG_SIG" in hdr_target
-        assert "BKG_SIG" in hdr_object
-
         self.hdr_target = hdr_target
         self.hdr_object = hdr_object
+        self.target_skyrms = target_skyrms
+        self.object_skyrms = object_skyrms
         self.PixA_target_GPU = PixA_target_GPU
         self.PixA_object_GPU = PixA_object_GPU
+        if PixA_target_DMASK_GPU.dtype != cp.float64:
+            PixA_target_DMASK_GPU = PixA_target_DMASK_GPU.astype(cp.float64)
         self.PixA_target_DMASK_GPU = PixA_target_DMASK_GPU
+        if PixA_object_DMASK_GPU.dtype != cp.float64:
+            PixA_object_DMASK_GPU = PixA_object_DMASK_GPU.astype(cp.float64)
         self.PixA_object_DMASK_GPU = PixA_object_DMASK_GPU
         self.PSF_target_GPU = PSF_target_GPU
         self.PSF_object_GPU = PSF_object_GPU
+        self.sci_is_target = sci_is_target
         self.GKerHW = GKerHW
-        self.KerrPolyOrder = KerrPolyOrder
+        self.KerPolyOrder = KerPolyOrder
         self.BGPolyOrder = BGPolyOrder
         self.ConstPhotRatio = ConstPhotRatio
         self.CUDA_DEVICE_4SUBTRACT = CUDA_DEVICE_4SUBTRACT
         self.GAIN = GAIN
-        self.which_convolve = which_convolve
         self.RANDOM_SEED = 10086
 
 
@@ -140,7 +150,7 @@ class SpaceSFFT_CupyFlow:
         self.PixA_resamp_object_DMASK_GPU = CR.resampling(PixA_Eobj_GPU=PixA_Eobj_GPU,
                                                           EProjDict=EProjDict,
                                                           USE_SHARED_MEMORY=False)
-        self.BlankMask_GPU = sci.PixA_resamp_object_GPU == 0.
+        self.BlankMask_GPU = self.PixA_resamp_object_GPU == 0.
 
         PATTERN_ROTATE_ANGLE = PatternRotation_Calculator.PRC(hdr_obj=self.hdr_object, hdr_targ=self.hdr_target)
 
@@ -198,12 +208,23 @@ class SpaceSFFT_CupyFlow:
         del ZeroMask_GPU
         
         # trigger sfft subtraction
+        if self.sci_is_target:
+            PixA_REF_GPU = self.PixA_Cresamp_object_GPU
+            PixA_SCI_GPU = self.PixA_Ctarget_GPU
+            PixA_mREF_GPU = PixA_mCresamp_object_GPU
+            PixA_mSCI_GPU = PixA_mCtarget_GPU
+        else:
+            PixA_REF_GPU = self.PixA_Ctarget_GPU
+            PixA_SCI_GPU = self.PixA_Cresamp_object_GPU
+            PixA_mREF_GPU = PixA_mCtarget_GPU
+            PixA_mSCI_GPU = PixA_mCresamp_object_GPU
+        
         self.Solution_GPU, self.PixA_DIFF_GPU = PureCupy_Customized_Packet.PCCP(
-            PixA_target_GPU=self.PixA_Ctarget_GPU,
-            PixA_resamp_object_GPU=self.PixA_Cresamp_object_GPU,
-            PixA_mtarget_GPU=PixA_mCtarget_GPU,
-            PixA_mresamp_object_GPU=PixA_mCresamp_object_GPU, 
-            ForceConv=self.which_convolve,
+            PixA_REF_GPU=PixA_REF_GPU,
+            PixA_SCI_GPU=PixA_SCI_GPU,
+            PixA_mREF_GPU=PixA_mREF_GPU,
+            PixA_mSCI_GPU=PixA_mSCI_GPU,
+            ForceConv='REF' if self.sci_is_target else 'NEW',
             GKerHW=self.GKerHW,
             KerPolyOrder=self.KerPolyOrder,
             BGPolyOrder=self.BGPolyOrder,
@@ -226,12 +247,14 @@ class SpaceSFFT_CupyFlow:
             Solution=self.Solution, N0=N0, N1=N1, L0=L0, L1=L1, DK=DK, Fpq=Fpq
         )[0], dtype=cp.float64)
 
+        # NOTE -- assuming below that the resampled object image has the same
+        #   skyrms as the original object image.  (This is ~OK.)
         self.FKDECO_GPU = PureCupy_DeCorrelation_Calculator.PCDC(NX_IMG=N0,
                                                                  NY_IMG=N1,
                                                                  KERNEL_GPU_JQueue=[self.PSF_target_GPU], 
-                                                                 BKGSIG_JQueue=[self.BKGSIG_resamp_object],
+                                                                 BKGSIG_JQueue=[self.object_skyrms],
                                                                  KERNEL_GPU_IQueue=[self.PSF_resamp_object_GPU],
-                                                                 BKGSIG_IQueue=[self.BKGSIG_target], 
+                                                                 BKGSIG_IQueue=[self.target_skyrms], 
                                                                  MATCH_KERNEL_GPU=MATCH_KERNEL_GPU,
                                                                  REAL_OUTPUT=False,
                                                                  REAL_OUTPUT_SIZE=None, 
@@ -242,8 +265,25 @@ class SpaceSFFT_CupyFlow:
     def apply_decorrelation( self, img ):
         # do decorrelation
 
+        padxl = 0
+        padyl = 0
+        padxh = 0
+        padyh = 0
+        # Implicitly assuming img is smaller here
+        if img.shape != self.FKDECO_GPU.shape:
+            padx = self.FKDECO_GPU.shape[0] - img.shape[0]
+            padxl = padx // 2
+            padxh = padx - padxl
+            pady = self.FKDECO_GPU.shape[1] - img.shape[1]
+            padyl = pady // 2
+            padyh = pady - padyl
+            img = cp.pad( img, ( (padxl, padxh), (padyl, padyh) ) )
+            
         Fdecor = cp.fft.fft2( img )
-        return cp.fft.ifft2( Fdecor * FKDECO_GPU) ).real
+        decorimg = cp.fft.ifft2( Fdecor * self.FKDECO_GPU ).real
+
+        return decorimg[ padxl:(decorimg.shape[0]-padxh) , padyl:(decorimg.shape[1]-padyh) ]
+        
         # FPixA_DIFF_GPU = cp.fft.fft2(self.PixA_DIFF_GPU)
         # self.PixA_DCDIFF_GPU = cp.fft.ifft2(FPixA_DIFF_GPU * FKDECO_GPU).real
 
@@ -276,7 +316,7 @@ class SpaceSFFT_CupyFlow:
         # del self.PSF_target_GPU
         # del self.PSF_object_GPU
         # del self.GKerHW
-        # del self.KerrPolyOrder
+        # del self.KerPolyOrder
         # del self.BGPolyOrder
         # del self.ConstPhotRatio
         # del self.CUDA_DEVICE_4SUBTRACT

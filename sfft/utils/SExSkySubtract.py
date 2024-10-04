@@ -12,9 +12,10 @@ __version__ = "v1.4"
 
 class SEx_SkySubtract:
     @staticmethod
-    def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
-        BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
-        VERBOSE_LEVEL=2, MDIR=None):
+    def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, FITS_detmask=None,
+            SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
+            BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
+            VERBOSE_LEVEL=2, MDIR=None):
 
         """
         # Inputs & Outputs:
@@ -119,4 +120,7 @@ class SEx_SkySubtract:
                 hdl[0].data[:, :] = PixA_skyrms.T
                 hdl.writeto(FITS_skyrms, overwrite=True)
 
+        if FITS_detmask is not None:
+            fits.writeto( FITS_detmask, DETECT_MASK.T.astype( np.uint8 ), overwrite=True )
+                
         return SKYDIP, SKYPEAK, PixA_skysub, PixA_sky, PixA_skyrms
