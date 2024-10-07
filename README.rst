@@ -33,7 +33,7 @@ Get started
 - **Source code:** https://github.com/thomasvrussell/sfft
 
 Installation
-
+=================
 To install the latest release from PyPI, use pip: ::
     
     pip install sfft
