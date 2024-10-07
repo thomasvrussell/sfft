@@ -46,7 +46,6 @@ Citing
 *Image Subtraction in Fourier Space, Lei Hu et al. 2022, The Astrophysical Journal, 936, 157* 
 
 See ADS Link: https://ui.adsabs.harvard.edu/abs/2022ApJ...936..157H/abstract
-`ADS Link <https://ui.adsabs.harvard.edu/abs/2022ApJ...936..157H/abstract>`_
 
 Publications using SFFT method
 --------------------------------
