@@ -2,11 +2,11 @@
 
 *SFFT: Saccadic Fast Fourier Transform for image subtraction*
 ---------------------
-.. image:: https://img.shields.io/pypi/v/sfft-red.svg
+.. image:: https://img.shields.io/pypi/v/sfft.svg
     :target: https://pypi.python.org/pypi/sfft
     :alt: Latest Version
 
-.. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=orange&left_text=Downloads
+.. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=yellow&left_text=Downloads
     :target: https://pepy.tech/project/sfft
 
 .. image:: https://zenodo.org/badge/doi/10.5281/zenodo.6463000.svg
