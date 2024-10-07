@@ -2,8 +2,8 @@
 
 SFFT
 ---------------------
-*Python package for Saccadic Fast Fourier Transform (SFFT) image subtraction*
-========
+** *Python package for Saccadic Fast Fourier Transform (SFFT) image subtraction* **
+
 .. image:: https://img.shields.io/pypi/v/sfft.svg
     :target: https://pypi.python.org/pypi/sfft
     :alt: Latest Version
