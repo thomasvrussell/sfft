@@ -43,13 +43,9 @@ For more detailed instructions, see the `install guide <https://thomasvrussell.g
 Citing
 --------
 
-*Image Subtraction in Fourier Space, Lei Hu et al. 2022, The Astrophysical Journal, 936, 157*
+*Image Subtraction in Fourier Space, Lei Hu et al. 2022, The Astrophysical Journal, 936, 157* 
 
-`ADS <https://ui.adsabs.harvard.edu/abs/2022ApJ...936..157H/abstract>`_ 
-
-Arxiv link: `<https://arxiv.org/abs/2109.09334>`_.
-
-ApJ Publication link: `<https://doi.org/10.3847/1538-4357/ac7394>`_.
+`ADS Link <https://ui.adsabs.harvard.edu/abs/2022ApJ...936..157H/abstract>`_
 
 Publications using SFFT method
 --------------------------------
