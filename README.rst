@@ -31,7 +31,13 @@ SFFT method is the transient detection engine for several ongoing time-domain pr
 - **SFFT Tutorials:** https://thomasvrussell.github.io/sfft-doc/tutorials/
 - **Source code:** https://github.com/thomasvrussell/sfft
 - **Bug reports:** https://github.com/thomasvrussell/sfft/issues
-- **Citing in your work:** https://thomasvrussell.github.io/sfft-doc/citing/
+
+Installation
+------------
+
+To install the latest release from PyPI, use pip: ::
+    
+    pip install sfft
 
 Citing
 --------
