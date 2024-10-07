@@ -30,7 +30,6 @@ SFFT method is the transient detection engine for several ongoing time-domain pr
 - **SFFT Installation:** https://thomasvrussell.github.io/sfft-doc/installation/
 - **SFFT Tutorials:** https://thomasvrussell.github.io/sfft-doc/tutorials/
 - **Source code:** https://github.com/thomasvrussell/sfft
-- **Bug reports:** https://github.com/thomasvrussell/sfft/issues
 
 Installation
 ------------
