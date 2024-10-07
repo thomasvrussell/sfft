@@ -5,12 +5,14 @@ SFFT
 
 .. image:: https://img.shields.io/pypi/v/sfft.svg
     :target: https://pypi.python.org/pypi/sfft
+    :alt: Latest Version
 
 .. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=orange&left_text=Downloads
     :target: https://pepy.tech/project/sfft
 
 .. image:: https://zenodo.org/badge/doi/10.5281/zenodo.6463000.svg
     :target: https://doi.org/10.5281/zenodo.6463000
+    :alt: 1.0.6
 
 .. image:: https://img.shields.io/badge/python-3.7-green.svg
     :target: https://www.python.org/downloads/release/python-370/
@@ -24,7 +26,7 @@ Saccadic Fast Fourier Transform (SFFT) is an algorithm for image subtraction in 
 
 SFFT method is the transient detection engine for several ongoing time-domain programs, including the `DESIRT <https://ui.adsabs.harvard.edu/abs/2022TNSAN.107....1P/abstract>`_ survey based on DECam & DESI, the DECam GW-MMADS Survey for GW Follow-ups and the JWST Cycle 3 Archival program `AR 5965 <https://www.stsci.edu/jwst/science-execution/program-information?id=5965>`_. SFFT is also the core engine for the differential photometry pipeline of the `Roman Supernova PIT <https://github.com/Roman-Supernova-PIT>`_.
 
-- **Home Page:** https://thomasvrussell.github.io/sfft-doc/
+- **Documentation:** https://thomasvrussell.github.io/sfft-doc/
 - **Installation:** https://thomasvrussell.github.io/sfft-doc/installation/
 - **Tutorials:** https://thomasvrussell.github.io/sfft-doc/tutorials/
 
