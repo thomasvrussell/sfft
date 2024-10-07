@@ -5,14 +5,12 @@ SFFT
 
 .. image:: https://img.shields.io/pypi/v/sfft.svg
     :target: https://pypi.python.org/pypi/sfft
-    :alt: Latest Version
 
 .. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=orange&left_text=Downloads
     :target: https://pepy.tech/project/sfft
 
 .. image:: https://zenodo.org/badge/doi/10.5281/zenodo.6463000.svg
     :target: https://doi.org/10.5281/zenodo.6463000
-    :alt: 1.0.6
 
 .. image:: https://img.shields.io/badge/python-3.7-green.svg
     :target: https://www.python.org/downloads/release/python-370/
