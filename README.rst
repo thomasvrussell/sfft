@@ -38,16 +38,7 @@ Arxiv link: `<https://arxiv.org/abs/2109.09334>`_.
 
 ApJ Publication link: `<https://doi.org/10.3847/1538-4357/ac7394>`_.
 
-Related DOI: 10.3847/1538-4357/ac7394
-
 Publications using SFFT method
 --------------------------------
 
 See ADS Library: https://ui.adsabs.harvard.edu/public-libraries/lc4tiTR_T--92f9k0YrRQg
-
-Acknowledgment
---------------------------------
-
-The version SFFT v1.6.* is developed during the `NASA GPU Hackathon 2024 <https://www.nas.nasa.gov/hackathon/#home>`_ as part of the pipeline optimization efforts for the `Roman Supernova PIT team <https://github.com/Roman-Supernova-PIT>`_. The valuable support and insightful suggestions from our team members and Hackathon mentors are essential for the improvements in this version of SFFT. 
-
-I would like to specifically acknowledge the contributions of the following team members: Lauren Aldoroty (Duke), Robert Knop (LBNL), Shu Liu (Pitt), and Michael Wood-Vasey (Pitt). Additionally, I am grateful for the guidance provided by our mentors, Marcus Manos and Lucas Erlandson from NVIDIA.
