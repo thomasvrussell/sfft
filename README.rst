@@ -1,6 +1,6 @@
 ..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_logo_gwbkg.png
 
-*Python package for Saccadic Fast Fourier Transform (SFFT)*
+*SFFT: Saccadic Fast Fourier Transform for image subtraction*
 ---------------------
 .. image:: https://img.shields.io/pypi/v/sfft.svg
     :target: https://pypi.python.org/pypi/sfft
