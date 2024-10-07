@@ -38,12 +38,14 @@ To install the latest release from PyPI, use pip: ::
     
     pip install sfft
 
-For more detailed instructions, see the `install guide <https://thomasvrussell.github.io/sfft-doc/installation/>`_   in the docs.
+For more detailed instructions, see the `install guide <https://thomasvrussell.github.io/sfft-doc/installation/>`_ in the docs.
 
 Citing
 --------
 
-*Image Subtraction in Fourier Space. Lei Hu et al. 2022, The Astrophysical Journal, 936, 157*
+*Image Subtraction in Fourier Space, Lei Hu et al. 2022, The Astrophysical Journal, 936, 157*
+
+`ADS <https://ui.adsabs.harvard.edu/abs/2022ApJ...936..157H/abstract>`_ 
 
 Arxiv link: `<https://arxiv.org/abs/2109.09334>`_.
 
