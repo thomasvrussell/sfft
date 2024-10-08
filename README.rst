@@ -31,6 +31,7 @@ Get started
 - **Installation:** https://thomasvrussell.github.io/sfft-doc/installation/
 - **Tutorials:** https://thomasvrussell.github.io/sfft-doc/tutorials/
 - **Source code:** https://github.com/thomasvrussell/sfft
+- **Author Contact:** astroleihu@gmail.com or leihu@andrew.cmu.edu
 
 Installation
 =================
