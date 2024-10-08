@@ -95,30 +95,30 @@ class SEx_SkySubtract:
         IQR = iqr(PixA_sky)
         SKYDIP = Q1 - 1.5*IQR    # outlier rejected dip
         SKYPEAK = Q3 + 1.5*IQR   # outlier rejected peak
+
+        with fits.open(FITS_obj) as hdl:
+            FITS_obj_hdr = hdl[0].header
         
         if FITS_skysub is not None:
-            with fits.open(FITS_obj) as hdl:
-                hdl[0].header['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
-                hdl[0].header['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
-                if SATUR_KEY in hdl[0].header:
-                    ESATUR = float(hdl[0].header[SATUR_KEY]) - SKYPEAK    # use a conservative value
-                    hdl[0].header[ESATUR_KEY] = (ESATUR, 'MeLOn: Effective SATURATE after SEx-SKY-SUB')
-                hdl[0].data[:, :] = PixA_skysub.T
-                hdl.writeto(FITS_skysub, overwrite=True)
+            hdr = FITS_obj_hdr.copy()
+            hdr['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
+            hdr['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
+            if SATUR_KEY in hdr:
+                ESATUR = float(hdr[SATUR_KEY]) - SKYPEAK    # use a conservative value
+                hdr[ESATUR_KEY] = (ESATUR, 'MeLOn: Effective SATURATE after SEx-SKY-SUB')
+            fits.writeto( FITS_skysub, PixA_skysub.T, hdr, overwrite=True )
         
         if FITS_sky is not None:
-            with fits.open(FITS_obj) as hdl:
-                hdl[0].header['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
-                hdl[0].header['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
-                hdl[0].data[:, :] = PixA_sky.T
-                hdl.writeto(FITS_sky, overwrite=True)
+            hdr = FITS_obj_hdr.copy()
+            hdr['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
+            hdr['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
+            fits.writeto(FITS_sky, PixA_sky.T, hdr, overwrite=True)
         
         if FITS_skyrms is not None:
-            with fits.open(FITS_obj) as hdl:
-                hdl[0].header['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
-                hdl[0].header['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
-                hdl[0].data[:, :] = PixA_skyrms.T
-                hdl.writeto(FITS_skyrms, overwrite=True)
+            hdr = FITS_obj_hdr.copy()
+            hdr['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
+            hdr['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
+            fits.writeto(FITS_skyrms, PixA_skyrms.T, hdr, overwrite=True)
 
         if FITS_detmask is not None:
             fits.writeto( FITS_detmask, DETECT_MASK.T.astype( np.uint8 ), overwrite=True )
