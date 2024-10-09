@@ -27,7 +27,7 @@ SFFT method is the transient detection engine for several ongoing time-domain pr
 Get started
 ---------------------
 
-- **Documentation:** https://thomasvrussell.github.io/sfft-doc/ *[recommended]*
+- **Documentation:** https://thomasvrussell.github.io/sfft-doc/ **[recommended]**
 - **Installation:** https://thomasvrussell.github.io/sfft-doc/installation/
 - **Tutorials:** https://thomasvrussell.github.io/sfft-doc/tutorials/
 - **Source code:** https://github.com/thomasvrussell/sfft
