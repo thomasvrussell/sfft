@@ -1,5 +1,5 @@
-import importlib
 import numpy as np
+import importlib.util
 from sfft.utils.PureCupyFFTKits import PureCupy_FFTKits
 if importlib.util.find_spec('cupy') is not None:
     import cupy as cp

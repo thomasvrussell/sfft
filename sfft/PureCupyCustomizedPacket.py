@@ -1,6 +1,6 @@
 import time
-import importlib
 import numpy as np
+import importlib.util
 from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract_PureCupy
 from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
 if importlib.util.find_spec('cupy') is not None:

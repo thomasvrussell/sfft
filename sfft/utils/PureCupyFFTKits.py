@@ -1,4 +1,4 @@
-import importlib
+import importlib.util
 if importlib.util.find_spec('cupy') is not None:
     import cupy as cp
 
