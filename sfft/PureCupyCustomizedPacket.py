@@ -1,14 +1,14 @@
 import time
 import numpy as np
-import importlib.util
+import importlib.util as iu
 from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract_PureCupy
 from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
-if importlib.util.find_spec('cupy') is not None:
+if iu.find_spec('cupy') is not None:
     import cupy as cp
 
-__last_update__ = "2024-09-21"
+__last_update__ = "2024-10-17"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
-__version__ = "v1.6.0"
+__version__ = "v1.6.3"
 
 #########################################################################
 #||                                                                   ||#

@@ -1,7 +1,7 @@
 import numpy as np
-import importlib.util
+import importlib.util as iu
 from sfft.utils.PureCupyFFTKits import PureCupy_FFTKits
-if importlib.util.find_spec('cupy') is not None:
+if iu.find_spec('cupy') is not None:
     import cupy as cp
 
 __last_update__ = "2024-09-22"
