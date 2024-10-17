@@ -1,8 +1,10 @@
 import time
-import cupy as cp
+import importlib
 import numpy as np
 from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract_PureCupy
 from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
+if importlib.util.find_spec('cupy') is not None:
+    import cupy as cp
 
 __last_update__ = "2024-09-21"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
