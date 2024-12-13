@@ -11,7 +11,7 @@ from sfft.utils.ReadWCS import Read_WCS
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
-# version: Mar 12, 2023
+# version: Dec 13, 2024
 
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
@@ -756,7 +756,7 @@ class PY_SEx:
                         print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
             
             # ** e. Remove Boundary Sources
-            if XBoundary != 0.0 or XBoundary != 0.0:
+            if XBoundary != 0.0 or YBoundary != 0.0:
                 NX, NY = int(phr_obj['NAXIS1']), int(phr_obj['NAXIS2'])
                 _XY = np.array([AstSEx['X_IMAGE'], AstSEx['Y_IMAGE']]).T
 
