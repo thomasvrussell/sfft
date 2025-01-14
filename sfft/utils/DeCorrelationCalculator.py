@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import cupy
 from sfft.utils.ConvKernelConvertion import ConvKernel_Convertion
 # version: Mar 10, 2023
 
@@ -69,23 +70,24 @@ class DeCorrelation_Calculator:
         # construct the DeNonimator (a real-positive map) in Fourier Space
         uMK = np.array([[0, 0, 0], [0, 1, 0], [0, 0, 0]]).astype(float)
         def Get_JTerm(MKj, skysig):
-            if MKj is not None: KIMG_CSZ = ConvKernel_Convertion.CSZ(MKj, N0, N1)
-            if MKj is None: KIMG_CSZ = ConvKernel_Convertion.CSZ(uMK, N0, N1)
-            kft = np.fft.fft2(KIMG_CSZ)
-            kft2 = (np.conj(kft) * kft).real
-            term = (skysig**2 * kft2) / NumJ**2
+            if MKj is not None: KIMG_CSZ = ConvKernel_Convertion.CSZ(cupy.array( MKj ), N0, N1)
+            if MKj is None: KIMG_CSZ = ConvKernel_Convertion.CSZ(cupy.array( uMK ), N0, N1)
+            kft = cupy.fft.fft2(KIMG_CSZ)
+            kft2 = (cupy.conj(kft) * kft).real
+            term = (skysig**2 * kft2) / NumJ**2 
             return term
         
-        if MK_Fin is not None: KIMG_CSZ = ConvKernel_Convertion.CSZ(MK_Fin, N0, N1)
-        if MK_Fin is None: KIMG_CSZ = ConvKernel_Convertion.CSZ(uMK, N0, N1)
-        kft = np.fft.fft2(KIMG_CSZ)
-        kft2_Fin = (np.conj(kft) * kft).real
+        if MK_Fin is not None: KIMG_CSZ = ConvKernel_Convertion.CSZ(cupy.array( MK_Fin ), N0, N1)
+        if MK_Fin is None: KIMG_CSZ = ConvKernel_Convertion.CSZ(cupy.array( uMK ), N0, N1)
+        cu_KIMG_CSZ = cupy.array( KIMG_CSZ )
+        kft = cupy.fft.fft2(cu_KIMG_CSZ)
+        kft2_Fin = (cupy.conj(kft) * kft).real
 
         def Get_ITerm(MKi, skysig):
-            if MKi is not None: KIMG_CSZ = ConvKernel_Convertion.CSZ(MKi, N0, N1)
-            if MKi is None: KIMG_CSZ = ConvKernel_Convertion.CSZ(uMK, N0, N1)
-            kft = np.fft.fft2(KIMG_CSZ)
-            kft2 = (np.conj(kft) * kft).real
+            if MKi is not None: KIMG_CSZ = ConvKernel_Convertion.CSZ(cupy.array( MKi ), N0, N1) 
+            if MKi is None: KIMG_CSZ = ConvKernel_Convertion.CSZ(cupy.array( uMK ), N0, N1)
+            kft = cupy.fft.fft2(KIMG_CSZ)
+            kft2 = (cupy.conj(kft) * kft).real
             term = (skysig**2 * kft2 * kft2_Fin) / NumI**2 
             return term
         
@@ -96,9 +98,12 @@ class DeCorrelation_Calculator:
             for MKi, skysig in zip(MK_ILst, SkySig_ILst):
                 DeNo += Get_ITerm(MKi, skysig)
 
-        FDeCo = np.sqrt(1.0 / DeNo)        # real & conjugate-symmetric
-        DeCo = np.fft.ifft2(FDeCo).real    # no imaginary part
+        FDeCo = cupy.sqrt(1.0 / DeNo)        # real & conjugate-symmetric
+        DeCo = cupy.fft.ifft2(FDeCo).real    # no imaginary part
+        
+        # made this cupy:
         KDeCo = ConvKernel_Convertion.iCSZ(DeCo, L0_KDeCo, L1_KDeCo)
-        KDeCo = KDeCo / np.sum(KDeCo)      # rescale to have Unit kernel sum
+        KDeCo = KDeCo / cupy.sum(KDeCo)      # rescale to have Unit kernel sum
+        KDeCo = cupy.asnumpy( KDeCo )
 
         return KDeCo
