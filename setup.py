@@ -36,6 +36,7 @@ setup(name=NAME,
       license=LICENSE,
       packages=find_packages(),
       include_package_data=True,
+      zip_safe=False,
       classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',
