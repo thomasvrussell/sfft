@@ -4,16 +4,16 @@ import os.path as pa
 from astropy.io import fits
 from sfft.sfftcore.SFFTSubtract import GeneralSFFTSubtract
 from sfft.sfftcore.SFFTConfigure import SingleSFFTConfigure
-# version: Feb 25, 2023
+# version: Apr 22, 2025
 
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
-__version__ = "v1.4"
+__version__ = "v1.6"
 
 class Customized_Packet:
     @staticmethod
     def CP(FITS_REF, FITS_SCI, FITS_mREF, FITS_mSCI, ForceConv, GKerHW, \
         FITS_DIFF=None, FITS_Solution=None, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
+        BACKEND_4SUBTRACT='Cupy', CUDA_DEVICE_4SUBTRACT='0', NUM_CPU_THREADS_4SUBTRACT=8, NUMBA_CACHE=True, VERBOSE_LEVEL=2):
         
         """
         * Parameters for Customized SFFT
@@ -34,6 +34,10 @@ class Customized_Packet:
                                             # SFFT in Numpy backend has been implemented with pyFFTW and numba, 
                                             # that allow for parallel computing on CPUs. Of course, the Numpy 
                                             # backend is generally much slower than GPU backends.
+        
+        -NUMBA_CACHE [True]                # it determines whether to cache the compiled functions in numba.
+                                           # if True, the compiled functions will be cached in the local directory __pycache__ or a specified NUMBA_CACHE_DIR.
+                                           # it can save the compilation time when the functions are called multiple times with same configuration for different tasks.
 
         # ----------------------------- SFFT Subtraction --------------------------------- #
 
@@ -134,7 +138,7 @@ class Customized_Packet:
         SFFTConfig = SingleSFFTConfigure.SSC(NX=PixA_REF.shape[0], NY=PixA_REF.shape[1], KerHW=KerHW, \
             KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
             BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, \
-            VERBOSE_LEVEL=VERBOSE_LEVEL)
+            NUMBA_CACHE=NUMBA_CACHE, VERBOSE_LEVEL=VERBOSE_LEVEL)
 
         if VERBOSE_LEVEL in [1, 2]:
             _message = 'Function Compilations of SFFT-SUBTRACTION TAKES [%.3f s]' %(time.time() - Tcomp_start)

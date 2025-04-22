@@ -1,8 +1,8 @@
 import numpy as np
-# version: Feb 5, 2023
+# version: Apr 22, 2025
 
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
-__version__ = "v1.4"
+__version__ = "v1.6"
 
 class SingleSFFTConfigure_Cupy:
     @staticmethod
@@ -816,7 +816,8 @@ class SingleSFFTConfigure_Cupy:
 
 class SingleSFFTConfigure_Numpy:
     @staticmethod
-    def SSCN(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
+    def SSCN(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, 
+             NUM_CPU_THREADS_4SUBTRACT=8, NUMBA_CACHE=True, VERBOSE_LEVEL=2):
 
         import numba as nb
         nb.set_num_threads = NUM_CPU_THREADS_4SUBTRACT
@@ -886,7 +887,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** produce spatial coordinate X/Y/oX/oY-map
         _strdec = 'Tuple((i4[:,:], i4[:,:], f8[:,:], f8[:,:]))(i4[:,:], i4[:,:], f8[:,:], f8[:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def SpatialCoor(PixA_X, PixA_Y, PixA_CX, PixA_CY):
 
             #assert PixA_X.dtype == np.int32 and PixA_X.shape == (N0, N1)
@@ -908,7 +909,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** produce Iij, Tpq
         _strdec = 'Tuple((f8[:,:,:], f8[:,:,:]))' + '(i4[:,:], i4[:,:], f8[:,:], f8[:,:], f8[:,:], f8[:,:,:], f8[:,:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def SpatialPoly(REF_ij, REF_pq, PixA_CX, PixA_CY, PixA_I, SPixA_Iij, SPixA_Tpq):
             
             #assert REF_ij.dtype == np.int32 and REF_ij.shape == (Fij, 2)
@@ -938,7 +939,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Hadamard Product [𝛀]
         _strdec = 'c16[:,:,:](i4[:,:], c16[:,:,:], c16[:,:,:], c16[:,:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def HadProd_OMG(SREF_iji0j0, SPixA_FIij, SPixA_CFIij, HpOMG):
             
             #assert SREF_iji0j0.dtype == np.int32 and SREF_iji0j0.shape == (FOMG, 2)
@@ -954,7 +955,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Fill Linear-System [𝛀]
         _strdec = 'f8[:,:](i4[:,:], i4[:,:], f8[:,:,:], f8[:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def FillLS_OMG(SREF_ijab, REF_ab, PreOMG, LHMAT):
             
             #assert SREF_ijab.dtype == np.int32 and SREF_ijab.shape == (Fijab, 2)
@@ -1022,7 +1023,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Hadamard Product [𝜦]
         _strdec = 'c16[:,:,:](i4[:,:], c16[:,:,:], c16[:,:,:], c16[:,:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def HadProd_GAM(SREF_ijpq, SPixA_FIij, SPixA_CFTpq, HpGAM):
             
             #assert SREF_ijpq.dtype == np.int32 and SREF_ijpq.shape == (FGAM, 2)
@@ -1038,7 +1039,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Fill Linear-System [𝜦]
         _strdec = 'f8[:,:](i4[:,:], i4[:,:], f8[:,:,:], f8[:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def FillLS_GAM(SREF_ijab, REF_ab, PreGAM, LHMAT):
             
             #assert SREF_ijab.dtype == np.int32 and SREF_ijab.shape == (Fijab, 2)
@@ -1081,7 +1082,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Hadamard Product [𝜳]
         _strdec = 'c16[:,:,:](i4[:,:], c16[:,:,:], c16[:,:,:], c16[:,:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def HadProd_PSI(SREF_pqij, SPixA_CFIij, SPixA_FTpq, HpPSI):
             
             #assert SREF_pqij.dtype == np.int32 and SREF_pqij.shape == (FPSI, 2)
@@ -1097,7 +1098,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Fill Linear-System [𝜳]
         _strdec = 'f8[:,:](i4[:,:], i4[:,:], f8[:,:,:], f8[:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def FillLS_PSI(SREF_ijab, REF_ab, PrePSI, LHMAT):
             
             #assert SREF_ijab.dtype == np.int32 and SREF_ijab.shape == (Fijab, 2)
@@ -1140,7 +1141,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Hadamard Product [𝚽]
         _strdec = 'c16[:,:,:](i4[:,:], c16[:,:,:], c16[:,:,:], c16[:,:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def HadProd_PHI(SREF_pqp0q0, SPixA_FTpq, SPixA_CFTpq, HpPHI):
             
             #assert SREF_pqp0q0.dtype == np.int32 and SREF_pqp0q0.shape == (FPHI, 2)
@@ -1156,7 +1157,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Fill Linear-System [𝚽]
         _strdec = 'f8[:,:](f8[:,:,:], f8[:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def FillLS_PHI(PrePHI, LHMAT):
             
             #assert PrePHI.dtype == np.float64 and PrePHI.shape == (FPHI, N0, N1)
@@ -1184,7 +1185,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Hadamard Product [𝚯]
         _strdec = 'c16[:,:,:](c16[:,:,:], c16[:,:], c16[:,:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def HadProd_THE(SPixA_FIij, PixA_CFJ, HpTHE):
             
             #assert SPixA_FIij.dtype == np.complex128 and SPixA_FIij.shape == (Fij, N0, N1)
@@ -1198,7 +1199,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Fill Linear-System [𝚯]
         _strdec = 'f8[:](i4[:,:], i4[:,:], f8[:,:,:], f8[:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def FillLS_THE(SREF_ijab, REF_ab, PreTHE, RHb):
             
             #assert SREF_ijab.dtype == np.int32 and SREF_ijab.shape == (Fijab, 2)
@@ -1238,7 +1239,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Hadamard Product [𝚫]
         _strdec = 'c16[:,:,:](c16[:,:,:], c16[:,:], c16[:,:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def HadProd_DEL(SPixA_FTpq, PixA_CFJ, HpDEL):
             
             #assert SPixA_FTpq.dtype == np.complex128 and SPixA_FTpq.shape == (Fpq, N0, N1)
@@ -1252,7 +1253,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Fill Linear-System [𝚫]
         _strdec = 'f8[:](f8[:,:,:], f8[:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def FillLS_DEL(PreDEL, RHb):
             
             #assert PreDEL.dtype == np.float64 and PreDEL.shape == (FDEL, N0, N1)
@@ -1276,7 +1277,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Remove Forbidden Stripes in Linear-System
         _strdec = 'f8[:,:](f8[:,:], i4[:], f8[:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def Remove_LSFStripes(LHMAT, IDX_nFS, LHMAT_FSfree):
             
             #assert LHMAT.dtype == np.float64 and LHMAT.shape == (NEQ, NEQ)
@@ -1296,7 +1297,7 @@ class SingleSFFTConfigure_Numpy:
 
         # ** Extend Solution from Forbidden-Stripes-Free Linear-System
         _strdec = 'f8[:](f8[:], i4[:], f8[:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def Extend_Solution(Solution_FSfree, IDX_nFS, Solution):
             
             #assert Solution_FSfree.dtype == np.float64 and Solution_FSfree.shape == (NEQ_FSfree, )
@@ -1313,7 +1314,7 @@ class SingleSFFTConfigure_Numpy:
         # ************************************ Construct_FDIFF.py ************************************ #
 
         _strdec = 'c16[:,:](i4[:,:], i4[:,:], c16[:], c16[:,:,:], c16[:,:,:], c16[:,:,:], c16[:], c16[:,:,:], c16[:,:], c16[:,:])'
-        @nb.njit(_strdec, parallel=True)
+        @nb.njit(_strdec, parallel=True, cache=NUMBA_CACHE)
         def Construct_FDIFF(SREF_ijab, REF_ab, a_ijab, SPixA_FIij, Kab_Wla, Kab_Wmb, b_pq, SPixA_FTpq, PixA_FJ, PixA_FDIFF):
             
             #assert SREF_ijab.dtype == np.int32 and SREF_ijab.shape == (Fijab, 2)
@@ -1337,7 +1338,7 @@ class SingleSFFTConfigure_Numpy:
                 for COL in nb.prange(N1):
                     
                     PVAL = ZERO_C
-                    for ab in range(Fab):
+                    for ab in nb.prange(Fab):
                         a, b = REF_ab[ab]
 
                         if (a == 0 and b == 0):
@@ -1346,11 +1347,11 @@ class SingleSFFTConfigure_Numpy:
                         if (a != 0 or b != 0):
                             PVAL_FKab = SCALE_C * ((Kab_Wla[w0 + a, ROW, COL] * Kab_Wmb[w1 + b, ROW, COL]) - ONE_C)
 
-                        for ij in range(Fij):
+                        for ij in nb.prange(Fij):
                             ijab = ij * Fab + ab
                             PVAL += (a_ijab[ijab] * SPixA_FIij[ij, ROW, COL]) * PVAL_FKab
                         
-                    for pq in range(Fpq):
+                    for pq in nb.prange(Fpq):
                         PVAL += b_pq[pq] * SPixA_FTpq[pq, ROW, COL]
 
                     PixA_FDIFF[ROW, COL] = PixA_FJ[ROW, COL] - PVAL
@@ -1368,7 +1369,7 @@ class SingleSFFTConfigure_Numpy:
 class SingleSFFTConfigure:
     @staticmethod
     def SSC(NX, NY, KerHW, KerPolyOrder=2, BGPolyOrder=2, ConstPhotRatio=True, \
-        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
+        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, NUMBA_CACHE=True, VERBOSE_LEVEL=2):
 
         """
         # Arguments:
@@ -1379,6 +1380,7 @@ class SingleSFFTConfigure:
         # e) ConstPhotRatio: Use a constant photometric ratio in image subtraction?
         # f) BACKEND_4SUBTRACT : Which backend would you like to perform SFFT subtraction on? (Cupy/Numpy)
         # h) NUM_CPU_THREADS_4SUBTRACT: How many CPU threads would you want to perform SFFT subtraction on? (Numpy)
+        # i) NUMBA_CACHE: Whether to cache the compiled Numba functions into NUMBA_CACHE_DIR or not.
         #
         """
         
@@ -1390,6 +1392,6 @@ class SingleSFFTConfigure:
         if BACKEND_4SUBTRACT == 'Numpy':
             SFFTConfig = SingleSFFTConfigure_Numpy.SSCN(NX=NX, NY=NY, KerHW=KerHW, \
                 KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
-                NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)
+                NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, NUMBA_CACHE=NUMBA_CACHE, VERBOSE_LEVEL=VERBOSE_LEVEL)
         
         return SFFTConfig
