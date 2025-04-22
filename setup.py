@@ -9,7 +9,7 @@ MAINTAINER = "Lei Hu"
 MAINTAINER_EMAIL = "leihu@andrew.cmu.edu"
 DOWNLOAD_URL = 'https://github.com/thomasvrussell/sfft'
 
-LICENSE = 'MIT Licence'
+LICENSE = 'MIT License'
 VERSION = '1.6.4'
 
 install_reqs = ['scipy>=1.5.2',
