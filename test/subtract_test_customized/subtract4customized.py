@@ -6,12 +6,13 @@ from astropy.io import fits
 from tempfile import mkdtemp
 from sfft.CustomizedPacket import Customized_Packet
 CDIR = pa.dirname(pa.abspath(__file__))
-# sfft version: 1.4.0+
+# sfft version: 1.6.4+
 
 # configuration: computing backend and resourse
-BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Pycuda', 'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
+BACKEND_4SUBTRACT = 'Cupy'      # FIXME {'Cupy', 'Numpy'}, Use Numpy if you only have CPUs
 CUDA_DEVICE_4SUBTRACT = '0'     # FIXME ONLY work for backend Pycuda / Cupy
 NUM_CPU_THREADS_4SUBTRACT = 8   # FIXME ONLY work for backend Numpy  
+NUMBA_CACHE = True              # FIXME {True, False}, whether to cache numba compiled functions (only for Numpy backend)
 
 # configuration: how to subtract
 ForceConv = 'REF'               # FIXME {'REF', 'SCI'}
@@ -28,7 +29,7 @@ FITS_SCI = CDIR + '/input_data/ztf_20180705481609_001735_zg_c01_o_q2_sciimg.mini
 FITS_mREF = FITS_REF[:-5] + '.masked.fits'
 FITS_mSCI = FITS_SCI[:-5] + '.masked.fits'
 
-if BACKEND_4SUBTRACT in ['Cupy', 'Pycuda']:
+if BACKEND_4SUBTRACT in ['Cupy']:
     print('\n---------------------------------- GPU warming-up --------------------------------------')
     print('MeLOn CheckPoint: GPU warming-up [START]!')
     print('MeLOn Note: GPU warming-up is not an ingredient of SFFT.')
@@ -66,7 +67,7 @@ if BACKEND_4SUBTRACT in ['Cupy', 'Pycuda']:
             FITS_mSCI=_FITS_mSCI, ForceConv=ForceConv, GKerHW=GKerHW, FITS_DIFF=None, FITS_Solution=None, \
             KerPolyOrder=KerPolyOrder, BGPolyOrder=BGPolyOrder, ConstPhotRatio=ConstPhotRatio, \
             BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, CUDA_DEVICE_4SUBTRACT=CUDA_DEVICE_4SUBTRACT, \
-            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=2)
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, NUMBA_CACHE=NUMBA_CACHE, VERBOSE_LEVEL=2)
         os.system('rm -rf %s' %TDIR)
 
     print('MeLOn CheckPoint: GPU warming-up [END]!')
@@ -102,6 +103,8 @@ REMOVED PARAMETERS:
 NEW PARAMETERS:
   (1) allows for verbsose level control
   >>>> VERBOSE_LEVEL (v1.4+)
+  (2) allows for numba cache control
+  >>>> NUMBA_CACHE (v1.6.4+)
 
 """
 

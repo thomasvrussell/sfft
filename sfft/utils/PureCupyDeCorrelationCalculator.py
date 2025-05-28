@@ -1,6 +1,8 @@
-import cupy as cp
 import numpy as np
+import importlib.util as iu
 from sfft.utils.PureCupyFFTKits import PureCupy_FFTKits
+if iu.find_spec('cupy') is not None:
+    import cupy as cp
 
 __last_update__ = "2024-09-22"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
