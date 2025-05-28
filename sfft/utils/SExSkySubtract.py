@@ -6,6 +6,17 @@ from scipy.stats import iqr
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 # version: Apr 22, 2024
 
+import sys
+import logging
+import multiprocessing
+_logger = logging.getLogger(f'sfft')
+if not _logger.hasHandlers():
+    log_out = logging.StreamHandler(sys.stderr)
+    formatter = logging.Formatter(f'[%(asctime)s - sfft - %(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    log_out.setFormatter(formatter)
+    _logger.addHandler(log_out)
+    _logger.setLevel(logging.DEBUG) # ERROR, WARNING, INFO, or DEBUG (in that order by increasing detail)
+
 # improved by Lauren Aldoroty (Duke Univ.)
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
@@ -72,14 +83,21 @@ class SEx_SkySubtract:
         # * Generate SExtractor OBJECT-MASK
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
+            _logger.debug( f"Process {multiprocessing.current_process().pid} running PY_SEx.PS on {FITS_obj}..." )
             # NOTE: GAIN, SATURATE, ANALYSIS_THRESH, DEBLEND_MINCONT, BACKPHOTO_TYPE do not affect the detection mask.
-            DETECT_MASK = PY_SEx.PS(FITS_obj=FITS_obj, SExParam=['X_IMAGE', 'Y_IMAGE'], GAIN_KEY='PHGAIN', SATUR_KEY=SATUR_KEY, \
-                BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, DETECT_THRESH=DETECT_THRESH, \
-                ANALYSIS_THRESH=1.5, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=0.005, \
-                BACKPHOTO_TYPE='GLOBAL', CHECKIMAGE_TYPE='OBJECTS', MDIR=MDIR, VERBOSE_LEVEL=VERBOSE_LEVEL)[1][0].astype(bool)
+            DETECT_MASK = PY_SEx.PS(FITS_obj=FITS_obj, SExParam=['X_IMAGE', 'Y_IMAGE'], GAIN_KEY='PHGAIN', SATUR_KEY=SATUR_KEY,
+                                    BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE,
+                                    DETECT_THRESH=DETECT_THRESH, ANALYSIS_THRESH=1.5, DETECT_MINAREA=DETECT_MINAREA,
+                                    DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='GLOBAL',
+                                    CHECKIMAGE_TYPE='OBJECTS', MDIR=MDIR, VERBOSE_LEVEL=VERBOSE_LEVEL,
+                                    logger=_logger
+                                    )[1][0].astype(bool)
+            _logger.debug( f"...process {multiprocessing.current_process().pid} done running PY_SEx.PS on {FITS_obj}..." )
 
         # * Extract SExtractor SKY-MAP from the Unmasked Image
+        _logger.debug( f"Running fits.getdata({FITS_obj}, ext=0)..." )
         PixA_obj = fits.getdata(FITS_obj, ext=0).T
+        _logger.debug( f"...done running fits.getdata({FITS_obj}, ext=0)." )
         _PixA = PixA_obj.astype(np.float64, copy=True)    # default copy=True, just to emphasize
         _PixA[DETECT_MASK] = np.nan
         if not _PixA.flags['C_CONTIGUOUS']: _PixA = np.ascontiguousarray(_PixA)
