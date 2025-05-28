@@ -1,3 +1,9 @@
+Roman SNPIT fork of SFFT
+------------------------
+
+Please look at the PyPi package ``sfft`` for the original.  This
+package has customizations created for the Roman SNPIT.
+
 ..  image:: https://github.com/thomasvrussell/sfft/blob/master/docs/sfft_logo_gwbkg.png
 
 *SFFT: Saccadic Fast Fourier Transform for image subtraction*
@@ -52,3 +58,31 @@ Publications using SFFT method
 --------------------------------
 
 See ADS Library: https://ui.adsabs.harvard.edu/public-libraries/lc4tiTR_T--92f9k0YrRQg
+
+
+Roman SNPIT Variant Notes
+-------------------------
+
+(These notes are for members of the Roman SNPIT who need to upload a new
+version of this package.)
+
+* Make sure that ``NAME`` in ``setup.py`` is ``sfft-romansnpit``.
+
+* Make sure that VERSION in ``setup.py`` is of the form
+``<MAJOR>.<MINOR>.<PATCH>.dev<n>`` where ``<MAJOR>``,
+``<MINOR>``, AND ``<PATCH>`` match the upstream that has most recently been
+merged in, and ``<n>`` is an integer that can start at 0 for a given
+``MAJOR.MINOR.PATCH`` and that needs to increment each time we want to
+push a new package.
+
+* Build in the main directory with::
+
+    python -m build --sdist --outdir dist
+
+  That will create a file in ``dist`` named
+  ``sfft_romansnpit-<version>.tar.gz`` where ``<version>`` is what you
+  put in the ``VERSION`` variable.
+
+* You can then upload it to the ``sfft-romansnpit`` package on PyPi with::
+
+    twine upload dist/sfft_romansnpit-<version>.tar.gz

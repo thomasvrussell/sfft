@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 DESCRIPTION = "Image Subtraction in Fourier Space"
 LONG_DESCRIPTION = open('README.rst').read()
-NAME = "sfft"
+NAME = "sfft-romansnpit"
 AUTHOR = "Lei Hu"
 AUTHOR_EMAIL = "leihu@andrew.cmu.edu"
 MAINTAINER = "Lei Hu"
@@ -10,7 +10,7 @@ MAINTAINER_EMAIL = "leihu@andrew.cmu.edu"
 DOWNLOAD_URL = 'https://github.com/thomasvrussell/sfft'
 
 LICENSE = 'MIT License'
-VERSION = '1.6.4'
+VERSION = '1.6.4.dev3'
 
 install_reqs = ['scipy>=1.5.2',
                 'astropy>=3.2.3',
