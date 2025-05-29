@@ -80,10 +80,12 @@ class SEx_SkySubtract:
 
         """
 
+        procid = multiprocessing.current_process().pid
+
         # * Generate SExtractor OBJECT-MASK
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _logger.debug( f"Process {multiprocessing.current_process().pid} running PY_SEx.PS on {FITS_obj}..." )
+            _logger.debug( f"Process {procid} running PY_SEx.PS on {FITS_obj}..." )
             # NOTE: GAIN, SATURATE, ANALYSIS_THRESH, DEBLEND_MINCONT, BACKPHOTO_TYPE do not affect the detection mask.
             DETECT_MASK = PY_SEx.PS(FITS_obj=FITS_obj, SExParam=['X_IMAGE', 'Y_IMAGE'], GAIN_KEY='PHGAIN', SATUR_KEY=SATUR_KEY,
                                     BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE,
@@ -92,7 +94,7 @@ class SEx_SkySubtract:
                                     CHECKIMAGE_TYPE='OBJECTS', MDIR=MDIR, VERBOSE_LEVEL=VERBOSE_LEVEL,
                                     logger=_logger
                                     )[1][0].astype(bool)
-            _logger.debug( f"...process {multiprocessing.current_process().pid} done running PY_SEx.PS on {FITS_obj}..." )
+            _logger.debug( f"...process {procid} done running PY_SEx.PS on {FITS_obj}..." )
 
         # * Extract SExtractor SKY-MAP from the Unmasked Image
         _logger.debug( f"Running fits.getdata({FITS_obj}, ext=0)..." )
