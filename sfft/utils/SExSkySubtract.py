@@ -3,8 +3,9 @@ import warnings
 import numpy as np
 from astropy.io import fits
 from scipy.stats import iqr
+import scipy.ndimage as ndimage
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
-# version: Apr 22, 2024
+# version: Jun 5, 2025
 
 import sys
 import logging
@@ -26,7 +27,7 @@ class SEx_SkySubtract:
     def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, FITS_detmask=None,
             SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
             BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
-            VERBOSE_LEVEL=2, MDIR=None):
+            RADIUS_CUT_DETMASK=2., NITER_DILATE_DETMASK=2, VERBOSE_LEVEL=2, MDIR=None):
 
         """
         # Inputs & Outputs:
@@ -66,6 +67,10 @@ class SEx_SkySubtract:
                                         # PYSEx will generate a child directory with a random name under the paraent directory
                                         # all output files are stored in the child directory
 
+        -RADIUS_CUT_DETMASK [None]      # If not None, the detection mask saved to FITS_detmask (for sfft) will be cut by its flux radius
+
+        -NITER_DILATE_DETMASK [2]       # Number of iterations for the dilation of the detection mask (for sfft)
+
         # Returns:
 
             SKYDIP                      # The flux peak of the sky image (outliers rejected)
@@ -86,14 +91,18 @@ class SEx_SkySubtract:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _logger.debug( f"Process {procid} running PY_SEx.PS on {FITS_obj}..." )
+            
             # NOTE: GAIN, SATURATE, ANALYSIS_THRESH, DEBLEND_MINCONT, BACKPHOTO_TYPE do not affect the detection mask.
-            DETECT_MASK = PY_SEx.PS(FITS_obj=FITS_obj, SExParam=['X_IMAGE', 'Y_IMAGE'], GAIN_KEY='PHGAIN', SATUR_KEY=SATUR_KEY,
-                                    BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE,
-                                    DETECT_THRESH=DETECT_THRESH, ANALYSIS_THRESH=1.5, DETECT_MINAREA=DETECT_MINAREA,
-                                    DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='GLOBAL',
-                                    CHECKIMAGE_TYPE='OBJECTS', MDIR=MDIR, VERBOSE_LEVEL=VERBOSE_LEVEL,
-                                    logger=_logger
-                                    )[1][0].astype(bool)
+            SExParam = ["X_IMAGE", "Y_IMAGE", "FLUX_RADIUS", "FLAGS"]
+            results = PY_SEx.PS(FITS_obj=FITS_obj, SExParam=SExParam, GAIN_KEY='PHGAIN', SATUR_KEY=SATUR_KEY,
+                      BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE,
+                      DETECT_THRESH=DETECT_THRESH, ANALYSIS_THRESH=1.5, DETECT_MINAREA=DETECT_MINAREA,
+                      DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=0.005, BACKPHOTO_TYPE='GLOBAL',
+                      CHECKIMAGE_TYPE='SEGMENTATION', MDIR=MDIR, VERBOSE_LEVEL=VERBOSE_LEVEL,
+                      logger=_logger
+                      )
+            AstSEx, PixA_SEG = results[0], results[1][0]
+            FULL_DETECT_MASK = PixA_SEG > 0
             _logger.debug( f"...process {procid} done running PY_SEx.PS on {FITS_obj}..." )
 
         # * Extract SExtractor SKY-MAP from the Unmasked Image
@@ -101,7 +110,7 @@ class SEx_SkySubtract:
         PixA_obj = fits.getdata(FITS_obj, ext=0).T
         _logger.debug( f"...done running fits.getdata({FITS_obj}, ext=0)." )
         _PixA = PixA_obj.astype(np.float64, copy=True)    # default copy=True, just to emphasize
-        _PixA[DETECT_MASK] = np.nan
+        _PixA[FULL_DETECT_MASK] = np.nan
         if not _PixA.flags['C_CONTIGUOUS']: _PixA = np.ascontiguousarray(_PixA)
 
         # NOTE: here we use faster sep package instead of SExtractor.
@@ -142,6 +151,17 @@ class SEx_SkySubtract:
             fits.writeto(FITS_skyrms, PixA_skyrms.T, hdr, overwrite=True)
 
         if FITS_detmask is not None:
+            if RADIUS_CUT_DETMASK is not None:
+                # * Cut the FULL_DETECT_MASK by the flux radius for the use of sfft diff
+                _logger.debug( f"Cutting DETECT_MASK by flux radius {RADIUS_CUT_DETMASK}..." )
+
+                struct21 = ndimage.generate_binary_structure(2, 1)
+                iActivateMask = np.in1d(PixA_SEG, AstSEx["SEGLABEL"][AstSEx["FLUX_RADIUS"] > RADIUS_CUT_DETMASK]).reshape(PixA_SEG.shape)
+                ActivateMask = ndimage.binary_dilation(iActivateMask, structure=struct21, iterations=NITER_DILATE_DETMASK)
+                DETECT_MASK = np.logical_or(iActivateMask, np.logical_and(ActivateMask, PixA_SEG == 0))
+                print("NUMBER OF DETECTED OBJECTS [%d/%d]." % (np.sum(FULL_DETECT_MASK), np.sum(DETECT_MASK)))
+            else:
+                DETECT_MASK = FULL_DETECT_MASK
             fits.writeto( FITS_detmask, DETECT_MASK.T.astype( np.uint8 ), overwrite=True )
 
         return SKYDIP, SKYPEAK, PixA_skysub, PixA_sky, PixA_skyrms
