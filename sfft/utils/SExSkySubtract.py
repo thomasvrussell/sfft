@@ -66,6 +66,11 @@ class SEx_SkySubtract:
         -MDIR [None]                    # Parent Directory for output files
                                         # PYSEx will generate a child directory with a random name under the paraent directory
                                         # all output files are stored in the child directory
+        
+        -FITS_detmask [None]            # If not None, the binary detection mask saved to FITS_detmask will be generated
+                                        # Note that this mask is not necessarily the "full" detection mask
+                                        # By default, we only keep source with sufficient large flux radius in the mask 
+                                        # (an efficient way to remove stars and severely undersampled sources).
 
         -RADIUS_CUT_DETMASK [None]      # If not None, the detection mask saved to FITS_detmask (for sfft) will be cut by its flux radius
 
