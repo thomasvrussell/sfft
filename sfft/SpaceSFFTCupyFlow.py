@@ -1,16 +1,17 @@
 import cupy as cp
 import numpy as np
+from sfft.utils.PureCupyFFTKits import PureCupy_FFTKits
+from sfft.utils.SkyLevelEstimator import SkyLevel_Estimator
 from sfft.utils.SFFTSolutionReader import Realize_MatchingKernel
 from sfft.PureCupyCustomizedPacket import PureCupy_Customized_Packet
 from sfft.utils.PatternRotationCalculator import PatternRotation_Calculator
-from sfft.utils.PureCupyFFTKits import PureCupy_FFTKits
 from sfft.utils.PureCupyDeCorrelationCalculator import PureCupy_DeCorrelation_Calculator
 
 # loacal imports
 from sfft.utils.ResampKits import Cupy_ZoomRotate
 from sfft.utils.ResampKits import Cupy_Resampling
 
-__last_update__ = "2024-09-22"
+__last_update__ = "2025-06-05"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 
 class SpaceSFFT_CupyFlow:
@@ -302,6 +303,48 @@ class SpaceSFFT_CupyFlow:
         self.PixA_DSNR_GPU = PixA_DCDIFF_GPU / PixA_NDIFF_GPU
 
         # return PixA_DIFF_GPU, PixA_DCDIFF_GPU, PixA_DSNR_GPU
+
+    def create_score_image( self ):
+        
+        # retrieve the decorrelated PSF
+        # Note: here we assume the same pixel size for PSF and imgaes.
+        NX, NY = self.PixA_target_GPU.shape
+        PSF_object_CSZ_GPU = PureCupy_FFTKits.KERNEL_CSZ(KERNEL_GPU=self.PSF_object_GPU, NX_IMG=NX, NY_IMG=NY)
+        PSF_target_CSZ_GPU = PureCupy_FFTKits.KERNEL_CSZ(KERNEL_GPU=self.PSF_target_GPU, NX_IMG=NX, NY_IMG=NY)
+        FPSF_dDIFF_GPU = cp.fft.fft2(PSF_object_CSZ_GPU) * cp.fft.fft2(PSF_target_CSZ_GPU) * self.FKDECO_GPU
+
+        # apply the decorrelation on difference image again (redundant, a workaround) 
+        FPixA_DIFF_GPU = cp.fft.fft2( self.PixA_DIFF_GPU )
+        FPixA_dDIFF_GPU = FPixA_DIFF_GPU * self.FKDECO_GPU
+
+        FPixA_SCORE_GPU = FPixA_dDIFF_GPU * cp.conj(FPSF_dDIFF_GPU)
+        PixA_SCORE_GPU = cp.fft.ifft2(FPixA_SCORE_GPU).real
+
+        # an ad-hoc correction to make score image has standrd Gaussian distribution at background
+        skysig_SCORE = SkyLevel_Estimator.SLE(PixA_obj=cp.asnumpy(PixA_SCORE_GPU))[1]
+        PixA_SCORE_GPU /= skysig_SCORE
+
+        return PixA_SCORE_GPU
+
+    def create_variance_image( self, PixA_targetVar_GPU, PixA_objectVar_GPU ):
+
+        assert PixA_targetVar_GPU.flags['C_CONTIGUOUS']
+        assert PixA_objectVar_GPU.flags['C_CONTIGUOUS']
+
+        # calculate variance image for (un-decorrelated) difference image
+        NX, NY = self.PixA_target_GPU.shape
+        PSF_object_CSZ_GPU = PureCupy_FFTKits.KERNEL_CSZ(KERNEL_GPU=self.PSF_object_GPU, NX_IMG=NX, NY_IMG=NY)
+        PSF_target_CSZ_GPU = PureCupy_FFTKits.KERNEL_CSZ(KERNEL_GPU=self.PSF_target_GPU, NX_IMG=NX, NY_IMG=NY)
+
+        # Note: convolve a squared kernel on the variance image to get the variance of the convolved image
+        # Note: let's skip the matching kernel here, as it is expected to be a minor compensation.
+        FPixA_DIFFVar_GPU = cp.fft.fft2(PixA_objectVar_GPU) * cp.fft.fft2(PSF_target_CSZ_GPU ** 2) + \
+            cp.fft.fft2(PixA_targetVar_GPU) * cp.fft.fft2(PSF_object_CSZ_GPU ** 2)
+        
+        FPixA_dDIFFVar_GPU = FPixA_DIFFVar_GPU * cp.fft.fft2(cp.fft.ifft2(self.FKDECO_GPU) ** 2)
+        PixA_dDIFFVar_GPU = cp.fft.ifft2(FPixA_dDIFFVar_GPU).real
+        
+        return PixA_dDIFFVar_GPU
 
     # Do we need this?  We should just unreference the object
     def cleanup( self ):
