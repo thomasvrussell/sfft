@@ -1,23 +1,27 @@
+# IMPORTS Standard
 import cupy as cp
 import numpy as np
-from sfft.utils.PureCupyFFTKits import PureCupy_FFTKits
-from sfft.utils.SkyLevelEstimator import SkyLevel_Estimator
-from sfft.utils.SFFTSolutionReader import Realize_MatchingKernel
+
+# IMPORTS Internal
 from sfft.PureCupyCustomizedPacket import PureCupy_Customized_Packet
+from sfft.utils.PureCupyFFTKits import PureCupy_FFTKits
 from sfft.utils.PatternRotationCalculator import PatternRotation_Calculator
 from sfft.utils.PureCupyDeCorrelationCalculator import PureCupy_DeCorrelation_Calculator
-
-# loacal imports
 from sfft.utils.ResampKits import Cupy_ZoomRotate
 from sfft.utils.ResampKits import Cupy_Resampling
+from sfft.utils.SkyLevelEstimator import SkyLevel_Estimator
+from sfft.utils.SFFTSolutionReader import Realize_MatchingKernel
 
-__last_update__ = "2025-06-05"
+__last_update__ = "2025-06-06"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 
 class SpaceSFFT_CupyFlow:
     """Run A Cupy WorkFlow for SFFT subtraction"""
 
-    def __init__(self, hdr_target, hdr_object, target_skyrms, object_skyrms, PixA_target_GPU, PixA_object_GPU,
+    def __init__(self, hdr_target, hdr_object, 
+                 target_skyrms, object_skyrms, 
+                 PixA_target_GPU, PixA_object_GPU,
+                 PixA_targetVar_GPU, PixA_objectVar_GPU,
                  PixA_target_DMASK_GPU, PixA_object_DMASK_GPU, 
                  PSF_target_GPU, PSF_object_GPU,
                  sci_is_target=True,
@@ -44,6 +48,12 @@ class SpaceSFFT_CupyFlow:
 
            PixA_object_GPU: cupy array (float64)
               2d image data of original image, indexed by x, y.
+
+           PixA_targetVar_GPU: cupy array (float64)
+              2d image variance of original image, indexed by x, y.
+
+           PixA_objectVar_GPU: cupy array (float64)
+              2d image variance of original image, indexed by x, y. 
 
            PixA_target_DMASK_GPU: cupy array (bool)
               2d detection mask for target image
@@ -99,18 +109,30 @@ class SpaceSFFT_CupyFlow:
 
         self.hdr_target = hdr_target
         self.hdr_object = hdr_object
+
         self.target_skyrms = target_skyrms
         self.object_skyrms = object_skyrms
+
         self.PixA_target_GPU = PixA_target_GPU
         self.PixA_object_GPU = PixA_object_GPU
+
+        if PixA_targetVar_GPU.dtype != cp.float64:
+            PixA_targetVar_GPU = PixA_targetVar_GPU.astype(cp.float64)
+        self.PixA_targetVar_GPU = PixA_targetVar_GPU
+        if PixA_objectVar_GPU.dtype != cp.float64:
+            PixA_objectVar_GPU = PixA_objectVar_GPU.astype(cp.float64)
+        self.PixA_objectVar_GPU = PixA_objectVar_GPU
+
         if PixA_target_DMASK_GPU.dtype != cp.float64:
             PixA_target_DMASK_GPU = PixA_target_DMASK_GPU.astype(cp.float64)
         self.PixA_target_DMASK_GPU = PixA_target_DMASK_GPU
         if PixA_object_DMASK_GPU.dtype != cp.float64:
             PixA_object_DMASK_GPU = PixA_object_DMASK_GPU.astype(cp.float64)
         self.PixA_object_DMASK_GPU = PixA_object_DMASK_GPU
+
         self.PSF_target_GPU = PSF_target_GPU
         self.PSF_object_GPU = PSF_object_GPU
+
         self.sci_is_target = sci_is_target
         self.GKerHW = GKerHW
         self.KerPolyOrder = KerPolyOrder
@@ -157,14 +179,14 @@ class SpaceSFFT_CupyFlow:
 
         self.PSF_resamp_object_GPU = Cupy_ZoomRotate.CZR(PixA_obj_GPU=self.PSF_object_GPU,
                                                          ZOOM_SCALE_X=1.,
-                                                         ZOOM_SCALE_Y=1., \
+                                                         ZOOM_SCALE_Y=1.,
                                                          OUTSIZE_PARIRY_X='UNCHANGED',
                                                          OUTSIZE_PARIRY_Y='UNCHANGED',
-                                                         PATTERN_ROTATE_ANGLE=PATTERN_ROTATE_ANGLE, \
+                                                         PATTERN_ROTATE_ANGLE=PATTERN_ROTATE_ANGLE,
                                                          RESAMP_METHOD='BILINEAR',
                                                          PAD_FILL_VALUE=0.,
                                                          NAN_FILL_VALUE=0.,
-                                                         THREAD_PER_BLOCK=8, \
+                                                         THREAD_PER_BLOCK=8,
                                                          USE_SHARED_MEMORY=False,
                                                          VERBOSE_LEVEL=2)
 
@@ -288,7 +310,8 @@ class SpaceSFFT_CupyFlow:
         # FPixA_DIFF_GPU = cp.fft.fft2(self.PixA_DIFF_GPU)
         # self.PixA_DCDIFF_GPU = cp.fft.ifft2(FPixA_DIFF_GPU * FKDECO_GPU).real
 
-    def noise_decorrelation_snr_estimation( self, bkgsig ):
+    # def noise_decorrelation_snr_estimation( self, bkgsig ):
+        # This function is both broken and possibly not necessary since we have the score image. 
         # * step 4. noise decorrelation & SNR estimation 
         # roughly estimate the SNR map for the decorrelated difference image
         # WARNING: the noise propagation is highly simplified.
@@ -297,10 +320,10 @@ class SpaceSFFT_CupyFlow:
         # self.BKGSIG_resamp_object = self.hdr_object['BKG_SIG']
         # self.BKGSIG_target = self.hdr_target['BKG_SIG']
 
-        PixA_vartarget_GPU = cp.clip(self.PixA_target_GPU/GAIN, a_min=0.0, a_max=None) + self.BKGSIG_target**2
-        PixA_varresamp_object_GPU = cp.clip(self.PixA_resamp_object_GPU/GAIN, a_min=0.0, a_max=None) + self.BKGSIG_resamp_object**2
-        self.PixA_NDIFF_GPU = cp.sqrt(PixA_vartarget_GPU + PixA_varresamp_object_GPU)
-        self.PixA_DSNR_GPU = PixA_DCDIFF_GPU / PixA_NDIFF_GPU
+        # PixA_vartarget_GPU = cp.clip(self.PixA_target_GPU/GAIN, a_min=0.0, a_max=None) + self.BKGSIG_target**2
+        # PixA_varresamp_object_GPU = cp.clip(self.PixA_resamp_object_GPU/GAIN, a_min=0.0, a_max=None) + self.BKGSIG_resamp_object**2
+        # self.PixA_NDIFF_GPU = cp.sqrt(PixA_vartarget_GPU + PixA_varresamp_object_GPU)
+        # self.PixA_DSNR_GPU = PixA_DCDIFF_GPU / PixA_NDIFF_GPU
 
         # return PixA_DIFF_GPU, PixA_DCDIFF_GPU, PixA_DSNR_GPU
 
@@ -326,10 +349,10 @@ class SpaceSFFT_CupyFlow:
 
         return PixA_SCORE_GPU
 
-    def create_variance_image( self, PixA_targetVar_GPU, PixA_objectVar_GPU ):
+    def create_variance_image( self ):
 
-        assert PixA_targetVar_GPU.flags['C_CONTIGUOUS']
-        assert PixA_objectVar_GPU.flags['C_CONTIGUOUS']
+        assert self.PixA_targetVar_GPU.flags['C_CONTIGUOUS']
+        assert self.PixA_objectVar_GPU.flags['C_CONTIGUOUS']
 
         # calculate variance image for (un-decorrelated) difference image
         NX, NY = self.PixA_target_GPU.shape
@@ -338,8 +361,8 @@ class SpaceSFFT_CupyFlow:
 
         # Note: convolve a squared kernel on the variance image to get the variance of the convolved image
         # Note: let's skip the matching kernel here, as it is expected to be a minor compensation.
-        FPixA_DIFFVar_GPU = cp.fft.fft2(PixA_objectVar_GPU) * cp.fft.fft2(PSF_target_CSZ_GPU ** 2) + \
-            cp.fft.fft2(PixA_targetVar_GPU) * cp.fft.fft2(PSF_object_CSZ_GPU ** 2)
+        FPixA_DIFFVar_GPU = cp.fft.fft2(self.PixA_objectVar_GPU) * cp.fft.fft2(PSF_target_CSZ_GPU ** 2) + \
+            cp.fft.fft2(self.PixA_targetVar_GPU) * cp.fft.fft2(PSF_object_CSZ_GPU ** 2)
         
         FPixA_dDIFFVar_GPU = FPixA_DIFFVar_GPU * cp.fft.fft2(cp.fft.ifft2(self.FKDECO_GPU) ** 2)
         PixA_dDIFFVar_GPU = cp.fft.ifft2(FPixA_dDIFFVar_GPU).real
