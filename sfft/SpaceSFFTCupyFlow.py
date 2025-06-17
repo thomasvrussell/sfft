@@ -144,7 +144,7 @@ class SpaceSFFT_CupyFlow:
 
 
     def resampling_image_mask_psf( self ):
-        # * step 0. run resampling for input object image, mask and PSF
+        # * step 0. run resampling for input object image, variance image, mask, and PSF
         CR = Cupy_Resampling(RESAMP_METHOD="BILINEAR", VERBOSE_LEVEL=1)
         XX_proj_GPU, YY_proj_GPU = CR.resamp_projection_sip(hdr_obj=self.hdr_object,
                                                             hdr_targ=self.
@@ -152,15 +152,29 @@ class SpaceSFFT_CupyFlow:
                                                             NSAMP=1024,
                                                             RANDOM_SEED=self.RANDOM_SEED)
 
+        # Object image:
         PixA_Eobj_GPU, EProjDict = CR.frame_extension(XX_proj_GPU=XX_proj_GPU,
                                                       YY_proj_GPU=YY_proj_GPU, 
                                                       PixA_obj_GPU=self.PixA_object_GPU,
                                                       PAD_FILL_VALUE=0.,
                                                       NAN_FILL_VALUE=0.)
+
         self.PixA_resamp_object_GPU = CR.resampling(PixA_Eobj_GPU=PixA_Eobj_GPU,
                                                     EProjDict=EProjDict,
                                                     USE_SHARED_MEMORY=False)
 
+        # Variance image:
+        PixA_EobjVar_GPU, EProjDict_Var = CR.frame_extension(XX_proj_GPU=XX_proj_GPU,
+                                                             YY_proj_GPU=YY_proj_GPU, 
+                                                             PixA_obj_GPU=self.PixA_objectVar_GPU,
+                                                             PAD_FILL_VALUE=0.,
+                                                             NAN_FILL_VALUE=0.)
+
+        self.PixA_resamp_objectVar_GPU = CR.resampling(PixA_Eobj_GPU=PixA_EobjVar_GPU,
+                                                       EProjDict=EProjDict,
+                                                       USE_SHARED_MEMORY=False)
+
+        # Mask:
         PixA_Eobj_GPU, EProjDict = CR.frame_extension(XX_proj_GPU=XX_proj_GPU,
                                                       YY_proj_GPU=YY_proj_GPU, 
                                                       PixA_obj_GPU=self.PixA_object_DMASK_GPU,
@@ -175,6 +189,8 @@ class SpaceSFFT_CupyFlow:
                                                           USE_SHARED_MEMORY=False)
         self.BlankMask_GPU = self.PixA_resamp_object_GPU == 0.
 
+
+        # PSF:
         PATTERN_ROTATE_ANGLE = PatternRotation_Calculator.PRC(hdr_obj=self.hdr_object, hdr_targ=self.hdr_target)
 
         self.PSF_resamp_object_GPU = Cupy_ZoomRotate.CZR(PixA_obj_GPU=self.PSF_object_GPU,
@@ -352,7 +368,7 @@ class SpaceSFFT_CupyFlow:
     def create_variance_image( self ):
 
         assert self.PixA_targetVar_GPU.flags['C_CONTIGUOUS']
-        assert self.PixA_objectVar_GPU.flags['C_CONTIGUOUS']
+        assert self.PixA_resamp_objectVar_GPU.flags['C_CONTIGUOUS']
 
         # calculate variance image for (un-decorrelated) difference image
         NX, NY = self.PixA_target_GPU.shape
@@ -361,7 +377,7 @@ class SpaceSFFT_CupyFlow:
 
         # Note: convolve a squared kernel on the variance image to get the variance of the convolved image
         # Note: let's skip the matching kernel here, as it is expected to be a minor compensation.
-        FPixA_DIFFVar_GPU = cp.fft.fft2(self.PixA_objectVar_GPU) * cp.fft.fft2(PSF_target_CSZ_GPU ** 2) + \
+        FPixA_DIFFVar_GPU = cp.fft.fft2(self.PixA_resamp_objectVar_GPU) * cp.fft.fft2(PSF_target_CSZ_GPU ** 2) + \
             cp.fft.fft2(self.PixA_targetVar_GPU) * cp.fft.fft2(PSF_object_CSZ_GPU ** 2)
         
         FPixA_dDIFFVar_GPU = FPixA_DIFFVar_GPU * cp.fft.fft2(cp.fft.ifft2(self.FKDECO_GPU) ** 2)
