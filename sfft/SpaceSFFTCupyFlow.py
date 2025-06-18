@@ -12,7 +12,7 @@ from sfft.utils.ResampKits import Cupy_Resampling
 from sfft.utils.SkyLevelEstimator import SkyLevel_Estimator
 from sfft.utils.SFFTSolutionReader import Realize_MatchingKernel
 
-__last_update__ = "2025-06-06"
+__last_update__ = "2025-06-17"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 
 class SpaceSFFT_CupyFlow:
@@ -147,10 +147,17 @@ class SpaceSFFT_CupyFlow:
         # * step 0. run resampling for input object image, variance image, mask, and PSF
         CR = Cupy_Resampling(RESAMP_METHOD="BILINEAR", VERBOSE_LEVEL=1)
         XX_proj_GPU, YY_proj_GPU = CR.resamp_projection_sip(hdr_obj=self.hdr_object,
-                                                            hdr_targ=self.
-                                                            hdr_target,
+                                                            hdr_targ=self.hdr_target,
                                                             NSAMP=1024,
                                                             RANDOM_SEED=self.RANDOM_SEED)
+        
+        # check if projection completely outside of target image
+        # TODO: this check is currently not smart...
+        NTX = int(self.hdr_targ["NAXIS1"]) 
+        NTY = int(self.hdr_targ["NAXIS2"])
+        NPIX_INNER = cp.sum(cp.logical_and.reduce((XX_proj_GPU >= 0.5, XX_proj_GPU < NTX+0.5,
+             YY_proj_GPU >= 0.5, YY_proj_GPU < NTY+0.5)))
+        assert NPIX_INNER > 0, "SFFT Error: Projection of object image is completely outside of target image!"
 
         # Object image:
         PixA_Eobj_GPU, EProjDict = CR.frame_extension(XX_proj_GPU=XX_proj_GPU,
