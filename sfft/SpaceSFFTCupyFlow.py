@@ -153,10 +153,10 @@ class SpaceSFFT_CupyFlow:
         
         # check if projection completely outside of target image
         # TODO: this check is currently not smart...
-        NTX = int(self.hdr_targ["NAXIS1"]) 
-        NTY = int(self.hdr_targ["NAXIS2"])
-        NPIX_INNER = cp.sum(cp.logical_and.reduce((XX_proj_GPU >= 0.5, XX_proj_GPU < NTX+0.5,
-             YY_proj_GPU >= 0.5, YY_proj_GPU < NTY+0.5)))
+        NTX = int(self.hdr_target["NAXIS1"])
+        NTY = int(self.hdr_target["NAXIS2"])
+        NPIX_INNER = cp.sum(cp.logical_and( cp.logical_and(XX_proj_GPU >= 0.5, XX_proj_GPU < NTX+0.5),
+                                            cp.logical_and(YY_proj_GPU >= 0.5, YY_proj_GPU < NTY+0.5) ))
         assert NPIX_INNER > 0, "SFFT Error: Projection of object image is completely outside of target image!"
 
         # Object image:
