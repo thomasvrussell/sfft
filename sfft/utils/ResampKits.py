@@ -12,7 +12,7 @@ class Cupy_WCS_Transform:
         __author__ = "Shu Liu <shl159@pitt.edu> & Lei Hu <leihu@andrew.cmu.edu>"
         return None
 
-    def read_cd_wcs(self, hdr_wcs, CDKEY="CD"):
+    def read_cd_wcs(self, hdr_wcs):
         """ Read WCS information from FITS header """
         assert hdr_wcs["CTYPE1"] == "RA---TAN"
         assert hdr_wcs["CTYPE2"] == "DEC--TAN"
@@ -35,6 +35,7 @@ class Cupy_WCS_Transform:
             "LONPOLE": LONPOLE
         }
 
+        CDKEY = Read_WCS.determine_cdkey( hdr_wcs )
         CD1_1 = hdr_wcs[f"{CDKEY}1_1"]
         CD1_2 = hdr_wcs[f"{CDKEY}1_2"] if f"{CDKEY}1_2" in hdr_wcs else 0.
         CD2_1 = hdr_wcs[f"{CDKEY}2_1"] if f"{CDKEY}2_1" in hdr_wcs else 0.
@@ -47,7 +48,7 @@ class Cupy_WCS_Transform:
         
         return KEYDICT, CD_GPU
 
-    def read_sip_wcs(self, hdr_wcs, CDKEY="CD"):
+    def read_sip_wcs(self, hdr_wcs):
         """ Read TAN-SIP WCS information from FITS header """
         assert hdr_wcs["CTYPE1"] == "RA---TAN-SIP"
         assert hdr_wcs["CTYPE2"] == "DEC--TAN-SIP"
@@ -74,6 +75,7 @@ class Cupy_WCS_Transform:
             "A_ORDER": A_ORDER, "B_ORDER": B_ORDER
         }
 
+        CDKEY = Read_WCS.determine_cdkey( hdr_wcs )
         CD1_1 = hdr_wcs[f"{CDKEY}1_1"]
         CD1_2 = hdr_wcs[f"{CDKEY}1_2"] if f"{CDKEY}1_2" in hdr_wcs else 0.
         CD2_1 = hdr_wcs[f"{CDKEY}2_1"] if f"{CDKEY}2_1" in hdr_wcs else 0.
@@ -211,7 +213,7 @@ class Cupy_Resampling:
 
         return x_GPU, y_GPU
 
-    def resamp_projection_sip(self, hdr_obj, hdr_targ, CDKEY="CD", NSAMP=1024, RANDOM_SEED=10086):
+    def resamp_projection_sip(self, hdr_obj, hdr_targ, NSAMP=1024, RANDOM_SEED=10086):
         """Project the target pixel centers to the object frame using Cupy for TAN-SIP WCS"""
         NTX = int(hdr_targ["NAXIS1"]) 
         NTY = int(hdr_targ["NAXIS2"])
@@ -225,7 +227,7 @@ class Cupy_Resampling:
         CWT = Cupy_WCS_Transform()
         if True:
             # read header | target
-            KEYDICT, CD_GPU, A_SIP_GPU, B_SIP_GPU = CWT.read_sip_wcs(hdr_wcs=hdr_targ, CDKEY=CDKEY)
+            KEYDICT, CD_GPU, A_SIP_GPU, B_SIP_GPU = CWT.read_sip_wcs(hdr_wcs=hdr_targ)
             CRPIX1_targ, CRPIX2_targ = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
             CRVAL1_targ, CRVAL2_targ = KEYDICT["CRVAL1"], KEYDICT["CRVAL2"]
             LONPOLE_targ = KEYDICT["LONPOLE"]
@@ -248,7 +250,7 @@ class Cupy_Resampling:
         
         if True:
             # read header | object
-            KEYDICT, CD_GPU, A_SIP_GPU, B_SIP_GPU = CWT.read_sip_wcs(hdr_wcs=hdr_obj, CDKEY=CDKEY)
+            KEYDICT, CD_GPU, A_SIP_GPU, B_SIP_GPU = CWT.read_sip_wcs(hdr_wcs=hdr_obj)
             CRPIX1_obj, CRPIX2_obj = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
             CRVAL1_obj, CRVAL2_obj = KEYDICT["CRVAL1"], KEYDICT["CRVAL2"]
             LONPOLE_obj = KEYDICT["LONPOLE"]

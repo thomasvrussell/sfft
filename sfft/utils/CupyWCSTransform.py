@@ -1,4 +1,5 @@
 import cupy as cp
+from sfft.utils.ReadWCS import Read_WCS
 
 __last_update__ = "2024-09-19"
 __author__ = "Shu Liu <shl159@pitt.edu> & Lei Hu <leihu@andrew.cmu.edu>"
@@ -7,7 +8,7 @@ class Cupy_WCS_Transform:
     def __init__(self):
         return None
 
-    def read_cd_wcs(self, hdr_wcs, CDKEY="CD"):
+    def read_cd_wcs(self, hdr_wcs):
         """
         # * Note on the CD matrix transformation:
         The sky coordinate (x, y) relative to reference point can be connected with
@@ -35,6 +36,7 @@ class Cupy_WCS_Transform:
             "CRVAL1": CRVAL1, "CRVAL2": CRVAL2
         }
 
+        CDKEY = Read_WCS.determine_cdkey( hdr_wcs )
         CD1_1 = hdr_wcs[f"{CDKEY}1_1"]
         CD1_2 = hdr_wcs[f"{CDKEY}1_2"] if f"{CDKEY}1_2" in hdr_wcs else 0.
         CD2_1 = hdr_wcs[f"{CDKEY}2_1"] if f"{CDKEY}2_1" in hdr_wcs else 0.
