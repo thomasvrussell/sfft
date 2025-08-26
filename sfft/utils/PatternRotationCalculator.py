@@ -8,7 +8,22 @@ __version__ = "v1.6.1"
 class PatternRotation_Calculator:
     @staticmethod
     def PRC(hdr_obj, hdr_targ):
-        """calculate the rotation angle for a pattern from the object frame to target frame"""
+        """calculate the rotation angle for a pattern from the object frame to target frame
+
+        Parmaeters
+        ----------
+          hdr_obj: astropy.io.fits.header.Header
+            The WCS of the object frame is read from this header.  (The
+            header doesn't need anything else.)  Doesn't have to
+            actually be a astropy Header; it needs to be able to have
+            its elements accessed like a dictionary, it needs to suppor
+            the copy() method for a shallow copy, and it needs to be
+            something that the astropy.wcs.WCS() constructor can take.
+
+          hdr_targ:  astropy.io.fits.header.Header
+            Like hdr_obj, but for the target.
+
+        """
         def calculate_skyN_vector(wcshdr, x_start, y_start, shift_dec=1.0):
             w = Read_WCS.RW(wcshdr, VERBOSE_LEVEL=1)
             ra_start, dec_start = w.all_pix2world(np.array([[x_start, y_start]]), 1)[0]
@@ -21,7 +36,7 @@ class PatternRotation_Calculator:
         def calculate_rotate_angle(vector_ref, vector_obj):
             rad = np.arctan2(np.cross(vector_ref, vector_obj), np.dot(vector_ref, vector_obj))
             rotate_angle = np.rad2deg(rad)
-            if rotate_angle < 0.0: rotate_angle += 360.0 
+            if rotate_angle < 0.0: rotate_angle += 360.0
             return rotate_angle
 
         _phdr = hdr_obj
