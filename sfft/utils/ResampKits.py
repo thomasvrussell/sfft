@@ -4,7 +4,7 @@ import cupy as cp
 import numpy as np
 from sfft.utils.ReadWCS import Read_WCS
 
-__last_update__ = "2024-09-22"
+__last_update__ = "2025-09-26"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu> & Shu Liu <shl159@pitt.edu>"
 
 class Cupy_WCS_Transform:
@@ -213,6 +213,71 @@ class Cupy_Resampling:
 
         return x_GPU, y_GPU
 
+    def resamp_projection_cd(self, hdr_obj, hdr_targ, CDKEY="CD"):
+        """Project the target pixel centers to the object frame using Cupy for CD WCS (NO distortion)"""
+        NTX = int(hdr_targ["NAXIS1"]) 
+        NTY = int(hdr_targ["NAXIS2"])
+
+        XX_targ_GPU, YY_targ_GPU = cp.meshgrid(
+            cp.arange(0, NTX) + 1., 
+            cp.arange(0, NTY) + 1., 
+            indexing='ij'
+        )
+        
+        CWT = Cupy_WCS_Transform()
+        # * perform CD transformation through target WCS
+        if True:
+            # read header | target
+            KEYDICT, CD_GPU = CWT.read_cd_wcs(hdr_wcs=hdr_targ, CDKEY=CDKEY)
+            CRPIX1_targ, CRPIX2_targ = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
+            CRVAL1_targ, CRVAL2_targ = KEYDICT["CRVAL1"], KEYDICT["CRVAL2"]
+            LONPOLE_targ = KEYDICT["LONPOLE"]
+            
+            # forward transformation 0: (p1, p2) > (u, v) | target
+            u_GPU, v_GPU = XX_targ_GPU.flatten() - CRPIX1_targ, YY_targ_GPU.flatten() - CRPIX2_targ
+            
+            # forward transformation 1: (u, v) > (x, y) | target
+            x_GPU, y_GPU = CWT.cd_transform(IMAGE_X_GPU=u_GPU, IMAGE_Y_GPU=v_GPU, CD_GPU=CD_GPU)
+
+            # forward transformation 2 & 3 to sky: (x, y) > (phi, theta) > (alpha, delta) | target
+            ra_GPU, dec_GPU = self.spherical_transformation(
+                x_GPU=cp.deg2rad(x_GPU), 
+                y_GPU=cp.deg2rad(y_GPU), 
+                alpha_p=cp.deg2rad(CRVAL1_targ), 
+                delta_p=cp.deg2rad(CRVAL2_targ),
+                phi_p=cp.deg2rad(LONPOLE_targ)
+            )   # in radians!
+
+        # * perform CD^-1 transformation through object WCS
+        if True:
+            # read header | object
+            KEYDICT, CD_GPU = CWT.read_cd_wcs(hdr_wcs=hdr_obj, CDKEY=CDKEY)
+            CRPIX1_obj, CRPIX2_obj = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
+            CRVAL1_obj, CRVAL2_obj = KEYDICT["CRVAL1"], KEYDICT["CRVAL2"]
+            LONPOLE_obj = KEYDICT["LONPOLE"]
+
+            # inverse transformation 3 & 2: (alpha, delta) > (phi, theta) > (x, y) | object
+            x_GPU, y_GPU = self.inverse_spherical_transformation(
+                alpha_GPU=ra_GPU, 
+                delta_GPU=dec_GPU, 
+                alpha_p=cp.deg2rad(CRVAL1_obj), 
+                delta_p=cp.deg2rad(CRVAL2_obj),
+                phi_p=cp.deg2rad(LONPOLE_obj)
+            )   # in radians!
+
+            # inverse transformation 1: (x, y) > (u, v) | object
+            u_GPU, v_GPU = CWT.cd_transform_inv(
+                WORLD_X_GPU=cp.rad2deg(x_GPU), 
+                WORLD_Y_GPU=cp.rad2deg(y_GPU), 
+                CD_GPU=CD_GPU
+            )
+            
+            # inverse transformation 0: (u, v) > (p1, p2) | object
+            XX_proj_GPU = CRPIX1_obj + u_GPU.reshape((NTX, NTY))
+            YY_proj_GPU = CRPIX2_obj + v_GPU.reshape((NTX, NTY))
+        
+        return XX_proj_GPU, YY_proj_GPU
+    
     def resamp_projection_sip(self, hdr_obj, hdr_targ, NSAMP=1024, RANDOM_SEED=10086):
         """Project the target pixel centers to the object frame using Cupy for TAN-SIP WCS"""
         NTX = int(hdr_targ["NAXIS1"]) 
