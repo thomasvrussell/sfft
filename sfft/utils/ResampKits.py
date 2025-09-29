@@ -4,16 +4,24 @@ import cupy as cp
 import numpy as np
 from sfft.utils.ReadWCS import Read_WCS
 
-__last_update__ = "2025-09-26"
+__last_update__ = "2025-09-29"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu> & Shu Liu <shl159@pitt.edu>"
 
 class Cupy_WCS_Transform:
     def __init__(self):
         __author__ = "Shu Liu <shl159@pitt.edu> & Lei Hu <leihu@andrew.cmu.edu>"
         return None
-
+    
     def read_cd_wcs(self, hdr_wcs):
-        """ Read WCS information from FITS header """
+        """
+        # * Note on the CD matrix transformation:
+        # The sky coordinate (x, y) relative to reference point, a.k.a, intermediate world coordinate, can be connected with 
+        # the image coordinate (u, v) relative to reference point, a.k.a, intermediate pixel coordinate by the CD matrix:
+        #     [x]   [CD1_1 CD1_2] [u]
+        #     [y] = [CD2_1 CD2_2] [v]
+        # where CD1_1, CD1_2, CD2_1, CD2_2 are stored in the FITS header.
+        #
+        """
         assert hdr_wcs["CTYPE1"] == "RA---TAN"
         assert hdr_wcs["CTYPE2"] == "DEC--TAN"
 
@@ -26,7 +34,12 @@ class Cupy_WCS_Transform:
         CRVAL1 = float(hdr_wcs["CRVAL1"])
         CRVAL2 = float(hdr_wcs["CRVAL2"])
 
-        LONPOLE = float(hdr_wcs["LONPOLE"])
+        if "LONPOLE" not in hdr_wcs:
+            _warnmsg = "keyword LONPOLE not found in the header, set to default value 180.0"
+            # print("MeLOn WARNING: %s" % _warnmsg)
+            LONPOLE = 180.0    # default value
+        else:
+            LONPOLE = float(hdr_wcs["LONPOLE"])
 
         KEYDICT = {
             "N0": N0, "N1": N1, 
@@ -35,11 +48,38 @@ class Cupy_WCS_Transform:
             "LONPOLE": LONPOLE
         }
 
-        CDKEY = Read_WCS.determine_cdkey( hdr_wcs )
-        CD1_1 = hdr_wcs[f"{CDKEY}1_1"]
-        CD1_2 = hdr_wcs[f"{CDKEY}1_2"] if f"{CDKEY}1_2" in hdr_wcs else 0.
-        CD2_1 = hdr_wcs[f"{CDKEY}2_1"] if f"{CDKEY}2_1" in hdr_wcs else 0.
-        CD2_2 = hdr_wcs[f"{CDKEY}2_2"]
+        if "CD1_1" in hdr_wcs:
+            CD1_1 = hdr_wcs["CD1_1"]
+            CD1_2 = hdr_wcs["CD1_2"] if "CD1_2" in hdr_wcs else 0.
+            CD2_1 = hdr_wcs["CD2_1"] if "CD2_1" in hdr_wcs else 0.
+            CD2_2 = hdr_wcs["CD2_2"]
+        
+        elif "PC1_1" in hdr_wcs:
+            PC1_1 = hdr_wcs["PC1_1"]
+            PC1_2 = hdr_wcs["PC1_2"] if "PC1_2" in hdr_wcs else 0.
+            PC2_1 = hdr_wcs["PC2_1"] if "PC2_1" in hdr_wcs else 0.
+            PC2_2 = hdr_wcs["PC2_2"]
+
+            assert "CDELT1" in hdr_wcs
+            assert "CDELT2" in hdr_wcs
+            CDELT1 = hdr_wcs["CDELT1"]
+            CDELT2 = hdr_wcs["CDELT2"]
+
+            CD1_1 = CDELT1 * PC1_1
+            CD1_2 = CDELT1 * PC1_2
+            CD2_1 = CDELT2 * PC2_1
+            CD2_2 = CDELT2 * PC2_2
+
+        else:
+            assert "CDELT1" in hdr_wcs
+            assert "CDELT2" in hdr_wcs
+            CDELT1 = hdr_wcs["CDELT1"]
+            CDELT2 = hdr_wcs["CDELT2"]
+            
+            CD1_1 = CDELT1
+            CD1_2 = 0.
+            CD2_1 = 0.
+            CD2_2 = CDELT2
 
         CD_GPU = cp.array([
             [CD1_1, CD1_2], 
@@ -228,7 +268,7 @@ class Cupy_Resampling:
         # * perform CD transformation through target WCS
         if True:
             # read header | target
-            KEYDICT, CD_GPU = CWT.read_cd_wcs(hdr_wcs=hdr_targ, CDKEY=CDKEY)
+            KEYDICT, CD_GPU = CWT.read_cd_wcs(hdr_wcs=hdr_targ)
             CRPIX1_targ, CRPIX2_targ = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
             CRVAL1_targ, CRVAL2_targ = KEYDICT["CRVAL1"], KEYDICT["CRVAL2"]
             LONPOLE_targ = KEYDICT["LONPOLE"]
@@ -251,7 +291,7 @@ class Cupy_Resampling:
         # * perform CD^-1 transformation through object WCS
         if True:
             # read header | object
-            KEYDICT, CD_GPU = CWT.read_cd_wcs(hdr_wcs=hdr_obj, CDKEY=CDKEY)
+            KEYDICT, CD_GPU = CWT.read_cd_wcs(hdr_wcs=hdr_obj)
             CRPIX1_obj, CRPIX2_obj = KEYDICT["CRPIX1"], KEYDICT["CRPIX2"]
             CRVAL1_obj, CRVAL2_obj = KEYDICT["CRVAL1"], KEYDICT["CRVAL2"]
             LONPOLE_obj = KEYDICT["LONPOLE"]
