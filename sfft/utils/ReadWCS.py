@@ -18,7 +18,7 @@ class Read_WCS:
         return 'PC'
 
     @staticmethod
-    def read_cd_wcs(hdr_wcs):
+    def read_linear_part_of_wcs(hdr_wcs):
         """
         # * Note on the CD matrix transformation:
         # The sky coordinate (x, y) relative to reference point, a.k.a, intermediate world coordinate, can be connected with 
@@ -28,9 +28,6 @@ class Read_WCS:
         # where CD1_1, CD1_2, CD2_1, CD2_2 are stored in the FITS header.
         #
         """
-        assert hdr_wcs["CTYPE1"] == "RA---TAN"
-        assert hdr_wcs["CTYPE2"] == "DEC--TAN"
-
         N0 = int(hdr_wcs["NAXIS1"])
         N1 = int(hdr_wcs["NAXIS2"])
 
@@ -94,44 +91,22 @@ class Read_WCS:
         
         return KEYDICT, CD
 
+
+    @staticmethod
+    def read_cd_wcs(hdr_wcs):
+        if ( hdr_wcs["CTYPE1"] != "RA---TAN" ) or ( hdr_wcs["CTYPE2"] != 'DEC--TAN' ):
+            raise ValueError( f"Error, read_cd_wcs expects header CTYPE1='RA---TAN' and CTYPE2='DEC--TAN'; "
+                              f"instead, got CTYPE1='{hdr_wcs['CTYPE1']} and CTYPE2='{hdr_wcs['CTYPE2']}" )
+        return Read_WCS.read_linear_part_of_wcs( hdr_wcs )
+
+
     @staticmethod
     def read_sip_wcs(hdr_wcs):
         """ Read TAN-SIP WCS information from FITS header """
         assert hdr_wcs["CTYPE1"] == "RA---TAN-SIP"
         assert hdr_wcs["CTYPE2"] == "DEC--TAN-SIP"
 
-        N0 = int(hdr_wcs["NAXIS1"])
-        N1 = int(hdr_wcs["NAXIS2"])
-
-        CRPIX1 = float(hdr_wcs["CRPIX1"])
-        CRPIX2 = float(hdr_wcs["CRPIX2"])
-
-        CRVAL1 = float(hdr_wcs["CRVAL1"])
-        CRVAL2 = float(hdr_wcs["CRVAL2"])
-        
-        LONPOLE = float(hdr_wcs["LONPOLE"])
-
-        A_ORDER = int(hdr_wcs["A_ORDER"])
-        B_ORDER = int(hdr_wcs["B_ORDER"])
-
-        KEYDICT = {
-            "N0": N0, "N1": N1, 
-            "CRPIX1": CRPIX1, "CRPIX2": CRPIX2,
-            "CRVAL1": CRVAL1, "CRVAL2": CRVAL2, 
-            "LONPOLE": LONPOLE,
-            "A_ORDER": A_ORDER, "B_ORDER": B_ORDER
-        }
-
-        CDKEY = Read_WCS.determine_cdkey( hdr_wcs )
-        CD1_1 = hdr_wcs[f"{CDKEY}1_1"]
-        CD1_2 = hdr_wcs[f"{CDKEY}1_2"] if f"{CDKEY}1_2" in hdr_wcs else 0.
-        CD2_1 = hdr_wcs[f"{CDKEY}2_1"] if f"{CDKEY}2_1" in hdr_wcs else 0.
-        CD2_2 = hdr_wcs[f"{CDKEY}2_2"]
-
-        CD = np.array([
-            [CD1_1, CD1_2], 
-            [CD2_1, CD2_2]
-        ], dtype=np.float64)
+        KEYDICT, CD = Read_WCS.read_linear_part_of_wcs( hdr_wcs )
 
         A_SIP = np.zeros((A_ORDER+1, A_ORDER+1), dtype=np.float64)
         B_SIP = np.zeros((B_ORDER+1, B_ORDER+1), dtype=np.float64)

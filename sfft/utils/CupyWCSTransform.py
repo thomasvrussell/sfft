@@ -18,35 +18,8 @@ class Cupy_WCS_Transform:
         where CD1_1, CD1_2, CD2_1, CD2_2 are stored in the FITS header.
 
         """
-        assert hdr_wcs["CTYPE1"] == "RA---TAN"
-        assert hdr_wcs["CTYPE2"] == "DEC--TAN"
-
-        N0 = int(hdr_wcs["NAXIS1"])
-        N1 = int(hdr_wcs["NAXIS2"])
-
-        CRPIX1 = float(hdr_wcs["CRPIX1"])
-        CRPIX2 = float(hdr_wcs["CRPIX2"])
-
-        CRVAL1 = float(hdr_wcs["CRVAL1"])
-        CRVAL2 = float(hdr_wcs["CRVAL2"])
-
-        KEYDICT = {
-            "N0": N0, "N1": N1,
-            "CRPIX1": CRPIX1, "CRPIX2": CRPIX2,
-            "CRVAL1": CRVAL1, "CRVAL2": CRVAL2
-        }
-
-        CDKEY = Read_WCS.determine_cdkey( hdr_wcs )
-        CD1_1 = hdr_wcs[f"{CDKEY}1_1"]
-        CD1_2 = hdr_wcs[f"{CDKEY}1_2"] if f"{CDKEY}1_2" in hdr_wcs else 0.
-        CD2_1 = hdr_wcs[f"{CDKEY}2_1"] if f"{CDKEY}2_1" in hdr_wcs else 0.
-        CD2_2 = hdr_wcs[f"{CDKEY}2_2"]
-
-        CD_GPU = cp.array([
-            [CD1_1, CD1_2],
-            [CD2_1, CD2_2]
-        ], dtype=cp.float64)
-
+        KEYDICT, CD = Read_WCS.read_cd_wcs( hdr_wcs )
+        CD_GPU = cp.array( CD, dtype=cp.float64 )
         return KEYDICT, CD_GPU
 
     def read_sip_wcs(self, hdr_wcs):
@@ -139,30 +112,13 @@ class Cupy_WCS_Transform:
         assert hdr_wcs["CTYPE1"] == "RA---TAN-SIP"
         assert hdr_wcs["CTYPE2"] == "DEC--TAN-SIP"
 
-        N0 = int(hdr_wcs["NAXIS1"])
-        N1 = int(hdr_wcs["NAXIS2"])
-
-        CRPIX1 = float(hdr_wcs["CRPIX1"])
-        CRPIX2 = float(hdr_wcs["CRPIX2"])
-
-        CRVAL1 = float(hdr_wcs["CRVAL1"])
-        CRVAL2 = float(hdr_wcs["CRVAL2"])
-
+        KEYDICT, CD = Read_WCS.read_linear_part_of_wcs( hdr_wcs )
         A_ORDER = int(hdr_wcs["A_ORDER"])
         B_ORDER = int(hdr_wcs["B_ORDER"])
+        KEYDICT['A_ORDER'] = A_ORDER
+        KEYDICT['B_ORDER'] = B_ORDER
 
-        KEYDICT = {
-            "N0": N0, "N1": N1,
-            "CRPIX1": CRPIX1, "CRPIX2": CRPIX2,
-            "CRVAL1": CRVAL1, "CRVAL2": CRVAL2,
-            "A_ORDER": A_ORDER, "B_ORDER": B_ORDER
-        }
-
-        CD_GPU = cp.array([
-            [hdr_wcs["CD1_1"], hdr_wcs["CD1_2"]],
-            [hdr_wcs["CD2_1"], hdr_wcs["CD2_2"]]
-        ], dtype=cp.float64)
-
+        CD_GPU = cp.array( CD, dtype=cp.float64 )
         A_SIP_GPU = cp.zeros((A_ORDER+1, A_ORDER+1), dtype=cp.float64)
         B_SIP_GPU = cp.zeros((B_ORDER+1, B_ORDER+1), dtype=cp.float64)
 
