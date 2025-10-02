@@ -107,7 +107,10 @@ class Read_WCS:
         assert hdr_wcs["CTYPE2"] == "DEC--TAN-SIP"
 
         KEYDICT, CD = Read_WCS.read_linear_part_of_wcs( hdr_wcs )
-
+        A_ORDER = int(hdr_wcs["A_ORDER"])
+        B_ORDER = int(hdr_wcs["B_ORDER"])
+        KEYDICT['A_ORDER'] = A_ORDER
+        KEYDICT['B_ORDER'] = B_ORDER
         A_SIP = np.zeros((A_ORDER+1, A_ORDER+1), dtype=np.float64)
         B_SIP = np.zeros((B_ORDER+1, B_ORDER+1), dtype=np.float64)
 
