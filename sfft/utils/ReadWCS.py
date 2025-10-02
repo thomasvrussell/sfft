@@ -3,7 +3,7 @@ import numpy as np
 from astropy.wcs import WCS, FITSFixedWarning
 # version: Mar 17, 2023
 
-__last_update__ = "2025-09-29"
+__last_update__ = "2025-10-02"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu> & Rob Knop <raknop@lbl.gov>"
 
 class Read_WCS:
