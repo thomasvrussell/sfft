@@ -153,7 +153,7 @@ class SpaceSFFT_CupyFlow:
 
         if self.hdr_target["CTYPE1"] == "RA---TAN":
             assert self.hdr_target["CTYPE2"] == "DEC--TAN"
-            XX_proj_GPU, YY_proj_GPU = CR.resamp_projection_cd(hdr_obj=self.hdr_object, 
+            XX_proj_GPU, YY_proj_GPU = CR.resamp_projection_cd(hdr_obj=self.hdr_object,
                                                                hdr_targ=self.hdr_target, CDKEY="CD")
 
         if self.hdr_target["CTYPE1"] == "RA---TAN-SIP":
@@ -264,7 +264,7 @@ class SpaceSFFT_CupyFlow:
         PixA_mCresamp_object_GPU[ZeroMask_GPU] = 0.
 
         del ZeroMask_GPU
-        
+
         # trigger sfft subtraction
         if self.sci_is_target:
             PixA_REF_GPU = self.PixA_Cresamp_object_GPU
