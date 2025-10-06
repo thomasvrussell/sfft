@@ -21,7 +21,7 @@ class Read_WCS:
     def read_linear_part_of_wcs(hdr_wcs):
         """
         # * Note on the CD matrix transformation:
-        # The sky coordinate (x, y) relative to reference point, a.k.a, intermediate world coordinate, can be connected with 
+        # The sky coordinate (x, y) relative to reference point, a.k.a, intermediate world coordinate, can be connected with
         # the image coordinate (u, v) relative to reference point, a.k.a, intermediate pixel coordinate by the CD matrix:
         #     [x]   [CD1_1 CD1_2] [u]
         #     [y] = [CD2_1 CD2_2] [v]
@@ -45,7 +45,7 @@ class Read_WCS:
             LONPOLE = float(hdr_wcs["LONPOLE"])
 
         KEYDICT = {
-            "N0": N0, "N1": N1, 
+            "N0": N0, "N1": N1,
             "CRPIX1": CRPIX1, "CRPIX2": CRPIX2,
             "CRVAL1": CRVAL1, "CRVAL2": CRVAL2,
             "LONPOLE": LONPOLE
@@ -56,7 +56,7 @@ class Read_WCS:
             CD1_2 = hdr_wcs["CD1_2"] if "CD1_2" in hdr_wcs else 0.
             CD2_1 = hdr_wcs["CD2_1"] if "CD2_1" in hdr_wcs else 0.
             CD2_2 = hdr_wcs["CD2_2"]
-        
+
         elif "PC1_1" in hdr_wcs:
             PC1_1 = hdr_wcs["PC1_1"]
             PC1_2 = hdr_wcs["PC1_2"] if "PC1_2" in hdr_wcs else 0.
@@ -78,17 +78,17 @@ class Read_WCS:
             assert "CDELT2" in hdr_wcs
             CDELT1 = hdr_wcs["CDELT1"]
             CDELT2 = hdr_wcs["CDELT2"]
-            
+
             CD1_1 = CDELT1
             CD1_2 = 0.
             CD2_1 = 0.
             CD2_2 = CDELT2
 
         CD = np.array([
-            [CD1_1, CD1_2], 
+            [CD1_1, CD1_2],
             [CD2_1, CD2_2]
         ], dtype=np.float64)
-        
+
         return KEYDICT, CD
 
 
@@ -119,13 +119,13 @@ class Read_WCS:
                 keyword = f"A_{p}_{q}"
                 if keyword in hdr_wcs:
                     A_SIP[p, q] = hdr_wcs[keyword]
-        
+
         for p in range(B_ORDER + 1):
             for q in range(0, B_ORDER - p + 1):
                 keyword = f"B_{p}_{q}"
                 if keyword in hdr_wcs:
                     B_SIP[p, q] = hdr_wcs[keyword]
-        
+
         return KEYDICT, CD, A_SIP, B_SIP
 
     @staticmethod
