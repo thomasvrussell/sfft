@@ -12,7 +12,7 @@ from sfft.utils.ResampKits import Cupy_Resampling
 from sfft.utils.SkyLevelEstimator import SkyLevel_Estimator
 from sfft.utils.SFFTSolutionReader import Realize_MatchingKernel
 
-__last_update__ = "2025-06-17"
+__last_update__ = "2025-09-26"
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 
 class SpaceSFFT_CupyFlow:
@@ -150,11 +150,19 @@ class SpaceSFFT_CupyFlow:
     def resampling_image_mask_psf( self ):
         # * step 0. run resampling for input object image, variance image, mask, and PSF
         CR = Cupy_Resampling(RESAMP_METHOD="BILINEAR", VERBOSE_LEVEL=1)
-        XX_proj_GPU, YY_proj_GPU = CR.resamp_projection_sip(hdr_obj=self.hdr_object,
-                                                            hdr_targ=self.hdr_target,
-                                                            NSAMP=1024,
-                                                            RANDOM_SEED=self.RANDOM_SEED)
-        
+
+        if self.hdr_target["CTYPE1"] == "RA---TAN":
+            assert self.hdr_target["CTYPE2"] == "DEC--TAN"
+            XX_proj_GPU, YY_proj_GPU = CR.resamp_projection_cd(hdr_obj=self.hdr_object,
+                                                               hdr_targ=self.hdr_target, CDKEY="CD")
+
+        if self.hdr_target["CTYPE1"] == "RA---TAN-SIP":
+            assert self.hdr_target["CTYPE2"] == "DEC--TAN-SIP"
+            XX_proj_GPU, YY_proj_GPU = CR.resamp_projection_sip(hdr_obj=self.hdr_object,
+                                                                hdr_targ=self.hdr_target,
+                                                                NSAMP=1024,
+                                                                RANDOM_SEED=self.RANDOM_SEED)
+
         # check if projection completely outside of target image
         # TODO: this check is currently not smart...
         NTX = int(self.hdr_target["NAXIS1"])
@@ -256,7 +264,7 @@ class SpaceSFFT_CupyFlow:
         PixA_mCresamp_object_GPU[ZeroMask_GPU] = 0.
 
         del ZeroMask_GPU
-        
+
         # trigger sfft subtraction
         if self.sci_is_target:
             PixA_REF_GPU = self.PixA_Cresamp_object_GPU
