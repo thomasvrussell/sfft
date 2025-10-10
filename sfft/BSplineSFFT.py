@@ -7,2606 +7,13 @@ from astropy.io import fits
 from scipy.interpolate import BSpline
 from astropy.convolution import convolve, convolve_fft
 from sfft.utils.meta.MultiProc import Multi_Proc
-# version: Dec 01, 2023
+
+from sfft.BSplineConfigure import SingleSFFTConfigure
+# version: Oct 10, 2025
 
 # WARNING: THIS MODULE IS STILL BEING DEVELOPED AND LOT OF IMPROVEMENT NOT IMPLETEMENTED YET!
-__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
+__author__ = "Lei Hu <leihu@andrew.cmu.edu>, Zachary Stone <stone28@illinois.edu>"
 __version__ = "v2.0dev"
-
-class SingleSFFTConfigure_Cupy:
-    @staticmethod
-    def SSCC(NX, NY, KerHW=8, KerSpType='Polynomial', KerSpDegree=2, KerIntKnotX=[], KerIntKnotY=[], \
-        SEPARATE_SCALING=True, ScaSpType='Polynomial', ScaSpDegree=0, ScaIntKnotX=[], ScaIntKnotY=[], \
-        BkgSpType='Polynomial', BkgSpDegree=2, BkgIntKnotX=[], BkgIntKnotY=[], \
-        REGULARIZE_KERNEL=False, IGNORE_LAPLACIAN_KERCENT=True, XY_REGULARIZE=None, WEIGHT_REGULARIZE=None, \
-        LAMBDA_REGULARIZE=1e-6, MAX_THREADS_PER_BLOCK=8, MINIMIZE_GPU_MEMORY_USAGE=False, VERBOSE_LEVEL=2):
-
-        import cupy as cp
-
-        N0, N1 = int(NX), int(NY)
-        w0, w1 = int(KerHW), int(KerHW)
-
-        SCALE = np.float64(1/(N0*N1))     # Scale of Image-Size
-        SCALE_L = np.float64(1/SCALE)     # Reciprocal Scale of Image-Size
-
-        # kernel spatial variation
-        DK = int(KerSpDegree)
-        assert DK >= 0
-        assert KerSpType in ['Polynomial', 'B-Spline']
-        if KerSpType == 'B-Spline' and DK == 0:
-            assert len(KerIntKnotX) == 0  # otherwise, discontinuity
-            assert len(KerIntKnotY) == 0  # otherwise, discontinuity
-        
-        # scaling spatial variation
-        if SEPARATE_SCALING:
-            DS = int(ScaSpDegree)
-            assert DS >= 0
-            assert ScaSpType in ['Polynomial', 'B-Spline']
-            if ScaSpType == 'B-Spline' and DS == 0:
-                assert len(ScaIntKnotX) == 0  # otherwise, discontinuity
-                assert len(ScaIntKnotY) == 0  # otherwise, discontinuity
-
-        # Remarks on SCALING_MODE
-        # SEPARATE_SCALING & ScaSpDegree >>>      SCALING_MODE
-        #        N         &     any     >>>       'ENTANGLED'
-        #        Y         &      0      >>>   'SEPARATE-CONSTANT'
-        #        Y         &     > 0     >>>   'SEPARATE-VARYING'
-
-        SCALING_MODE = None
-        if not SEPARATE_SCALING:
-            SCALING_MODE = 'ENTANGLED'
-        elif ScaSpDegree == 0:
-            SCALING_MODE = 'SEPARATE-CONSTANT'
-        else: SCALING_MODE = 'SEPARATE-VARYING'
-        assert SCALING_MODE is not None
-
-        if SCALING_MODE == 'SEPARATE-CONSTANT':
-            assert KerSpDegree != 0   # otherwise, reduced to ENTANGLED
-
-        if SCALING_MODE == 'SEPARATE-VARYING':
-            # force to activate MINIMIZE_GPU_MEMORY_USAGE
-            assert MINIMIZE_GPU_MEMORY_USAGE
-
-            if KerSpType == 'Polynomial' and ScaSpType == 'Polynomial':
-                assert ScaSpDegree != KerSpDegree   # otherwise, reduced to ENTANGLED
-            
-            if KerSpType == 'B-Spline' and ScaSpType == 'B-Spline':
-                if np.all(KerIntKnotX == ScaIntKnotX) and np.all(KerIntKnotY == ScaIntKnotY):
-                    assert ScaSpDegree != KerSpDegree   # otherwise, reduced to ENTANGLED
-        
-        # background spatial variation
-        DB = int(BkgSpDegree)
-        assert DB >= 0
-        assert BkgSpType in ['Polynomial', 'B-Spline']
-        if BkgSpType == 'B-Spline' and BkgSpDegree == 0:
-            assert len(BkgIntKnotX) == 0  # otherwise, discontinuity
-            assert len(BkgIntKnotY) == 0  # otherwise, discontinuity
-
-        # NOTE input image should not has dramatically small size
-        assert N0 > MAX_THREADS_PER_BLOCK and N1 > MAX_THREADS_PER_BLOCK
-
-        if REGULARIZE_KERNEL:
-            assert XY_REGULARIZE is not None
-            assert len(XY_REGULARIZE.shape) == 2 and XY_REGULARIZE.shape[1] == 2
-
-        if VERBOSE_LEVEL in [1, 2]:
-            print('\n --//--//--//--//-- TRIGGER SFFT COMPILATION [Cupy] --//--//--//--//-- ')
-
-            if KerSpType == 'Polynomial':
-                print('\n ---//--- Polynomial Kernel | KerSpDegree %d | KerHW %d ---//---' %(KerSpDegree, KerHW))
-                if not SEPARATE_SCALING:
-                    print('\n ---//--- [ENTANGLED] Polynomial Scaling | KerSpDegree %d ---//---' %KerSpDegree)
-
-            if KerSpType == 'B-Spline':
-                print('\n ---//--- B-Spline Kernel | Internal Knots %d,%d | KerSpDegree %d | KerHW %d ---//---' \
-                      %(len(KerIntKnotX), len(KerIntKnotY), KerSpDegree, KerHW))
-                if not SEPARATE_SCALING: 
-                    print('\n ---//--- [ENTANGLED] B-Spline Scaling | Internal Knots %d,%d | KerSpDegree %d ---//---' \
-                          %(len(KerIntKnotX), len(KerIntKnotY), KerSpDegree))
-            
-            if SEPARATE_SCALING:
-                if ScaSpType == 'Polynomial':
-                    print('\n ---//--- [SEPARATE] Polynomial Scaling | ScaSpDegree %d ---//---' %ScaSpDegree)
-                
-                if ScaSpType == 'B-Spline':
-                    print('\n ---//--- [SEPARATE] B-Spline Scaling | Internal Knots %d,%d | ScaSpDegree %d ---//---' \
-                          %(len(ScaIntKnotX), len(ScaIntKnotY), ScaSpDegree))
-            
-            if BkgSpType == 'Polynomial':
-                print('\n ---//--- Polynomial Background | BkgSpDegree %d ---//---' %BkgSpDegree)
-            
-            if BkgSpType == 'B-Spline':
-                print('\n ---//--- B-Spline Background | Internal Knots %d,%d | BkgSpDegree %d ---//---' \
-                    %(len(BkgIntKnotX), len(BkgIntKnotY), BkgSpDegree))
-
-        SFFTParam_dict = {}
-        SFFTParam_dict['KerHW'] = KerHW
-        SFFTParam_dict['KerSpType'] = KerSpType
-        SFFTParam_dict['KerSpDegree'] = KerSpDegree
-        SFFTParam_dict['KerIntKnotX'] = KerIntKnotX
-        SFFTParam_dict['KerIntKnotY'] = KerIntKnotY
-
-        SFFTParam_dict['SEPARATE_SCALING'] = SEPARATE_SCALING
-        if SEPARATE_SCALING:
-            SFFTParam_dict['ScaSpType'] = ScaSpType
-            SFFTParam_dict['ScaSpDegree'] = ScaSpDegree
-            SFFTParam_dict['ScaIntKnotX'] = ScaIntKnotX
-            SFFTParam_dict['ScaIntKnotY'] = ScaIntKnotY
-
-        SFFTParam_dict['BkgSpType'] = BkgSpType
-        SFFTParam_dict['BkgSpDegree'] = BkgSpDegree
-        SFFTParam_dict['BkgIntKnotX'] = BkgIntKnotX
-        SFFTParam_dict['BkgIntKnotY'] = BkgIntKnotY
-
-        SFFTParam_dict['REGULARIZE_KERNEL'] = REGULARIZE_KERNEL
-        SFFTParam_dict['IGNORE_LAPLACIAN_KERCENT'] = IGNORE_LAPLACIAN_KERCENT
-        SFFTParam_dict['XY_REGULARIZE'] = XY_REGULARIZE
-        SFFTParam_dict['WEIGHT_REGULARIZE'] = WEIGHT_REGULARIZE
-        SFFTParam_dict['LAMBDA_REGULARIZE'] = LAMBDA_REGULARIZE
-
-        SFFTParam_dict['MAX_THREADS_PER_BLOCK'] = MAX_THREADS_PER_BLOCK
-        SFFTParam_dict['MINIMIZE_GPU_MEMORY_USAGE'] = MINIMIZE_GPU_MEMORY_USAGE
-        
-        # * Make a dictionary for SFFT parameters
-        L0 = 2*w0+1                                       # matching-kernel XSize
-        L1 = 2*w1+1                                       # matching-kernel YSize
-        Fab = L0*L1                                       # dof for index ab
-
-        if KerSpType == 'Polynomial':
-            Fi, Fj = -1, -1                               # not independent, placeholder
-            Fij = ((DK+1)*(DK+2))//2                      # dof for matching-kernel polynomial index ij 
-        
-        if KerSpType == 'B-Spline':
-            Fi = len(KerIntKnotX) + KerSpDegree + 1       # dof for matching-kernel B-spline index i (control points/coefficients)
-            Fj = len(KerIntKnotY) + KerSpDegree + 1       # dof for matching-kernel B-spline index j (control points/coefficients)
-            Fij = Fi*Fj                                   # dof for matching-kernel B-spline index ij
-        
-        if BkgSpType == 'Polynomial':
-            Fp, Fq = -1, -1                               # not independent, placeholder
-            Fpq = ((DB+1)*(DB+2))//2                      # dof for diff-background polynomial index pq 
-        
-        if BkgSpType == 'B-Spline':
-            Fp = len(BkgIntKnotX) + BkgSpDegree + 1       # dof for diff-background B-spline index p (control points/coefficients)
-            Fq = len(BkgIntKnotY) + BkgSpDegree + 1       # dof for diff-background B-spline index q (control points/coefficients)  
-            Fpq = Fp*Fq                                   # dof for diff-background B-spline index pq
-
-        if SCALING_MODE == 'SEPARATE-VARYING':
-            if ScaSpType == 'Polynomial':
-                ScaFi, ScaFj = -1, -1                     # not independent, placeholder
-                ScaFij = ((DS+1)*(DS+2))//2               # effective dof for scaling polynomial index ij
-            
-            if ScaSpType == 'B-Spline':
-                ScaFi = len(ScaIntKnotX) + ScaSpDegree + 1    # dof for scaling B-spline index i (control points/coefficients)
-                ScaFj = len(ScaIntKnotY) + ScaSpDegree + 1    # dof for scaling B-spline index j (control points/coefficients)
-                ScaFij = ScaFi*ScaFj                          # effective dof for scaling B-spline index ij
-            
-            # Remarks on the scaling effective dof
-            # I. current version not support scaling effective dof no higher than kernel variation.
-            #    for simplicity, we use trivail zero basis as placeholder so that 
-            #    the apparent dof of scaling and kernel are consistent.
-            # II. ScaFij = Fij is allowed, e.g.m, B-Spline, same degree and 
-            #     same number of internal knots but at different positions.
-
-            assert ScaFij <= Fij
-        
-        Fijab = Fij*Fab                                   # Linear-System Major side-length
-        FOMG, FGAM, FTHE = Fij**2, Fij*Fpq, Fij           # OMG / GAM / THE has shape (dof, N0, N1)
-        FPSI, FPHI, FDEL = Fpq*Fij, Fpq**2, Fpq           # PSI / PHI / DEL has shape (dof, N0, N1)
-        NEQ = Fij*Fab+Fpq                                 # Linear-System side-length
-        
-        NEQt = NEQ
-        if SCALING_MODE == 'SEPARATE-CONSTANT':
-            NEQt = NEQ-Fij+1                    # tweaked Linear-System side-length for constant scaling
-
-        if SCALING_MODE == 'SEPARATE-VARYING':
-            NEQt = NEQ-(Fij-ScaFij)             # tweaked Linear-System side-length for polynomial-varying scaling
-
-        SFFTParam_dict['N0'] = N0               # a.k.a, NX
-        SFFTParam_dict['N1'] = N1               # a.k.a, NY
-        SFFTParam_dict['w0'] = w0               # a.k.a, KerHW
-        SFFTParam_dict['w1'] = w1               # a.k.a, KerHW
-        SFFTParam_dict['DK'] = DK               # a.k.a, KerSpDegree
-        SFFTParam_dict['DB'] = DB               # a.k.a, BkgSpDegree
-        if SEPARATE_SCALING: 
-            SFFTParam_dict['DS'] = DS           # a.k.a, ScaSpDegree
-
-        SFFTParam_dict['SCALE'] = SCALE
-        SFFTParam_dict['SCALE_L'] = SCALE_L
-
-        SFFTParam_dict['L0'] = L0
-        SFFTParam_dict['L1'] = L1
-        SFFTParam_dict['Fab'] = Fab
-        SFFTParam_dict['Fi'] = Fi
-        SFFTParam_dict['Fj'] = Fj
-        SFFTParam_dict['Fij'] = Fij
-        SFFTParam_dict['Fp'] = Fp
-        SFFTParam_dict['Fq'] = Fq
-        SFFTParam_dict['Fpq'] = Fpq
-
-        if SCALING_MODE == 'SEPARATE-VARYING':
-            SFFTParam_dict['ScaFi'] = ScaFi
-            SFFTParam_dict['ScaFj'] = ScaFj
-            SFFTParam_dict['ScaFij'] = ScaFij        
-        SFFTParam_dict['Fijab'] = Fijab
-        
-        SFFTParam_dict['FOMG'] = FOMG
-        SFFTParam_dict['FGAM'] = FGAM
-        SFFTParam_dict['FTHE'] = FTHE
-        SFFTParam_dict['FPSI'] = FPSI
-        SFFTParam_dict['FPHI'] = FPHI
-        SFFTParam_dict['FDEL'] = FDEL
-        
-        SFFTParam_dict['NEQ'] = NEQ
-        SFFTParam_dict['NEQt'] = NEQt
-
-        # * Load SFFT CUDA modules
-        #   NOTE: Generally, a kernel function is defined without knowledge about Grid-Block-Thread Management.
-        #         However, we need to know the size of threads per block if SharedMemory is called.
-
-        SFFTModule_dict = {}
-        # ************************************ Spatial Variation ************************************ #
-
-        # <*****> produce spatial coordinate X/Y/oX/oY-map <*****> #
-        _refdict = {'N0': N0, 'N1': N1}
-        _funcstr = r"""
-        extern "C" __global__ void kmain(int PixA_X_GPU[%(N0)s][%(N1)s], int PixA_Y_GPU[%(N0)s][%(N1)s], 
-            double PixA_CX_GPU[%(N0)s][%(N1)s], double PixA_CY_GPU[%(N0)s][%(N1)s])
-        {
-            int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-            int COL = blockIdx.y*blockDim.y+threadIdx.y;
-            
-            int N0 = %(N0)s;
-            int N1 = %(N1)s;
-            
-            if (ROW < N0 && COL < N1) {
-                double cx = (ROW + 1.0) / N0;  
-                double cy = (COL + 1.0) / N1;
-                PixA_X_GPU[ROW][COL] = ROW;
-                PixA_Y_GPU[ROW][COL] = COL;
-                PixA_CX_GPU[ROW][COL] = cx;
-                PixA_CY_GPU[ROW][COL] = cy;
-            }
-        }
-        """
-        _code = _funcstr % _refdict
-        _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-        SFFTModule_dict['SpatialCoord'] = _module
-
-        # <*****> produce Iij <*****> #
-        if KerSpType == 'Polynomial':
-            
-            _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(int REF_ij_GPU[%(Fij)s][2],
-                double PixA_CX_GPU[%(N0)s][%(N1)s], double PixA_CY_GPU[%(N0)s][%(N1)s],
-                double PixA_I_GPU[%(N0)s][%(N1)s], double SPixA_Iij_GPU[%(Fij)s][%(N0)s][%(N1)s])
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-            
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int Fij = %(Fij)s;
-                
-                if (ROW < N0 && COL < N1) {
-                    for(int ij = 0; ij < Fij; ++ij) {
-                        int i = REF_ij_GPU[ij][0];
-                        int j = REF_ij_GPU[ij][1];
-                        double poly = pow(PixA_CX_GPU[ROW][COL], i) * pow(PixA_CY_GPU[ROW][COL], j);
-                        SPixA_Iij_GPU[ij][ROW][COL] = PixA_I_GPU[ROW][COL] * poly;
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['KerSpatial'] = _module
-        
-        if KerSpType == 'B-Spline':
-            
-            _refdict = {'N0': N0, 'N1': N1, 'Fi': Fi, 'Fj': Fj, 'Fij': Fij}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(int REF_ij_GPU[%(Fij)s][2],
-                double KerSplBasisX_GPU[%(Fi)s][%(N0)s], double KerSplBasisY_GPU[%(Fj)s][%(N1)s],
-                double PixA_I_GPU[%(N0)s][%(N1)s], double SPixA_Iij_GPU[%(Fij)s][%(N0)s][%(N1)s])
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-            
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int Fij = %(Fij)s;
-                
-                if (ROW < N0 && COL < N1) {
-                    for(int ij = 0; ij < Fij; ++ij) {
-                        int i = REF_ij_GPU[ij][0];
-                        int j = REF_ij_GPU[ij][1];
-                        double spl = KerSplBasisX_GPU[i][ROW] * KerSplBasisY_GPU[j][COL];
-                        SPixA_Iij_GPU[ij][ROW][COL] = PixA_I_GPU[ROW][COL] * spl;
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['KerSpatial'] = _module
-        
-        if SCALING_MODE == 'SEPARATE-VARYING':
-
-            if ScaSpType == 'Polynomial':
-
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int ScaREF_ij_GPU[%(Fij)s][2],
-                    double PixA_CX_GPU[%(N0)s][%(N1)s], double PixA_CY_GPU[%(N0)s][%(N1)s],
-                    double PixA_I_GPU[%(N0)s][%(N1)s], double ScaSPixA_Iij_GPU[%(Fij)s][%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    
-                    if (ROW < N0 && COL < N1) {
-                        for(int ij = 0; ij < Fij; ++ij) {
-                            int i = ScaREF_ij_GPU[ij][0];
-                            int j = ScaREF_ij_GPU[ij][1];
-
-                            if (i >= 0 && j >= 0) {
-                                double poly = pow(PixA_CX_GPU[ROW][COL], i) * pow(PixA_CY_GPU[ROW][COL], j);
-                                ScaSPixA_Iij_GPU[ij][ROW][COL] = PixA_I_GPU[ROW][COL] * poly;
-                            }
-
-                            if (i == -1 || j == -1) {
-                                ScaSPixA_Iij_GPU[ij][ROW][COL] = 0.0;
-                            } 
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['ScaSpatial'] = _module
-
-            if ScaSpType == 'B-Spline':
-
-                _refdict = {'N0': N0, 'N1': N1, 'Fi': Fi, 'Fj': Fj, 'Fij': Fij}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int ScaREF_ij_GPU[%(Fij)s][2],
-                    double ScaSplBasisX_GPU[%(Fi)s][%(N0)s], double ScaSplBasisY_GPU[%(Fj)s][%(N1)s],
-                    double PixA_I_GPU[%(N0)s][%(N1)s], double ScaSPixA_Iij_GPU[%(Fij)s][%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    
-                    if (ROW < N0 && COL < N1) {
-                        for(int ij = 0; ij < Fij; ++ij) {
-                            int i = ScaREF_ij_GPU[ij][0];
-                            int j = ScaREF_ij_GPU[ij][1];
-                            double spl = ScaSplBasisX_GPU[i][ROW] * ScaSplBasisY_GPU[j][COL];
-                            ScaSPixA_Iij_GPU[ij][ROW][COL] = PixA_I_GPU[ROW][COL] * spl;
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['ScaSpatial'] = _module
-        
-        # <*****> produce Tpq <*****> #
-        if BkgSpType == 'Polynomial':
-
-            _refdict = {'N0': N0, 'N1': N1, 'Fpq': Fpq}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(int REF_pq_GPU[%(Fpq)s][2],
-                double PixA_CX_GPU[%(N0)s][%(N1)s], double PixA_CY_GPU[%(N0)s][%(N1)s],
-                double SPixA_Tpq_GPU[%(Fpq)s][%(N0)s][%(N1)s])
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-            
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int Fpq = %(Fpq)s;
-                
-                if (ROW < N0 && COL < N1) {
-                    for(int pq = 0; pq < Fpq; ++pq) {
-                        int p = REF_pq_GPU[pq][0];
-                        int q = REF_pq_GPU[pq][1];
-                        double poly_bterm = pow(PixA_CX_GPU[ROW][COL], p) * pow(PixA_CY_GPU[ROW][COL], q);
-                        SPixA_Tpq_GPU[pq][ROW][COL] = poly_bterm;
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['BkgSpatial'] = _module
-        
-        if BkgSpType == 'B-Spline':
-
-            _refdict = {'N0': N0, 'N1': N1, 'Fp': Fp, 'Fq': Fq, 'Fpq': Fpq}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(int REF_pq_GPU[%(Fpq)s][2],
-                double BkgSplBasisX_GPU[%(Fp)s][%(N0)s], double BkgSplBasisY_GPU[%(Fq)s][%(N1)s],
-                double SPixA_Tpq_GPU[%(Fpq)s][%(N0)s][%(N1)s])
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-            
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int Fpq = %(Fpq)s;
-                
-                if (ROW < N0 && COL < N1) {
-                    for(int pq = 0; pq < Fpq; ++pq) {
-                        int p = REF_pq_GPU[pq][0];
-                        int q = REF_pq_GPU[pq][1];
-                        double spl_kterm = BkgSplBasisX_GPU[p][ROW] * BkgSplBasisY_GPU[q][COL];
-                        SPixA_Tpq_GPU[pq][ROW][COL] = spl_kterm;
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['BkgSpatial'] = _module
-
-        # ************************************ Constuct Linear System ************************************ #
-
-        # <*****> OMEGA & GAMMA & PSI & PHI & THETA & DELTA <*****> #
-        if SCALING_MODE in ['ENTANGLED', 'SEPARATE-CONSTANT']:
-
-            if not MINIMIZE_GPU_MEMORY_USAGE:
-                
-                # ** Hadamard Product [OMEGA]
-                # NOTE: As N0, N1 > MAX_THREADS_PER_BLOCK, here TpB == MAX_THREADS_PER_BLOCK
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'FOMG': FOMG, 'TpB': MAX_THREADS_PER_BLOCK}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_iji0j0_GPU[%(FOMG)s][2],
-                    cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex SPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex HpOMG_GPU[%(FOMG)s][%(N0)s][%(N1)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    int FOMG = %(FOMG)s;
-
-                    __shared__ cuDoubleComplex ShSPixA_FIij_GPU[%(Fij)s][%(TpB)s][%(TpB)s];
-                    if (ROW < N0 && COL < N1) {
-                        for(int ij = 0; ij < Fij; ++ij){
-                            ShSPixA_FIij_GPU[ij][threadIdx.x][threadIdx.y] = SPixA_FIij_GPU[ij][ROW][COL];
-                        }
-                    }
-
-                    __shared__ cuDoubleComplex ShSPixA_CFIij_GPU[%(Fij)s][%(TpB)s][%(TpB)s];
-                    if (ROW < N0 && COL < N1) {
-                        for(int ij = 0; ij < Fij; ++ij){
-                            ShSPixA_CFIij_GPU[ij][threadIdx.x][threadIdx.y] = SPixA_CFIij_GPU[ij][ROW][COL];
-                        }
-                    }
-                    __syncthreads();
-
-                    if (ROW < N0 && COL < N1) {
-                        for(int i8j8ij = 0; i8j8ij < FOMG; ++i8j8ij){
-                            
-                            int i8j8 = SREF_iji0j0_GPU[i8j8ij][0];
-                            int ij = SREF_iji0j0_GPU[i8j8ij][1];
-
-                            HpOMG_GPU[i8j8ij][ROW][COL] = cuCmul(ShSPixA_FIij_GPU[i8j8][threadIdx.x][threadIdx.y], 
-                                ShSPixA_CFIij_GPU[ij][threadIdx.x][threadIdx.y]);
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_OMG'] = _module
-
-                # ** Fill Linear-System [OMEGA]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fab': Fab, 'Fijab': Fijab, 'FOMG': FOMG, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                    double PreOMG_GPU[%(FOMG)s][%(N0)s][%(N1)s], double LHMAT_GPU[%(NEQ)s][%(NEQ)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                    
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    int Fijab = %(Fijab)s;
-                    
-                    if (ROW < Fijab && COL < Fijab) {
-                        
-                        // INDEX Analysis
-                        int i8j8 = SREF_ijab_GPU[ROW][0];
-                        int a8b8 = SREF_ijab_GPU[ROW][1];
-                        int ij = SREF_ijab_GPU[COL][0];
-                        int ab = SREF_ijab_GPU[COL][1];
-
-                        int a8 = REF_ab_GPU[a8b8][0];
-                        int b8 = REF_ab_GPU[a8b8][1];
-                        int a = REF_ab_GPU[ab][0];
-                        int b = REF_ab_GPU[ab][1];
-                        int idx = i8j8 * Fij + ij;
-
-                        // Define Mod_N0(rho), Mod_N1(eps)
-                        float tmp = 0.0;
-                        tmp = fmod(float(a8), float(N0));
-                        if (tmp < 0.0) {tmp += float(N0);}
-                        int MODa8 = tmp;
-
-                        tmp = fmod(float(b8), float(N1));
-                        if (tmp < 0.0) {tmp += float(N1);}
-                        int MODb8 = tmp;
-
-                        tmp = fmod(float(-a), float(N0));
-                        if (tmp < 0.0) {tmp += float(N0);}
-                        int MOD_a = tmp;
-
-                        tmp = fmod(float(-b), float(N1));
-                        if (tmp < 0.0) {tmp += float(N1);}
-                        int MOD_b = tmp;
-
-                        tmp = fmod(float(a8-a), float(N0));
-                        if (tmp < 0.0) {tmp += float(N0);}
-                        int MODa8_a = tmp;
-
-                        tmp = fmod(float(b8-b), float(N1));
-                        if (tmp < 0.0) {tmp += float(N1);}
-                        int MODb8_b = tmp;
-
-                        // Fill Linear System [A-component]
-                        if ((a8 != 0 || b8 != 0) && (a != 0 || b != 0)) {
-                            LHMAT_GPU[ROW][COL] = - PreOMG_GPU[idx][MODa8][MODb8]
-                                                - PreOMG_GPU[idx][MOD_a][MOD_b] 
-                                                + PreOMG_GPU[idx][MODa8_a][MODb8_b] 
-                                                + PreOMG_GPU[idx][0][0];
-                        }
-
-                        if ((a8 == 0 && b8 == 0) && (a != 0 || b != 0)) {
-                            LHMAT_GPU[ROW][COL] = PreOMG_GPU[idx][MOD_a][MOD_b] - PreOMG_GPU[idx][0][0];
-                        }
-
-                        if ((a8 != 0 || b8 != 0) && (a == 0 && b == 0)) {
-                            LHMAT_GPU[ROW][COL] = PreOMG_GPU[idx][MODa8][MODb8] - PreOMG_GPU[idx][0][0];
-                        }
-
-                        if ((a8 == 0 && b8 == 0) && (a == 0 && b == 0)) {
-                            LHMAT_GPU[ROW][COL] = PreOMG_GPU[idx][0][0];
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_OMG'] = _module
-
-                # ** Hadamard Product [GAMMA]
-                # NOTE: As N0, N1 > MAX_THREADS_PER_BLOCK, here TpB == MAX_THREADS_PER_BLOCK
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq, 'FGAM': FGAM, 'TpB': MAX_THREADS_PER_BLOCK}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_ijpq_GPU[%(FGAM)s][2], 
-                    cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex SPixA_CFTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex HpGAM_GPU[%(FGAM)s][%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    int Fpq = %(Fpq)s;
-                    int FGAM = %(FGAM)s;
-                    
-                    __shared__ cuDoubleComplex ShSPixA_FIij_GPU[%(Fij)s][%(TpB)s][%(TpB)s];
-                    if (ROW < N0 && COL < N1) {
-                        for(int ij = 0; ij < Fij; ++ij){
-                            ShSPixA_FIij_GPU[ij][threadIdx.x][threadIdx.y] = SPixA_FIij_GPU[ij][ROW][COL];
-                        }
-                    }
-
-                    __shared__ cuDoubleComplex ShSPixA_CFTpq_GPU[%(Fpq)s][%(TpB)s][%(TpB)s];
-                    if (ROW < N0 && COL < N1) {
-                        for(int pq = 0; pq < Fpq; ++pq){
-                            ShSPixA_CFTpq_GPU[pq][threadIdx.x][threadIdx.y] = SPixA_CFTpq_GPU[pq][ROW][COL];
-                        }
-                    }
-                    __syncthreads();
-                    
-                    if (ROW < N0 && COL < N1) {        
-                        for(int i8j8pq = 0; i8j8pq < FGAM; ++i8j8pq){
-
-                            int i8j8 = SREF_ijpq_GPU[i8j8pq][0];
-                            int pq = SREF_ijpq_GPU[i8j8pq][1];
-
-                            HpGAM_GPU[i8j8pq][ROW][COL] = cuCmul(ShSPixA_FIij_GPU[i8j8][threadIdx.x][threadIdx.y], 
-                                ShSPixA_CFTpq_GPU[pq][threadIdx.x][threadIdx.y]);
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_GAM'] = _module
-
-                # ** Fill Linear-System [GAMMA]
-                _refdict = {'N0': N0, 'N1': N1, 'Fab': Fab, 'Fpq': Fpq, 'Fijab': Fijab, 'FGAM': FGAM, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                    double PreGAM_GPU[%(FGAM)s][%(N0)s][%(N1)s], double LHMAT_GPU[%(NEQ)s][%(NEQ)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fpq = %(Fpq)s;
-                    int Fijab = %(Fijab)s;
-                    
-                    if (ROW < Fijab && COL < Fpq) {
-                        
-                        // INDEX Analysis
-                        int i8j8 = SREF_ijab_GPU[ROW][0];
-                        int a8b8 = SREF_ijab_GPU[ROW][1];
-                        int pq = COL;
-
-                        int a8 = REF_ab_GPU[a8b8][0];
-                        int b8 = REF_ab_GPU[a8b8][1];
-                        int idx = i8j8 * Fpq + pq;
-                        int cCOL = Fijab + COL;              // add offset
-
-                        // Define Mod_N0(rho), Mod_N1(eps)
-                        float tmp = 0.0;
-                        tmp = fmod(float(a8), float(N0));
-                        if (tmp < 0.0) {tmp += float(N0);}
-                        int MODa8 = tmp;
-
-                        tmp = fmod(float(b8), float(N1));
-                        if (tmp < 0.0) {tmp += float(N1);}
-                        int MODb8 = tmp;
-
-                        // Fill Linear System [B-component]
-                        if (a8 != 0 || b8 != 0) {
-                            LHMAT_GPU[ROW][cCOL] = PreGAM_GPU[idx][MODa8][MODb8] - PreGAM_GPU[idx][0][0];
-                        }
-
-                        if (a8 == 0 && b8 == 0) {
-                            LHMAT_GPU[ROW][cCOL] = PreGAM_GPU[idx][0][0];
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_GAM'] = _module
-
-                # ** Hadamard Product [PSI]
-                # NOTE: As N0, N1 > MAX_THREADS_PER_BLOCK, here TpB == MAX_THREADS_PER_BLOCK
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq, 'FPSI': FPSI, 'TpB': MAX_THREADS_PER_BLOCK}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_pqij_GPU[%(FPSI)s][2],
-                    cuDoubleComplex SPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex HpPSI_GPU[%(FPSI)s][%(N0)s][%(N1)s]) 
-                {    
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fpq = %(Fpq)s;
-                    int Fij = %(Fij)s;
-                    int FPSI = %(FPSI)s;
-                    
-                    __shared__ cuDoubleComplex ShSPixA_FTpq_GPU[%(Fpq)s][%(TpB)s][%(TpB)s];
-                    if (ROW < N0 && COL < N1) {
-                        for(int pq = 0; pq < Fpq; ++pq){
-                            ShSPixA_FTpq_GPU[pq][threadIdx.x][threadIdx.y] = SPixA_FTpq_GPU[pq][ROW][COL];
-                        }
-                    }
-
-                    __shared__ cuDoubleComplex ShSPixA_CFIij_GPU[%(Fij)s][%(TpB)s][%(TpB)s];
-                    if (ROW < N0 && COL < N1) {
-                        for(int ij = 0; ij < Fij; ++ij){
-                            ShSPixA_CFIij_GPU[ij][threadIdx.x][threadIdx.y] = SPixA_CFIij_GPU[ij][ROW][COL];
-                        }
-                    }
-                    __syncthreads();
-
-                    if (ROW < N0 && COL < N1) {
-                        for(int p8q8ij = 0; p8q8ij < FPSI; ++p8q8ij){
-                            
-                            int p8q8 = SREF_pqij_GPU[p8q8ij][0];
-                            int ij = SREF_pqij_GPU[p8q8ij][1];
-
-                            HpPSI_GPU[p8q8ij][ROW][COL] = cuCmul(ShSPixA_FTpq_GPU[p8q8][threadIdx.x][threadIdx.y], 
-                                ShSPixA_CFIij_GPU[ij][threadIdx.x][threadIdx.y]);
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_PSI'] = _module
-
-                # ** Fill Linear-System [PSI]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fab': Fab, 'Fpq': Fpq, 'Fijab': Fijab, 'FPSI': FPSI, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                    double PrePSI_GPU[%(FPSI)s][%(N0)s][%(N1)s], double LHMAT_GPU[%(NEQ)s][%(NEQ)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                    
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    int Fpq = %(Fpq)s;
-                    int Fijab = %(Fijab)s;
-
-                    if (ROW < Fpq && COL < Fijab) {
-
-                        // INDEX Analysis
-                        int cROW = Fijab + ROW;              // add offset
-                        int p8q8 = ROW;
-                        int ij = SREF_ijab_GPU[COL][0];
-                        int ab = SREF_ijab_GPU[COL][1];
-                        int a = REF_ab_GPU[ab][0];
-                        int b = REF_ab_GPU[ab][1];
-                        int idx = p8q8 * Fij + ij;
-
-                        // Define Mod_N0(rho), Mod_N1(eps)
-                        float tmp = 0.0;
-                        tmp = fmod(float(-a), float(N0));
-                        if (tmp < 0.0) {tmp += float(N0);}
-                        int MOD_a = tmp;
-
-                        tmp = fmod(float(-b), float(N1));
-                        if (tmp < 0.0) {tmp += float(N1);}
-                        int MOD_b = tmp;
-                        
-                        // Fill Linear System [B#-component]
-                        if (a != 0 || b != 0) {
-                            LHMAT_GPU[cROW][COL] = PrePSI_GPU[idx][MOD_a][MOD_b] - PrePSI_GPU[idx][0][0];
-                        }
-
-                        if (a == 0 && b == 0) {
-                            LHMAT_GPU[cROW][COL] = PrePSI_GPU[idx][0][0];
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_PSI'] = _module
-
-                # ** Hadamard Product [PHI]
-                # NOTE: As N0, N1 > MAX_THREADS_PER_BLOCK, here TpB == MAX_THREADS_PER_BLOCK
-                _refdict = {'N0': N0, 'N1': N1, 'Fpq': Fpq, 'FPHI': FPHI, 'TpB': MAX_THREADS_PER_BLOCK}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_pqp0q0_GPU[%(FPHI)s][2], 
-                    cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex SPixA_CFTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s],  
-                    cuDoubleComplex HpPHI_GPU[%(FPHI)s][%(N0)s][%(N1)s]) 
-                {    
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fpq = %(Fpq)s;
-                    int FPHI = %(FPHI)s;
-
-                    __shared__ cuDoubleComplex ShSPixA_FTpq_GPU[%(Fpq)s][%(TpB)s][%(TpB)s];
-                    if (ROW < N0 && COL < N1) {
-                        for(int pq = 0; pq < Fpq; ++pq){
-                            ShSPixA_FTpq_GPU[pq][threadIdx.x][threadIdx.y] = SPixA_FTpq_GPU[pq][ROW][COL];
-                        }
-                    }
-
-                    __shared__ cuDoubleComplex ShSPixA_CFTpq_GPU[%(Fpq)s][%(TpB)s][%(TpB)s];
-                    if (ROW < N0 && COL < N1) {
-                        for(int pq = 0; pq < Fpq; ++pq){
-                            ShSPixA_CFTpq_GPU[pq][threadIdx.x][threadIdx.y] = SPixA_CFTpq_GPU[pq][ROW][COL];
-                        }
-                    }
-                    __syncthreads();
-                    
-                    if (ROW < N0 && COL < N1) {
-                        for(int p8q8pq = 0; p8q8pq < FPHI; ++p8q8pq){
-                            
-                            int p8q8 = SREF_pqp0q0_GPU[p8q8pq][0];
-                            int pq = SREF_pqp0q0_GPU[p8q8pq][1];
-
-                            HpPHI_GPU[p8q8pq][ROW][COL] = cuCmul(ShSPixA_FTpq_GPU[p8q8][threadIdx.x][threadIdx.y], 
-                                ShSPixA_CFTpq_GPU[pq][threadIdx.x][threadIdx.y]);
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_PHI'] = _module
-
-                # ** Fill Linear-System [PHI]
-                _refdict = {'N0': N0, 'N1': N1, 'Fpq': Fpq, 'Fijab': Fijab, 'FPHI': FPHI, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(double PrePHI_GPU[%(FPHI)s][%(N0)s][%(N1)s], 
-                    double LHMAT_GPU[%(NEQ)s][%(NEQ)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                    
-                    int Fpq = %(Fpq)s;
-                    int Fijab = %(Fijab)s;
-
-                    if (ROW < Fpq && COL < Fpq) {
-                        
-                        // INDEX Analysis
-                        int cROW = Fijab + ROW;              // add offset
-                        int cCOL = Fijab + COL;              // add offset
-                        
-                        int p8q8 = ROW;
-                        int pq = COL;
-                        int idx = p8q8 * Fpq + pq;
-
-                        // Fill Linear System [C-component]
-                        LHMAT_GPU[cROW][cCOL] = PrePHI_GPU[idx][0][0];
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_PHI'] = _module
-
-            if MINIMIZE_GPU_MEMORY_USAGE:
-
-                # ** Hadamard Product [OMEGA]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'FOMG': FOMG}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_iji0j0_GPU[%(FOMG)s][2],
-                    cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex SPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpOMG_GPU[%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-
-                    if (ROW < N0 && COL < N1) {
-                        
-                        int i8j8 = SREF_iji0j0_GPU[cIdx][0];
-                        int ij = SREF_iji0j0_GPU[cIdx][1];
-
-                        cHpOMG_GPU[ROW][COL] = cuCmul(SPixA_FIij_GPU[i8j8][ROW][COL], 
-                            SPixA_CFIij_GPU[ij][ROW][COL]);
-                    
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_OMG'] = _module
-
-                # ** Fill Linear-System [OMEGA]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fab': Fab, 'Fijab': Fijab, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                    int cIdx, double cPreOMG_GPU[%(N0)s][%(N1)s], double LHMAT_GPU[%(NEQ)s][%(NEQ)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                    
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    int Fijab = %(Fijab)s;
-                    
-                    if (ROW < Fijab && COL < Fijab) {
-                        
-                        // INDEX Analysis
-                        int i8j8 = SREF_ijab_GPU[ROW][0];
-                        int a8b8 = SREF_ijab_GPU[ROW][1];
-                        int ij = SREF_ijab_GPU[COL][0];
-                        int ab = SREF_ijab_GPU[COL][1];
-
-                        int a8 = REF_ab_GPU[a8b8][0];
-                        int b8 = REF_ab_GPU[a8b8][1];
-                        int a = REF_ab_GPU[ab][0];
-                        int b = REF_ab_GPU[ab][1];
-                        int idx = i8j8 * Fij + ij;
-
-                        if (idx == cIdx) {
-                        
-                            // Define Mod_N0(rho), Mod_N1(eps)
-                            float tmp = 0.0;
-                            tmp = fmod(float(a8), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MODa8 = tmp;
-
-                            tmp = fmod(float(b8), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MODb8 = tmp;
-
-                            tmp = fmod(float(-a), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MOD_a = tmp;
-
-                            tmp = fmod(float(-b), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MOD_b = tmp;
-
-                            tmp = fmod(float(a8-a), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MODa8_a = tmp;
-
-                            tmp = fmod(float(b8-b), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MODb8_b = tmp;
-
-                            // Fill Linear System [A-component]
-                            if ((a8 != 0 || b8 != 0) && (a != 0 || b != 0)) {
-                                LHMAT_GPU[ROW][COL] = - cPreOMG_GPU[MODa8][MODb8]
-                                                    - cPreOMG_GPU[MOD_a][MOD_b] 
-                                                    + cPreOMG_GPU[MODa8_a][MODb8_b] 
-                                                    + cPreOMG_GPU[0][0];
-                            }
-
-                            if ((a8 == 0 && b8 == 0) && (a != 0 || b != 0)) {
-                                LHMAT_GPU[ROW][COL] = cPreOMG_GPU[MOD_a][MOD_b] - cPreOMG_GPU[0][0];
-                            }
-
-                            if ((a8 != 0 || b8 != 0) && (a == 0 && b == 0)) {
-                                LHMAT_GPU[ROW][COL] = cPreOMG_GPU[MODa8][MODb8] - cPreOMG_GPU[0][0];
-                            }
-
-                            if ((a8 == 0 && b8 == 0) && (a == 0 && b == 0)) {
-                                LHMAT_GPU[ROW][COL] = cPreOMG_GPU[0][0];
-                            }
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_OMG'] = _module
-
-                # ** Hadamard Product [GAMMA]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq, 'FGAM': FGAM}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_ijpq_GPU[%(FGAM)s][2], 
-                    cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex SPixA_CFTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpGAM_GPU[%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    
-                    if (ROW < N0 && COL < N1) {
-                    
-                        int i8j8 = SREF_ijpq_GPU[cIdx][0];
-                        int pq = SREF_ijpq_GPU[cIdx][1];
-
-                        cHpGAM_GPU[ROW][COL] = cuCmul(SPixA_FIij_GPU[i8j8][ROW][COL], 
-                            SPixA_CFTpq_GPU[pq][ROW][COL]);
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_GAM'] = _module
-
-                # ** Fill Linear-System [GAMMA]
-                _refdict = {'N0': N0, 'N1': N1, 'Fab': Fab, 'Fpq': Fpq, 'Fijab': Fijab, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                    int cIdx, double cPreGAM_GPU[%(N0)s][%(N1)s], double LHMAT_GPU[%(NEQ)s][%(NEQ)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fpq = %(Fpq)s;
-                    int Fijab = %(Fijab)s;
-                    
-                    if (ROW < Fijab && COL < Fpq) {
-                        
-                        // INDEX Analysis
-                        int i8j8 = SREF_ijab_GPU[ROW][0];
-                        int a8b8 = SREF_ijab_GPU[ROW][1];
-                        int pq = COL;
-
-                        int a8 = REF_ab_GPU[a8b8][0];
-                        int b8 = REF_ab_GPU[a8b8][1];
-                        int idx = i8j8 * Fpq + pq;
-                        int cCOL = Fijab + COL;              // add offset
-
-                        if (idx == cIdx) {
-
-                            // Define Mod_N0(rho), Mod_N1(eps)
-                            float tmp = 0.0;
-                            tmp = fmod(float(a8), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MODa8 = tmp;
-
-                            tmp = fmod(float(b8), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MODb8 = tmp;
-
-                            // Fill Linear System [B-component]
-                            if (a8 != 0 || b8 != 0) {
-                                LHMAT_GPU[ROW][cCOL] = cPreGAM_GPU[MODa8][MODb8] - cPreGAM_GPU[0][0];
-                            }
-
-                            if (a8 == 0 && b8 == 0) {
-                                LHMAT_GPU[ROW][cCOL] = cPreGAM_GPU[0][0];
-                            }
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_GAM'] = _module
-
-                # ** Hadamard Product [PSI]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq, 'FPSI': FPSI}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_pqij_GPU[%(FPSI)s][2],
-                    cuDoubleComplex SPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpPSI_GPU[%(N0)s][%(N1)s])
-                {    
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-
-                    if (ROW < N0 && COL < N1) {
-    
-                        int p8q8 = SREF_pqij_GPU[cIdx][0];
-                        int ij = SREF_pqij_GPU[cIdx][1];
-
-                        cHpPSI_GPU[ROW][COL] = cuCmul(SPixA_FTpq_GPU[p8q8][ROW][COL], 
-                            SPixA_CFIij_GPU[ij][ROW][COL]);
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_PSI'] = _module
-
-                # ** Fill Linear-System [PSI]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fab': Fab, 'Fpq': Fpq, 'Fijab': Fijab, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                    int cIdx, double cPrePSI_GPU[%(N0)s][%(N1)s], double LHMAT_GPU[%(NEQ)s][%(NEQ)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                    
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    int Fpq = %(Fpq)s;
-                    int Fijab = %(Fijab)s;
-
-                    if (ROW < Fpq && COL < Fijab) {
-
-                        // INDEX Analysis
-                        int cROW = Fijab + ROW;              // add offset
-                        int p8q8 = ROW;
-                        int ij = SREF_ijab_GPU[COL][0];
-                        int ab = SREF_ijab_GPU[COL][1];
-                        int a = REF_ab_GPU[ab][0];
-                        int b = REF_ab_GPU[ab][1];
-                        int idx = p8q8 * Fij + ij;
-
-                        if (idx == cIdx) {
-
-                            // Define Mod_N0(rho), Mod_N1(eps)
-                            float tmp = 0.0;
-                            tmp = fmod(float(-a), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MOD_a = tmp;
-
-                            tmp = fmod(float(-b), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MOD_b = tmp;
-                            
-                            // Fill Linear System [B#-component]
-                            if (a != 0 || b != 0) {
-                                LHMAT_GPU[cROW][COL] = cPrePSI_GPU[MOD_a][MOD_b] - cPrePSI_GPU[0][0];
-                            }
-
-                            if (a == 0 && b == 0) {
-                                LHMAT_GPU[cROW][COL] = cPrePSI_GPU[0][0];
-                            }
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_PSI'] = _module
-
-                # ** Hadamard Product [PHI]
-                _refdict = {'N0': N0, 'N1': N1, 'Fpq': Fpq, 'FPHI': FPHI}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_pqp0q0_GPU[%(FPHI)s][2], 
-                    cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex SPixA_CFTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s],  
-                    int cIdx, cuDoubleComplex cHpPHI_GPU[%(N0)s][%(N1)s])
-                {    
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fpq = %(Fpq)s;
-                    int FPHI = %(FPHI)s;
-
-                    if (ROW < N0 && COL < N1) {
-                    
-                        int p8q8 = SREF_pqp0q0_GPU[cIdx][0];
-                        int pq = SREF_pqp0q0_GPU[cIdx][1];
-
-                        cHpPHI_GPU[ROW][COL] = cuCmul(SPixA_FTpq_GPU[p8q8][ROW][COL], 
-                            SPixA_CFTpq_GPU[pq][ROW][COL]);
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_PHI'] = _module
-
-                # ** Fill Linear-System [PHI]
-                _refdict = {'N0': N0, 'N1': N1, 'Fpq': Fpq, 'Fijab': Fijab, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int cIdx, double cPrePHI_GPU[%(N0)s][%(N1)s],
-                    double LHMAT_GPU[%(NEQ)s][%(NEQ)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                    
-                    int Fpq = %(Fpq)s;
-                    int Fijab = %(Fijab)s;
-
-                    if (ROW < Fpq && COL < Fpq) {
-                        
-                        // INDEX Analysis
-                        int cROW = Fijab + ROW;              // add offset
-                        int cCOL = Fijab + COL;              // add offset
-                        
-                        int p8q8 = ROW;
-                        int pq = COL;
-                        int idx = p8q8 * Fpq + pq;
-
-                        if (idx == cIdx) {
-                        
-                            // Fill Linear System [C-component]
-                            LHMAT_GPU[cROW][cCOL] = cPrePHI_GPU[0][0];
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_PHI'] = _module
-
-            # ** Hadamard Product [THETA]
-            _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'FTHE': FTHE}
-            _funcstr = r"""
-            #include "cuComplex.h"
-            extern "C" __global__ void kmain(cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                cuDoubleComplex PixA_CFJ_GPU[%(N0)s][%(N1)s], cuDoubleComplex HpTHE_GPU[%(FTHE)s][%(N0)s][%(N1)s])
-            {    
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int FTHE = %(FTHE)s;
-
-                if (ROW < N0 && COL < N1) {
-                    for(int i8j8 = 0; i8j8 < FTHE; ++i8j8){
-                        HpTHE_GPU[i8j8][ROW][COL] = cuCmul(PixA_CFJ_GPU[ROW][COL], SPixA_FIij_GPU[i8j8][ROW][COL]);
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-            SFFTModule_dict['HadProd_THE'] = _module
-
-            # ** Fill Linear-System [THETA]  
-            _refdict = {'N0': N0, 'N1': N1, 'NEQ': NEQ, 'Fijab': Fijab, 'Fab': Fab, 'FTHE': FTHE}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                double PreTHE_GPU[%(FTHE)s][%(N0)s][%(N1)s], double RHb_GPU[%(NEQ)s]) 
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int Fijab = %(Fijab)s;
-
-                if (ROW < Fijab && COL == 0) {
-
-                    // INDEX Analysis
-                    int i8j8 = SREF_ijab_GPU[ROW][0];
-                    int a8b8 = SREF_ijab_GPU[ROW][1];
-                    int a8 = REF_ab_GPU[a8b8][0];
-                    int b8 = REF_ab_GPU[a8b8][1];
-                    int idx = i8j8;
-
-                    // Define Mod_N0(rho), Mod_N1(eps)
-                    float tmp = 0.0;
-                    tmp = fmod(float(a8), float(N0));
-                    if (tmp < 0.0) {tmp += float(N0);}
-                    int MODa8 = tmp;
-
-                    tmp = fmod(float(b8), float(N1));
-                    if (tmp < 0.0) {tmp += float(N1);}
-                    int MODb8 = tmp;
-                    
-                    // Fill Linear System [D-component]
-                    if (a8 != 0 || b8 != 0) {
-                        RHb_GPU[ROW] = PreTHE_GPU[idx][MODa8][MODb8] - PreTHE_GPU[idx][0][0];
-                    }
-
-                    if (a8 == 0 && b8 == 0) {
-                        RHb_GPU[ROW] = PreTHE_GPU[idx][0][0];
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['FillLS_THE'] = _module
-
-            # ** Hadamard Product [DELTA]
-            _refdict = {'N0': N0, 'N1': N1, 'Fpq': Fpq, 'FDEL': FDEL}
-            _funcstr = r"""
-            #include "cuComplex.h"
-            extern "C" __global__ void kmain(cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex PixA_CFJ_GPU[%(N0)s][%(N1)s], cuDoubleComplex HpDEL_GPU[%(FDEL)s][%(N0)s][%(N1)s])
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int FDEL = %(FDEL)s;
-
-                if (ROW < N0 && COL < N1) {
-                    for(int p8q8 = 0; p8q8 < FDEL; ++p8q8){
-                        HpDEL_GPU[p8q8][ROW][COL] = 
-                            cuCmul(PixA_CFJ_GPU[ROW][COL], SPixA_FTpq_GPU[p8q8][ROW][COL]);
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-            SFFTModule_dict['HadProd_DEL'] = _module
-
-            # ** Fill Linear-System [DELTA]
-            _refdict = {'N0': N0, 'N1': N1, 'NEQ': NEQ, 'Fpq': Fpq, 'Fijab': Fijab, 'FDEL': FDEL}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(double PreDEL_GPU[%(FDEL)s][%(N0)s][%(N1)s], 
-                double RHb_GPU[%(NEQ)s]) 
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                
-                int Fpq = %(Fpq)s;
-                int Fijab = %(Fijab)s;
-
-                if (ROW < Fpq && COL == 0) {
-                    // INDEX Analysis
-                    int cROW = Fijab + ROW;              // add offset
-                    int idx = ROW;                       // i.e. p8q8
-
-                    // Fill Linear System [E-component]
-                    RHb_GPU[cROW] = PreDEL_GPU[idx][0][0];
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['FillLS_DEL'] = _module
-
-        if SCALING_MODE == 'SEPARATE-VARYING':
-            assert MINIMIZE_GPU_MEMORY_USAGE # Force
-            
-            if MINIMIZE_GPU_MEMORY_USAGE:
-            
-                # ** Hadamard Product [OMEGA_11]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'FOMG': FOMG}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_iji0j0_GPU[%(FOMG)s][2],
-                    cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex SPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpOMG11_GPU[%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-
-                    if (ROW < N0 && COL < N1) {
-                        
-                        int i8j8 = SREF_iji0j0_GPU[cIdx][0];
-                        int ij = SREF_iji0j0_GPU[cIdx][1];
-
-                        cHpOMG11_GPU[ROW][COL] = cuCmul(SPixA_FIij_GPU[i8j8][ROW][COL], 
-                            SPixA_CFIij_GPU[ij][ROW][COL]);
-                    
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_OMG11'] = _module
-
-                # ** Hadamard Product [OMEGA_01]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'FOMG': FOMG}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_iji0j0_GPU[%(FOMG)s][2],
-                    cuDoubleComplex ScaSPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex SPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpOMG01_GPU[%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-
-                    if (ROW < N0 && COL < N1) {
-                        
-                        int i8j8 = SREF_iji0j0_GPU[cIdx][0];
-                        int ij = SREF_iji0j0_GPU[cIdx][1];
-
-                        cHpOMG01_GPU[ROW][COL] = cuCmul(ScaSPixA_FIij_GPU[i8j8][ROW][COL], 
-                            SPixA_CFIij_GPU[ij][ROW][COL]);
-                    
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_OMG01'] = _module
-
-                # ** Hadamard Product [OMEGA_10]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'FOMG': FOMG}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_iji0j0_GPU[%(FOMG)s][2],
-                    cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex ScaSPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpOMG10_GPU[%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-
-                    if (ROW < N0 && COL < N1) {
-                        
-                        int i8j8 = SREF_iji0j0_GPU[cIdx][0];
-                        int ij = SREF_iji0j0_GPU[cIdx][1];
-
-                        cHpOMG10_GPU[ROW][COL] = cuCmul(SPixA_FIij_GPU[i8j8][ROW][COL], 
-                            ScaSPixA_CFIij_GPU[ij][ROW][COL]);
-                    
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_OMG10'] = _module
-
-                # ** Hadamard Product [OMEGA_00]  # TODO: redundant, only one element used.
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'FOMG': FOMG}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_iji0j0_GPU[%(FOMG)s][2],
-                    cuDoubleComplex ScaSPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex ScaSPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpOMG00_GPU[%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-
-                    if (ROW < N0 && COL < N1) {
-                        
-                        int i8j8 = SREF_iji0j0_GPU[cIdx][0];
-                        int ij = SREF_iji0j0_GPU[cIdx][1];
-
-                        cHpOMG00_GPU[ROW][COL] = cuCmul(ScaSPixA_FIij_GPU[i8j8][ROW][COL], 
-                            ScaSPixA_CFIij_GPU[ij][ROW][COL]);
-                    
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_OMG00'] = _module
-
-                # ** Fill Linear-System [OMEGA]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fab': Fab, 'Fijab': Fijab, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                    int cIdx, double cPreOMG11_GPU[%(N0)s][%(N1)s], double cPreOMG01_GPU[%(N0)s][%(N1)s], 
-                    double cPreOMG10_GPU[%(N0)s][%(N1)s], double cPreOMG00_GPU[%(N0)s][%(N1)s], 
-                    double LHMAT_GPU[%(NEQ)s][%(NEQ)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                    
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    int Fijab = %(Fijab)s;
-                    
-                    if (ROW < Fijab && COL < Fijab) {
-                        
-                        // INDEX Analysis
-                        int i8j8 = SREF_ijab_GPU[ROW][0];
-                        int a8b8 = SREF_ijab_GPU[ROW][1];
-                        int ij = SREF_ijab_GPU[COL][0];
-                        int ab = SREF_ijab_GPU[COL][1];
-
-                        int a8 = REF_ab_GPU[a8b8][0];
-                        int b8 = REF_ab_GPU[a8b8][1];
-                        int a = REF_ab_GPU[ab][0];
-                        int b = REF_ab_GPU[ab][1];
-                        int idx = i8j8 * Fij + ij;
-
-                        if (idx == cIdx) {
-                        
-                            // Define Mod_N0(rho), Mod_N1(eps)
-                            float tmp = 0.0;
-                            tmp = fmod(float(a8), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MODa8 = tmp;
-
-                            tmp = fmod(float(b8), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MODb8 = tmp;
-
-                            tmp = fmod(float(-a), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MOD_a = tmp;
-
-                            tmp = fmod(float(-b), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MOD_b = tmp;
-
-                            tmp = fmod(float(a8-a), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MODa8_a = tmp;
-
-                            tmp = fmod(float(b8-b), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MODb8_b = tmp;
-
-                            // Fill Linear System [A-component]
-                            if ((a8 != 0 || b8 != 0) && (a != 0 || b != 0)) {
-                                LHMAT_GPU[ROW][COL] = - cPreOMG11_GPU[MODa8][MODb8]
-                                                      - cPreOMG11_GPU[MOD_a][MOD_b] 
-                                                      + cPreOMG11_GPU[MODa8_a][MODb8_b] 
-                                                      + cPreOMG11_GPU[0][0];
-                            }
-
-                            if ((a8 == 0 && b8 == 0) && (a != 0 || b != 0)) {
-                                LHMAT_GPU[ROW][COL] = cPreOMG01_GPU[MOD_a][MOD_b] 
-                                                      - cPreOMG01_GPU[0][0];
-                            }
-
-                            if ((a8 != 0 || b8 != 0) && (a == 0 && b == 0)) {
-                                LHMAT_GPU[ROW][COL] = cPreOMG10_GPU[MODa8][MODb8] 
-                                                      - cPreOMG10_GPU[0][0];
-                            }
-
-                            if ((a8 == 0 && b8 == 0) && (a == 0 && b == 0)) {
-                                LHMAT_GPU[ROW][COL] = cPreOMG00_GPU[0][0];
-                            }
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_OMG'] = _module
-
-                # ** Hadamard Product [GAMMA_1]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq, 'FGAM': FGAM}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_ijpq_GPU[%(FGAM)s][2], 
-                    cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex SPixA_CFTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpGAM1_GPU[%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    
-                    if (ROW < N0 && COL < N1) {
-                    
-                        int i8j8 = SREF_ijpq_GPU[cIdx][0];
-                        int pq = SREF_ijpq_GPU[cIdx][1];
-
-                        cHpGAM1_GPU[ROW][COL] = cuCmul(SPixA_FIij_GPU[i8j8][ROW][COL], 
-                            SPixA_CFTpq_GPU[pq][ROW][COL]);
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_GAM1'] = _module
-
-                # ** Hadamard Product [GAMMA_0]  # TODO: redundant, only one element used.
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq, 'FGAM': FGAM}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_ijpq_GPU[%(FGAM)s][2], 
-                    cuDoubleComplex ScaSPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                    cuDoubleComplex SPixA_CFTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpGAM0_GPU[%(N0)s][%(N1)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    
-                    if (ROW < N0 && COL < N1) {
-                    
-                        int i8j8 = SREF_ijpq_GPU[cIdx][0];
-                        int pq = SREF_ijpq_GPU[cIdx][1];
-
-                        cHpGAM0_GPU[ROW][COL] = cuCmul(ScaSPixA_FIij_GPU[i8j8][ROW][COL], 
-                            SPixA_CFTpq_GPU[pq][ROW][COL]);
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_GAM0'] = _module
-
-                # ** Fill Linear-System [GAMMA]
-                _refdict = {'N0': N0, 'N1': N1, 'Fab': Fab, 'Fpq': Fpq, 'Fijab': Fijab, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                    int cIdx, double cPreGAM1_GPU[%(N0)s][%(N1)s], double cPreGAM0_GPU[%(N0)s][%(N1)s], 
-                    double LHMAT_GPU[%(NEQ)s][%(NEQ)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fpq = %(Fpq)s;
-                    int Fijab = %(Fijab)s;
-                    
-                    if (ROW < Fijab && COL < Fpq) {
-                        
-                        // INDEX Analysis
-                        int i8j8 = SREF_ijab_GPU[ROW][0];
-                        int a8b8 = SREF_ijab_GPU[ROW][1];
-                        int pq = COL;
-
-                        int a8 = REF_ab_GPU[a8b8][0];
-                        int b8 = REF_ab_GPU[a8b8][1];
-                        int idx = i8j8 * Fpq + pq;
-                        int cCOL = Fijab + COL;       // add offset
-
-                        if (idx == cIdx) {
-
-                            // Define Mod_N0(rho), Mod_N1(eps)
-                            float tmp = 0.0;
-                            tmp = fmod(float(a8), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MODa8 = tmp;
-
-                            tmp = fmod(float(b8), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MODb8 = tmp;
-
-                            // Fill Linear System [B-component]
-                            if (a8 != 0 || b8 != 0) {
-                                LHMAT_GPU[ROW][cCOL] = cPreGAM1_GPU[MODa8][MODb8] 
-                                                       - cPreGAM1_GPU[0][0];
-                            }
-
-                            if (a8 == 0 && b8 == 0) {
-                                LHMAT_GPU[ROW][cCOL] = cPreGAM0_GPU[0][0];
-                            }
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_GAM'] = _module
-
-                # ** Hadamard Product [PSI_1]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq, 'FPSI': FPSI}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_pqij_GPU[%(FPSI)s][2],
-                    cuDoubleComplex SPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpPSI1_GPU[%(N0)s][%(N1)s])
-                {    
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-
-                    if (ROW < N0 && COL < N1) {
-
-                        int p8q8 = SREF_pqij_GPU[cIdx][0];
-                        int ij = SREF_pqij_GPU[cIdx][1];
-
-                        cHpPSI1_GPU[ROW][COL] = cuCmul(SPixA_FTpq_GPU[p8q8][ROW][COL], 
-                            SPixA_CFIij_GPU[ij][ROW][COL]);
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_PSI1'] = _module
-
-                # ** Hadamard Product [PSI_0]  # TODO: redundant, only one element used.
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fpq': Fpq, 'FPSI': FPSI}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_pqij_GPU[%(FPSI)s][2],
-                    cuDoubleComplex ScaSPixA_CFIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    int cIdx, cuDoubleComplex cHpPSI0_GPU[%(N0)s][%(N1)s])
-                {    
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-
-                    if (ROW < N0 && COL < N1) {
-
-                        int p8q8 = SREF_pqij_GPU[cIdx][0];
-                        int ij = SREF_pqij_GPU[cIdx][1];
-
-                        cHpPSI0_GPU[ROW][COL] = cuCmul(SPixA_FTpq_GPU[p8q8][ROW][COL], 
-                            ScaSPixA_CFIij_GPU[ij][ROW][COL]);
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_PSI0'] = _module
-
-                # ** Fill Linear-System [PSI]
-                _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'Fab': Fab, 'Fpq': Fpq, 'Fijab': Fijab, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                    int cIdx, double cPrePSI1_GPU[%(N0)s][%(N1)s], double cPrePSI0_GPU[%(N0)s][%(N1)s], 
-                    double LHMAT_GPU[%(NEQ)s][%(NEQ)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                    
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fij = %(Fij)s;
-                    int Fpq = %(Fpq)s;
-                    int Fijab = %(Fijab)s;
-
-                    if (ROW < Fpq && COL < Fijab) {
-
-                        // INDEX Analysis
-                        int cROW = Fijab + ROW;              // add offset
-                        int p8q8 = ROW;
-                        int ij = SREF_ijab_GPU[COL][0];
-                        int ab = SREF_ijab_GPU[COL][1];
-                        int a = REF_ab_GPU[ab][0];
-                        int b = REF_ab_GPU[ab][1];
-                        int idx = p8q8 * Fij + ij;
-
-                        if (idx == cIdx) {
-
-                            // Define Mod_N0(rho), Mod_N1(eps)
-                            float tmp = 0.0;
-                            tmp = fmod(float(-a), float(N0));
-                            if (tmp < 0.0) {tmp += float(N0);}
-                            int MOD_a = tmp;
-
-                            tmp = fmod(float(-b), float(N1));
-                            if (tmp < 0.0) {tmp += float(N1);}
-                            int MOD_b = tmp;
-                            
-                            // Fill Linear System [B#-component]
-                            if (a != 0 || b != 0) {
-                                LHMAT_GPU[cROW][COL] = cPrePSI1_GPU[MOD_a][MOD_b] 
-                                                       - cPrePSI1_GPU[0][0];
-                            }
-
-                            if (a == 0 && b == 0) {
-                                LHMAT_GPU[cROW][COL] = cPrePSI0_GPU[0][0];
-                            }
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_PSI'] = _module
-
-                # ** Hadamard Product [PHI]
-                _refdict = {'N0': N0, 'N1': N1, 'Fpq': Fpq, 'FPHI': FPHI}
-                _funcstr = r"""
-                #include "cuComplex.h"
-                extern "C" __global__ void kmain(int SREF_pqp0q0_GPU[%(FPHI)s][2], 
-                    cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                    cuDoubleComplex SPixA_CFTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s],  
-                    int cIdx, cuDoubleComplex cHpPHI_GPU[%(N0)s][%(N1)s])
-                {    
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int N0 = %(N0)s;
-                    int N1 = %(N1)s;
-                    int Fpq = %(Fpq)s;
-                    int FPHI = %(FPHI)s;
-
-                    if (ROW < N0 && COL < N1) {
-                    
-                        int p8q8 = SREF_pqp0q0_GPU[cIdx][0];
-                        int pq = SREF_pqp0q0_GPU[cIdx][1];
-
-                        cHpPHI_GPU[ROW][COL] = cuCmul(SPixA_FTpq_GPU[p8q8][ROW][COL], 
-                            SPixA_CFTpq_GPU[pq][ROW][COL]);
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-                SFFTModule_dict['HadProd_PHI'] = _module
-
-                # ** Fill Linear-System [PHI]
-                _refdict = {'N0': N0, 'N1': N1, 'Fpq': Fpq, 'Fijab': Fijab, 'NEQ': NEQ}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int cIdx, double cPrePHI_GPU[%(N0)s][%(N1)s],
-                    double LHMAT_GPU[%(NEQ)s][%(NEQ)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                    
-                    int Fpq = %(Fpq)s;
-                    int Fijab = %(Fijab)s;
-
-                    if (ROW < Fpq && COL < Fpq) {
-                        
-                        // INDEX Analysis
-                        int cROW = Fijab + ROW;              // add offset
-                        int cCOL = Fijab + COL;              // add offset
-                        
-                        int p8q8 = ROW;
-                        int pq = COL;
-                        int idx = p8q8 * Fpq + pq;
-
-                        if (idx == cIdx) {
-                        
-                            // Fill Linear System [C-component]
-                            LHMAT_GPU[cROW][cCOL] = cPrePHI_GPU[0][0];
-                        }
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['FillLS_PHI'] = _module
-
-            # ** Hadamard Product [THETA_1]
-            _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'FTHE': FTHE}
-            _funcstr = r"""
-            #include "cuComplex.h"
-            extern "C" __global__ void kmain(cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                cuDoubleComplex PixA_CFJ_GPU[%(N0)s][%(N1)s], cuDoubleComplex HpTHE1_GPU[%(FTHE)s][%(N0)s][%(N1)s])
-            {    
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int FTHE = %(FTHE)s;
-
-                if (ROW < N0 && COL < N1) {
-                    for(int i8j8 = 0; i8j8 < FTHE; ++i8j8){
-                        HpTHE1_GPU[i8j8][ROW][COL] = cuCmul(PixA_CFJ_GPU[ROW][COL], 
-                            SPixA_FIij_GPU[i8j8][ROW][COL]);
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-            SFFTModule_dict['HadProd_THE1'] = _module
-
-            # ** Hadamard Product [THETA_0]  # TODO: redundant, only one element used.
-            _refdict = {'N0': N0, 'N1': N1, 'Fij': Fij, 'FTHE': FTHE}
-            _funcstr = r"""
-            #include "cuComplex.h"
-            extern "C" __global__ void kmain(cuDoubleComplex ScaSPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s],
-                cuDoubleComplex PixA_CFJ_GPU[%(N0)s][%(N1)s], cuDoubleComplex HpTHE0_GPU[%(FTHE)s][%(N0)s][%(N1)s])
-            {    
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int FTHE = %(FTHE)s;
-
-                if (ROW < N0 && COL < N1) {
-                    for(int i8j8 = 0; i8j8 < FTHE; ++i8j8){
-                        HpTHE0_GPU[i8j8][ROW][COL] = cuCmul(PixA_CFJ_GPU[ROW][COL], 
-                            ScaSPixA_FIij_GPU[i8j8][ROW][COL]);
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-            SFFTModule_dict['HadProd_THE0'] = _module
-
-            # ** Fill Linear-System [THETA]  
-            _refdict = {'N0': N0, 'N1': N1, 'NEQ': NEQ, 'Fijab': Fijab, 'Fab': Fab, 'FTHE': FTHE}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2], 
-                double PreTHE1_GPU[%(FTHE)s][%(N0)s][%(N1)s], double PreTHE0_GPU[%(FTHE)s][%(N0)s][%(N1)s], 
-                double RHb_GPU[%(NEQ)s]) 
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int Fijab = %(Fijab)s;
-
-                if (ROW < Fijab && COL == 0) {
-
-                    // INDEX Analysis
-                    int i8j8 = SREF_ijab_GPU[ROW][0];
-                    int a8b8 = SREF_ijab_GPU[ROW][1];
-                    int a8 = REF_ab_GPU[a8b8][0];
-                    int b8 = REF_ab_GPU[a8b8][1];
-                    int idx = i8j8;
-
-                    // Define Mod_N0(rho), Mod_N1(eps)
-                    float tmp = 0.0;
-                    tmp = fmod(float(a8), float(N0));
-                    if (tmp < 0.0) {tmp += float(N0);}
-                    int MODa8 = tmp;
-
-                    tmp = fmod(float(b8), float(N1));
-                    if (tmp < 0.0) {tmp += float(N1);}
-                    int MODb8 = tmp;
-                    
-                    // Fill Linear System [D-component]
-                    if (a8 != 0 || b8 != 0) {
-                        RHb_GPU[ROW] = PreTHE1_GPU[idx][MODa8][MODb8] 
-                                       - PreTHE1_GPU[idx][0][0];
-                    }
-
-                    if (a8 == 0 && b8 == 0) {
-                        RHb_GPU[ROW] = PreTHE0_GPU[idx][0][0];
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['FillLS_THE'] = _module
-
-            # ** Hadamard Product [DELTA]
-            _refdict = {'N0': N0, 'N1': N1, 'Fpq': Fpq, 'FDEL': FDEL}
-            _funcstr = r"""
-            #include "cuComplex.h"
-            extern "C" __global__ void kmain(cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex PixA_CFJ_GPU[%(N0)s][%(N1)s], cuDoubleComplex HpDEL_GPU[%(FDEL)s][%(N0)s][%(N1)s])
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int FDEL = %(FDEL)s;
-
-                if (ROW < N0 && COL < N1) {
-                    for(int p8q8 = 0; p8q8 < FDEL; ++p8q8){
-                        HpDEL_GPU[p8q8][ROW][COL] = 
-                            cuCmul(PixA_CFJ_GPU[ROW][COL], SPixA_FTpq_GPU[p8q8][ROW][COL]);
-                    }
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-            SFFTModule_dict['HadProd_DEL'] = _module
-
-            # ** Fill Linear-System [DELTA]
-            _refdict = {'N0': N0, 'N1': N1, 'NEQ': NEQ, 'Fpq': Fpq, 'Fijab': Fijab, 'FDEL': FDEL}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(double PreDEL_GPU[%(FDEL)s][%(N0)s][%(N1)s], 
-                double RHb_GPU[%(NEQ)s]) 
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                
-                int Fpq = %(Fpq)s;
-                int Fijab = %(Fijab)s;
-
-                if (ROW < Fpq && COL == 0) {
-                    // INDEX Analysis
-                    int cROW = Fijab + ROW;              // add offset
-                    int idx = ROW;                       // i.e. p8q8
-
-                    // Fill Linear System [E-component]
-                    RHb_GPU[cROW] = PreDEL_GPU[idx][0][0];
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['FillLS_DEL'] = _module
-
-        # <*****> regularize matrix <*****> #
-        if REGULARIZE_KERNEL:
-
-            _refdict = {'Fab': Fab}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(int LAPMAT_GPU[%(Fab)s][%(Fab)s],
-                int RRF_GPU[%(Fab)s], int CCF_GPU[%(Fab)s])
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                int Fab = %(Fab)s;
-
-                if (ROW < Fab && COL < Fab) {
-                    if (ROW != COL) {
-
-                        int r1 = RRF_GPU[ROW];
-                        int c1 = CCF_GPU[ROW];
-                        int r2 = RRF_GPU[COL];
-                        int c2 = CCF_GPU[COL];
-
-                        if (r2 == r1-1 && c2 == c1) {
-                            LAPMAT_GPU[ROW][COL] = -1;
-                        }
-                        if (r2 == r1+1 && c2 == c1) {
-                            LAPMAT_GPU[ROW][COL] = -1;
-                        }
-                        if (r2 == r1 && c2 == c1-1) {
-                            LAPMAT_GPU[ROW][COL] = -1;
-                        }
-                        if (r2 == r1 && c2 == c1+1) {
-                            LAPMAT_GPU[ROW][COL] = -1;
-                        }   
-                    }
-                }
-            }
-            """
-
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['fill_lapmat_nondiagonal'] = _module
-
-            c0 = w0*L1+w1
-            _refdict = {'Fab': Fab, 'c0': c0}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(int iREGMAT_GPU[%(Fab)s][%(Fab)s],
-                int LTLMAT_GPU[%(Fab)s][%(Fab)s])
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                int Fab = %(Fab)s;
-                int c0 = %(c0)s;
-
-                if (ROW < Fab && COL < Fab) {
-                    
-                    if (ROW != c0 && COL != c0) {
-                        iREGMAT_GPU[ROW][COL] = LTLMAT_GPU[ROW][COL] + LTLMAT_GPU[COL][ROW]
-                                                - LTLMAT_GPU[c0][ROW] - LTLMAT_GPU[c0][COL]
-                                                - LTLMAT_GPU[ROW][c0] - LTLMAT_GPU[COL][c0]
-                                                + 2 * LTLMAT_GPU[c0][c0];
-                    }
-                    
-                    if (ROW != c0 && COL == c0) {
-                        iREGMAT_GPU[ROW][COL] = LTLMAT_GPU[ROW][c0] + LTLMAT_GPU[c0][ROW] 
-                                                - 2 * LTLMAT_GPU[c0][c0];
-                    }
-                    
-                    if (ROW == c0 && COL != c0) {
-                        iREGMAT_GPU[ROW][COL] = LTLMAT_GPU[COL][c0] + LTLMAT_GPU[c0][COL]
-                                                - 2 * LTLMAT_GPU[c0][c0];
-                    }
-                    
-                    if (ROW == c0 && COL == c0) {
-                        iREGMAT_GPU[ROW][COL] = 2 * LTLMAT_GPU[c0][c0];
-                    }
-                }
-            }
-            """
-
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['fill_iregmat'] = _module
-
-            if SCALING_MODE in ['ENTANGLED', 'SEPARATE-CONSTANT']:
-
-                SCALE2 = SCALE**2
-                _refdict = {'Fij': Fij, 'Fab': Fab, 'Fijab': Fijab, 'NEQ': NEQ, 'SCALE2': SCALE2, 'RemSymbol': '%'}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int iREGMAT_GPU[%(Fab)s][%(Fab)s],
-                    double SSTMAT_GPU[%(Fij)s][%(Fij)s], 
-                    double REGMAT_GPU[%(NEQ)s][%(NEQ)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int Fijab = %(Fijab)s;
-                    int Fab = %(Fab)s;
-                    double SCALE2 = %(SCALE2)s;
-                    
-                    if (ROW < Fijab && COL < Fijab) {
-                        int k = ROW / Fab;
-                        int c = ROW %(RemSymbol)s Fab;
-                        int k8 = COL / Fab;
-                        int c8 = COL %(RemSymbol)s Fab;
-                        
-                        REGMAT_GPU[ROW][COL] = SCALE2 * SSTMAT_GPU[k][k8] * iREGMAT_GPU[c][c8];
-                    }
-                }
-                """
-
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['fill_regmat'] = _module
-            
-            if SCALING_MODE == 'SEPARATE-VARYING':
-                
-                c0 = w0*L1+w1
-                SCALE2 = SCALE**2
-                _refdict = {'Fij': Fij, 'Fab': Fab, 'c0': c0, 'Fijab': Fijab, 'NEQ': NEQ, 'SCALE2': SCALE2, 'RemSymbol': '%'}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(int iREGMAT_GPU[%(Fab)s][%(Fab)s],
-                    double SSTMAT_GPU[%(Fij)s][%(Fij)s], 
-                    double CSSTMAT_GPU[%(Fij)s][%(Fij)s],
-                    double DSSTMAT_GPU[%(Fij)s][%(Fij)s],
-                    double REGMAT_GPU[%(NEQ)s][%(NEQ)s])
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;
-
-                    int Fab = %(Fab)s;
-                    int c0 = %(c0)s;
-                    int Fijab = %(Fijab)s;
-                    double SCALE2 = %(SCALE2)s;
-                    
-                    if (ROW < Fijab && COL < Fijab) {
-                        int k = ROW / Fab;
-                        int c = ROW %(RemSymbol)s Fab;
-                        int k8 = COL / Fab;
-                        int c8 = COL %(RemSymbol)s Fab;
-                        
-                        if (c != c0 && c8 != c0) {
-                            REGMAT_GPU[ROW][COL] = SCALE2 * SSTMAT_GPU[k][k8] * iREGMAT_GPU[c][c8];
-                        }
-
-                        if (c != c0 && c8 == c0) {
-                            REGMAT_GPU[ROW][COL] = SCALE2 * CSSTMAT_GPU[k][k8] * iREGMAT_GPU[c][c8];
-                        }
-                        
-                        if (c == c0 && c8 != c0) {
-                            REGMAT_GPU[ROW][COL] = SCALE2 * CSSTMAT_GPU[k8][k] * iREGMAT_GPU[c][c8];
-                        }
-                        
-                        if (c == c0 && c8 == c0) {
-                            REGMAT_GPU[ROW][COL] = SCALE2 * DSSTMAT_GPU[k][k8] * iREGMAT_GPU[c][c8];
-                        }
-                    }
-                }
-                """
-
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['fill_regmat'] = _module
-
-        # <*****> Tweak Linear-System & Restore Solution <*****> #
-        if SCALING_MODE == 'SEPARATE-CONSTANT':
-
-            if KerSpType == 'Polynomial':
-                
-                _refdict = {'NEQ': NEQ, 'NEQt': NEQt}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(double LHMAT_GPU[%(NEQ)s][%(NEQ)s], double RHb_GPU[%(NEQ)s], 
-                    int PresIDX_GPU[%(NEQt)s], double LHMAT_tweaked_GPU[%(NEQt)s][%(NEQt)s], 
-                    double RHb_tweaked_GPU[%(NEQt)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;  // row index of tweakedLS
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;  // column index of tweakedLS
-                    int NEQt = %(NEQt)s;
-
-                    if (ROW < NEQt && COL < NEQt) {
-                        int PresROW = PresIDX_GPU[ROW];  // row index of LS
-                        int PresCOL = PresIDX_GPU[COL];  // column index of LS
-                        LHMAT_tweaked_GPU[ROW][COL] = LHMAT_GPU[PresROW][PresCOL];
-                    }
-
-                    if (ROW < NEQt && COL == 0) {
-                        int PresROW = PresIDX_GPU[ROW];  // row index of LS
-                        RHb_tweaked_GPU[ROW] = RHb_GPU[PresROW];
-                    }
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['TweakLS'] = _module
-
-            if KerSpType == 'B-Spline':
-                
-                _refdict = {'Fij': Fij, 'NEQ': NEQ, 'NEQt': NEQt}
-                _funcstr = r"""
-                extern "C" __global__ void kmain(double LHMAT_GPU[%(NEQ)s][%(NEQ)s], double RHb_GPU[%(NEQ)s], 
-                    int PresIDX_GPU[%(NEQt)s], int ij00_GPU[%(Fij)s], double LHMAT_tweaked_GPU[%(NEQt)s][%(NEQt)s], 
-                    double RHb_tweaked_GPU[%(NEQt)s]) 
-                {
-                    int ROW = blockIdx.x*blockDim.x+threadIdx.x;  // row index of tweakedLS
-                    int COL = blockIdx.y*blockDim.y+threadIdx.y;  // column index of tweakedLS
-
-                    int NEQt = %(NEQt)s;
-                    int Fij = %(Fij)s;
-                    int keyIdx = ij00_GPU[0];  // key index (ijab = 0000) of LS (tweakedLS)
-
-                    if (ROW == keyIdx && COL != keyIdx && COL < NEQt) {
-                        double cum1 = 0.0;
-                        for(int ij = 0; ij < Fij; ++ij){
-                            int ridx = ij00_GPU[ij];         // row index of LS
-                            int PresCOL = PresIDX_GPU[COL];  // column index of LS   
-                            cum1 += LHMAT_GPU[ridx][PresCOL];
-                        }
-                        LHMAT_tweaked_GPU[ROW][COL] = cum1;
-                    }
-                    
-                    if (ROW != keyIdx && ROW < NEQt && COL == keyIdx) {
-                        double cum2 = 0.0;
-                        for(int ij = 0; ij < Fij; ++ij){
-                            int PresROW = PresIDX_GPU[ROW];  // row index of LS
-                            int cidx = ij00_GPU[ij];         // column index of LS
-                            cum2 += LHMAT_GPU[PresROW][cidx];
-                        }
-                        LHMAT_tweaked_GPU[ROW][COL] = cum2;
-                    }
-
-                    if (ROW == keyIdx && COL == keyIdx) {
-                        double cum3 = 0.0;
-                        for(int ij = 0; ij < Fij; ++ij){
-                            for(int i8j8 = 0; i8j8 < Fij; ++i8j8){
-                                int ridx = ij00_GPU[ij];    // row index of LS
-                                int cidx = ij00_GPU[i8j8];  // column index of LS
-                                cum3 += LHMAT_GPU[ridx][cidx];
-                            }
-                        }
-                        LHMAT_tweaked_GPU[ROW][COL] = cum3;
-                    }
-
-                    if (ROW != keyIdx && ROW < NEQt && COL != keyIdx && COL < NEQt) {
-                        int PresROW = PresIDX_GPU[ROW];  // row index of LS
-                        int PresCOL = PresIDX_GPU[COL];  // column index of LS
-                        LHMAT_tweaked_GPU[ROW][COL] = LHMAT_GPU[PresROW][PresCOL];
-                    }
-
-                    if (ROW == keyIdx && COL == 0) {
-                        double cum4 = 0.0;
-                        for(int ij = 0; ij < Fij; ++ij){
-                            int ridx = ij00_GPU[ij];  // row index of LS
-                            cum4 += RHb_GPU[ridx];
-                        }
-                        RHb_tweaked_GPU[ROW] = cum4;
-                    }
-
-                    if (ROW != keyIdx && ROW < NEQt && COL == 0) {
-                        int PresROW = PresIDX_GPU[ROW];  // row index of LS 
-                        RHb_tweaked_GPU[ROW] = RHb_GPU[PresROW];
-                    }
-                    
-                }
-                """
-                _code = _funcstr % _refdict
-                _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-                SFFTModule_dict['TweakLS'] = _module
-            
-            _refdict = {'NEQ': NEQ, 'NEQt': NEQt}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(double Solution_tweaked_GPU[%(NEQt)s], 
-                int PresIDX_GPU[%(NEQt)s], double Solution_GPU[%(NEQ)s]) 
-            {    
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;  // row index of tweakedLS
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;  // trivial
-                int NEQt = %(NEQt)s;
-                
-                if (ROW < NEQt && COL == 0) {
-                    int PresROW = PresIDX_GPU[ROW];  // row index of LS
-                    Solution_GPU[PresROW] = Solution_tweaked_GPU[ROW];
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['Restore_Solution'] = _module
-
-        if SCALING_MODE == 'SEPARATE-VARYING' and NEQt < NEQ:
-            
-            _refdict = {'NEQ': NEQ, 'NEQt': NEQt}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(double LHMAT_GPU[%(NEQ)s][%(NEQ)s], double RHb_GPU[%(NEQ)s], 
-                int PresIDX_GPU[%(NEQt)s], double LHMAT_tweaked_GPU[%(NEQt)s][%(NEQt)s], 
-                double RHb_tweaked_GPU[%(NEQt)s]) 
-            {
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;  // row index of tweakedLS
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;  // column index of tweakedLS
-                int NEQt = %(NEQt)s;
-
-                if (ROW < NEQt && COL < NEQt) {
-                    int PresROW = PresIDX_GPU[ROW];  // row index of LS
-                    int PresCOL = PresIDX_GPU[COL];  // column index of LS
-                    LHMAT_tweaked_GPU[ROW][COL] = LHMAT_GPU[PresROW][PresCOL];
-                }
-
-                if (ROW < NEQt && COL == 0) {
-                    int PresROW = PresIDX_GPU[ROW];  // row index of LS
-                    RHb_tweaked_GPU[ROW] = RHb_GPU[PresROW];
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['TweakLS'] = _module
-
-            _refdict = {'NEQ': NEQ, 'NEQt': NEQt}
-            _funcstr = r"""
-            extern "C" __global__ void kmain(double Solution_tweaked_GPU[%(NEQt)s], 
-                int PresIDX_GPU[%(NEQt)s], double Solution_GPU[%(NEQ)s]) 
-            {    
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;  // row index of tweakedLS
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;  // trivial
-                int NEQt = %(NEQt)s;
-                
-                if (ROW < NEQt && COL == 0) {
-                    int PresROW = PresIDX_GPU[ROW];  // row index of LS
-                    Solution_GPU[PresROW] = Solution_tweaked_GPU[ROW];
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=False)
-            SFFTModule_dict['Restore_Solution'] = _module
-        
-        # ************************************ Construct Difference ************************************ #
-
-        # <*****> Construct difference in Fourier space <*****> #
-        if SCALING_MODE in ['ENTANGLED', 'SEPARATE-CONSTANT']:
-
-            # NOTE: As N0, N1 > MAX_THREADS_PER_BLOCK, here TpB == MAX_THREADS_PER_BLOCK
-            _refdict = {'N0': N0, 'N1': N1, 'L0': L0, 'L1': L1, 'w0': w0, 'w1': w1, \
-                        'Fij': Fij, 'Fab': Fab, 'Fpq': Fpq, 'Fijab': Fijab, \
-                        'SCALE': SCALE, 'TpB': MAX_THREADS_PER_BLOCK}
-            _funcstr = r"""
-            #include "cuComplex.h"
-            extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2],  
-                cuDoubleComplex a_ijab_GPU[%(Fijab)s], 
-                cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex Kab_Wla_GPU[%(L0)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex Kab_Wmb_GPU[%(L1)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex b_pq_GPU[%(Fpq)s], 
-                cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex PixA_FJ_GPU[%(N0)s][%(N1)s], 
-                cuDoubleComplex PixA_FDIFF_GPU[%(N0)s][%(N1)s])
-            {       
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int w0 = %(w0)s;
-                int w1 = %(w1)s;
-                int Fij = %(Fij)s;
-                int Fab = %(Fab)s;
-                int Fpq = %(Fpq)s;
-
-                double One_re = 1.0;
-                double Zero_re = 0.0;
-                double Zero_im = 0.0;
-                double SCALE_re = %(SCALE)s;
-                cuDoubleComplex ZERO = make_cuDoubleComplex(Zero_re, Zero_im);
-                cuDoubleComplex ONE = make_cuDoubleComplex(One_re, Zero_im);
-                cuDoubleComplex SCA = make_cuDoubleComplex(SCALE_re, Zero_im);
-                cuDoubleComplex PVAL = ZERO;
-                cuDoubleComplex PVAL_FKab = ZERO;
-
-                __shared__ cuDoubleComplex ShSPixA_FIij_GPU[%(Fij)s][%(TpB)s][%(TpB)s];
-                if (ROW < N0 && COL < N1) {
-                    for(int ij = 0; ij < Fij; ++ij){
-                        ShSPixA_FIij_GPU[ij][threadIdx.x][threadIdx.y] = SPixA_FIij_GPU[ij][ROW][COL];
-                    }
-                }
-                __syncthreads();
-
-                if (ROW < N0 && COL < N1) {
-
-                    PVAL = ZERO;
-                    PVAL_FKab = ZERO;
-
-                    for(int ab = 0; ab < Fab; ++ab){
-                    
-                        int a = REF_ab_GPU[ab][0];
-                        int b = REF_ab_GPU[ab][1];
-                        
-                        if (a == 0 && b == 0) {
-                            PVAL_FKab = SCA;
-                        }
-                        
-                        if (a != 0 || b != 0) {
-                            PVAL_FKab = cuCmul(SCA, cuCsub(cuCmul(Kab_Wla_GPU[w0 + a][ROW][COL], 
-                                Kab_Wmb_GPU[w1 + b][ROW][COL]), ONE));
-                        }
-
-                        for(int ij = 0; ij < Fij; ++ij){
-                            int ijab = ij * Fab + ab;
-                            PVAL = cuCadd(PVAL, cuCmul(cuCmul(a_ijab_GPU[ijab], 
-                                ShSPixA_FIij_GPU[ij][threadIdx.x][threadIdx.y]), PVAL_FKab));
-                        }
-                    }
-
-                    for(int pq = 0; pq < Fpq; ++pq){
-                        PVAL = cuCadd(PVAL, cuCmul(b_pq_GPU[pq], 
-                            SPixA_FTpq_GPU[pq][ROW][COL]));
-                    }
-                    
-                    PixA_FDIFF_GPU[ROW][COL] = cuCsub(PixA_FJ_GPU[ROW][COL], PVAL);
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-            SFFTModule_dict['Construct_FDIFF'] = _module
-
-        if SCALING_MODE == 'SEPARATE-VARYING':
-
-            # NOTE: As N0, N1 > MAX_THREADS_PER_BLOCK, here TpB == MAX_THREADS_PER_BLOCK
-            _refdict = {'N0': N0, 'N1': N1, 'L0': L0, 'L1': L1, 'w0': w0, 'w1': w1, \
-                        'Fij': Fij, 'Fab': Fab, 'Fpq': Fpq, 'Fijab': Fijab, \
-                        'SCALE': SCALE, 'TpB': MAX_THREADS_PER_BLOCK}
-            _funcstr = r"""
-            #include "cuComplex.h"
-            extern "C" __global__ void kmain(int SREF_ijab_GPU[%(Fijab)s][2], int REF_ab_GPU[%(Fab)s][2],  
-                cuDoubleComplex a_ijab_GPU[%(Fijab)s], 
-                cuDoubleComplex SPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex ScaSPixA_FIij_GPU[%(Fij)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex Kab_Wla_GPU[%(L0)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex Kab_Wmb_GPU[%(L1)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex b_pq_GPU[%(Fpq)s], 
-                cuDoubleComplex SPixA_FTpq_GPU[%(Fpq)s][%(N0)s][%(N1)s], 
-                cuDoubleComplex PixA_FJ_GPU[%(N0)s][%(N1)s], 
-                cuDoubleComplex PixA_FDIFF_GPU[%(N0)s][%(N1)s])
-            {       
-                int ROW = blockIdx.x*blockDim.x+threadIdx.x;
-                int COL = blockIdx.y*blockDim.y+threadIdx.y;
-                
-                int N0 = %(N0)s;
-                int N1 = %(N1)s;
-                int w0 = %(w0)s;
-                int w1 = %(w1)s;
-                int Fij = %(Fij)s;
-                int Fab = %(Fab)s;
-                int Fpq = %(Fpq)s;
-
-                double One_re = 1.0;
-                double Zero_re = 0.0;
-                double Zero_im = 0.0;
-                double SCALE_re = %(SCALE)s;
-                cuDoubleComplex ZERO = make_cuDoubleComplex(Zero_re, Zero_im);
-                cuDoubleComplex ONE = make_cuDoubleComplex(One_re, Zero_im);
-                cuDoubleComplex SCA = make_cuDoubleComplex(SCALE_re, Zero_im);
-                cuDoubleComplex PVAL = ZERO;
-                cuDoubleComplex PVAL_FKab = ZERO;
-
-                __shared__ cuDoubleComplex ShSPixA_FIij_GPU[%(Fij)s][%(TpB)s][%(TpB)s];
-                if (ROW < N0 && COL < N1) {
-                    for(int ij = 0; ij < Fij; ++ij){
-                        ShSPixA_FIij_GPU[ij][threadIdx.x][threadIdx.y] = SPixA_FIij_GPU[ij][ROW][COL];
-                    }
-                }
-
-                __shared__ cuDoubleComplex ShScaSPixA_FIij_GPU[%(Fij)s][%(TpB)s][%(TpB)s];
-                if (ROW < N0 && COL < N1) {
-                    for(int ij = 0; ij < Fij; ++ij){
-                        ShScaSPixA_FIij_GPU[ij][threadIdx.x][threadIdx.y] = ScaSPixA_FIij_GPU[ij][ROW][COL];
-                    }
-                }
-
-                __syncthreads();
-
-                if (ROW < N0 && COL < N1) {
-
-                    PVAL = ZERO;
-                    PVAL_FKab = ZERO;
-
-                    for(int ab = 0; ab < Fab; ++ab){
-                    
-                        int a = REF_ab_GPU[ab][0];
-                        int b = REF_ab_GPU[ab][1];
-                        
-                        if (a == 0 && b == 0) {
-                            PVAL_FKab = SCA;
-
-                            for(int ij = 0; ij < Fij; ++ij){
-                                int ijab = ij * Fab + ab;
-                                PVAL = cuCadd(PVAL, cuCmul(cuCmul(a_ijab_GPU[ijab], 
-                                    ShScaSPixA_FIij_GPU[ij][threadIdx.x][threadIdx.y]), PVAL_FKab));
-                            }
-                        }
-                        
-                        if (a != 0 || b != 0) {
-                            PVAL_FKab = cuCmul(SCA, cuCsub(cuCmul(Kab_Wla_GPU[w0 + a][ROW][COL], 
-                                Kab_Wmb_GPU[w1 + b][ROW][COL]), ONE));
-
-                            for(int ij = 0; ij < Fij; ++ij){
-                                int ijab = ij * Fab + ab;
-                                PVAL = cuCadd(PVAL, cuCmul(cuCmul(a_ijab_GPU[ijab], 
-                                    ShSPixA_FIij_GPU[ij][threadIdx.x][threadIdx.y]), PVAL_FKab));
-                            }
-                        }
-                    }
-
-                    for(int pq = 0; pq < Fpq; ++pq){
-                        PVAL = cuCadd(PVAL, cuCmul(b_pq_GPU[pq], 
-                            SPixA_FTpq_GPU[pq][ROW][COL]));
-                    }
-                    
-                    PixA_FDIFF_GPU[ROW][COL] = cuCsub(PixA_FJ_GPU[ROW][COL], PVAL);
-                }
-            }
-            """
-            _code = _funcstr % _refdict
-            _module = cp.RawModule(code=_code, backend=u'nvcc', translate_cucomplex=True)
-            SFFTModule_dict['Construct_FDIFF'] = _module
-
-        SFFTConfig = (SFFTParam_dict, SFFTModule_dict)
-        if VERBOSE_LEVEL in [1, 2]:
-            print('\n --//--//--//--//-- EXIT SFFT COMPILATION --//--//--//--//-- ')
-
-        return SFFTConfig
-
-class SingleSFFTConfigure:
-    @staticmethod
-    def SSC(NX, NY, KerHW=8, KerSpType='Polynomial', KerSpDegree=2, KerIntKnotX=[], KerIntKnotY=[], \
-        SEPARATE_SCALING=True, ScaSpType='Polynomial', ScaSpDegree=0, ScaIntKnotX=[], ScaIntKnotY=[], \
-        BkgSpType='Polynomial', BkgSpDegree=2, BkgIntKnotX=[], BkgIntKnotY=[], \
-        REGULARIZE_KERNEL=False, IGNORE_LAPLACIAN_KERCENT=True, XY_REGULARIZE=None, WEIGHT_REGULARIZE=None, \
-        LAMBDA_REGULARIZE=1e-6, BACKEND_4SUBTRACT='Cupy', MAX_THREADS_PER_BLOCK=8, \
-        MINIMIZE_GPU_MEMORY_USAGE=False, NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
-
-        """
-        # Compile Functions for SFFT
-        #
-        # Arguments:
-        # -NX: Image size along X (pix)                                                        | e.g., 1024
-        # -NY: Image size along Y (pix)                                                        | e.g., 1024
-        # -KerHW: Kernel half width for compilation                                            | e.g., 8
-        #
-        # -KerSpType: Spatial varaition type of matching kernel                                | ['Polynomial', 'B-Spline']
-        # -KerSpDegree: Polynomial/B-Spline degree of kernel spatial varaition                 | [0, 1, 2, 3]
-        # -KerIntKnotX: Internal knots of kernel B-Spline spatial varaition along X            | e.g., [256., 512., 768.]
-        # -KerIntKnotY: Internal knots of kernel B-Spline spatial varaition along Y            | e.g., [256., 512., 768.]
-        #
-        # -SEPARATE_SCALING: separate convolution scaling or entangled with matching kernel?   | [True, False]
-        # -ScaSpType: Spatial varaition type of convolution scaling                            | ['Polynomial', 'B-Spline']
-        # -ScaSpDegree: Polynomial/B-Spline degree of convolution scaling                      | [0, 1, 2, 3]
-        # -ScaIntKnotX: Internal knots of scaling B-Spline spatial varaition along X           | e.g., [256., 512., 768.]
-        # -ScaIntKnotY: Internal knots of scaling B-Spline spatial varaition along Y           | e.g., [256., 512., 768.]
-        #
-        # -BkgSpType: Spatial varaition type of differential background                        | ['Polynomial', 'B-Spline']
-        # -BkgSpDegree: Polynomial/B-Spline degree of background spatial varaition             | [0, 1, 2, 3]
-        # -BkgIntKnotX: Internal knots of background B-Spline spatial varaition along X        | e.g., [256., 512., 768.]
-        # -BkgIntKnotY: Internal knots of background B-Spline spatial varaition along Y        | e.g., [256., 512., 768.]
-        # 
-        # -REGULARIZE_KERNEL: Regularize matching kernel by applying penalty on                | [True, False]
-        #    kernel's second derivates using Laplacian matrix
-        # -IGNORE_LAPLACIAN_KERCENT: zero out the rows of Laplacian matrix                     | [True, False]
-        #    corresponding the kernel center pixels by zeros. 
-        #    If True, the regularization will not impose any penalty 
-        #    on a delta-function-like matching kernel
-        # -XY_REGULARIZE: The coordinates at which the matching kernel regularized.            | e.g., np.array([[64., 64.], 
-        #    Numpy array of (x, y) with shape (N_points, 2),                                   |                 [256., 256.]]) 
-        #    where x in (0.5, NX+0.5) and y in (0.5, NY+0.5)
-        # -WEIGHT_REGULARIZE: The weights of the coordinates sampled for regularization.       | e.g., np.array([1.0, 2.0, ...])
-        #    Numpy array of weights with shape (N_points)
-        #    -WEIGHT_REGULARIZE = None means uniform weights of 1.0
-        # -LAMBDA_REGULARIZE: Tunning paramater lambda for regularization                      | e.g., 1e-6
-        #    it controls the strength of penalty on kernel overfitting
-        #
-        # -BACKEND_4SUBTRACT: The backend with which you perform SFFT subtraction              | ['Cupy', 'Numpy']
-        # -MAX_THREADS_PER_BLOCK: Maximum Threads per Block for CUDA configuration             | e.g., 8
-        # -MINIMIZE_GPU_MEMORY_USAGE: Minimize the GPU Memory Usage?                           | [True, False]
-        # -NUM_CPU_THREADS_4SUBTRACT: The number of CPU threads for Numpy-SFFT subtraction     | e.g., 8
-        #
-        # -VERBOSE_LEVEL: The level of verbosity, can be 0/1/2: QUIET/NORMAL/FULL              | [0, 1, 2]
-        #
-        """
-        
-        if BACKEND_4SUBTRACT == 'Cupy':
-
-            SFFTConfig = SingleSFFTConfigure_Cupy.SSCC(NX=NX, NY=NY, KerHW=KerHW, KerSpType=KerSpType, \
-                KerSpDegree=KerSpDegree, KerIntKnotX=KerIntKnotX, KerIntKnotY=KerIntKnotY, \
-                SEPARATE_SCALING=SEPARATE_SCALING, ScaSpType=ScaSpType, ScaSpDegree=ScaSpDegree, \
-                ScaIntKnotX=ScaIntKnotX, ScaIntKnotY=ScaIntKnotY, BkgSpType=BkgSpType, \
-                BkgSpDegree=BkgSpDegree, BkgIntKnotX=BkgIntKnotX, BkgIntKnotY=BkgIntKnotY, \
-                REGULARIZE_KERNEL=REGULARIZE_KERNEL, IGNORE_LAPLACIAN_KERCENT=IGNORE_LAPLACIAN_KERCENT, \
-                XY_REGULARIZE=XY_REGULARIZE, WEIGHT_REGULARIZE=WEIGHT_REGULARIZE, LAMBDA_REGULARIZE=LAMBDA_REGULARIZE, \
-                MAX_THREADS_PER_BLOCK=MAX_THREADS_PER_BLOCK, MINIMIZE_GPU_MEMORY_USAGE=MINIMIZE_GPU_MEMORY_USAGE, \
-                VERBOSE_LEVEL=VERBOSE_LEVEL)
-        
-        if BACKEND_4SUBTRACT == 'Numpy':
-            print('MeLOn ERROR: Numpy backend is not supported for B-Spline SFFT in current version! Will implement in future!')
-            SFFTConfig = None
-        
-        return SFFTConfig
 
 class ElementalSFFTSubtract_Cupy:
     @staticmethod
@@ -3861,11 +1268,1336 @@ class ElementalSFFTSubtract_Cupy:
             print('\n --||--||--||--||-- EXIT SFFT SUBTRACTION [Cupy] --||--||--||--||-- ')
 
         return Solution, PixA_DIFF
+    
+    
+class ElementalSFFTSubtract_Numpy:
+    @staticmethod
+    def ESSN(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, NUM_CPU_THREADS_4SUBTRACT=8, \
+             VERBOSE_LEVEL=2, fft_type='mkl'):
+        
+        import scipy.linalg as linalg
+        def solver(A, b):
+            lu_piv = linalg.lu_factor(A, overwrite_a=False, check_finite=True)
+            x = linalg.lu_solve(lu_piv, b)
+            return x
+        
+        
+        def Create_BSplineBasis(N, IntKnot, BSplineDegree):
+            BSplineBasis = []
+            PixCoord = (1.0+np.arange(N))/N
+            Knot = np.concatenate(([0.5]*(BSplineDegree+1), IntKnot, [N+0.5]*(BSplineDegree+1)))/N
+            Nc = len(IntKnot) + BSplineDegree + 1    # number of control points/coeffcients
+            for idx in range(Nc):
+                Coeff = (np.arange(Nc) == idx).astype(float)
+                BaseFunc = BSpline(t=Knot, c=Coeff, k=BSplineDegree, extrapolate=False)
+                BSplineBasis.append(BaseFunc(PixCoord))
+            BSplineBasis = np.array(BSplineBasis)
+            return BSplineBasis
+        
+        def Create_BSplineBasis_Req(N, IntKnot, BSplineDegree, ReqCoord):
+            BSplineBasis_Req = []
+            Knot = np.concatenate(([0.5]*(BSplineDegree+1), IntKnot, [N+0.5]*(BSplineDegree+1)))/N
+            Nc = len(IntKnot) + BSplineDegree + 1    # number of control points/coeffcients
+            for idx in range(Nc):
+                Coeff = (np.arange(Nc) == idx).astype(float)
+                BaseFunc = BSpline(t=Knot, c=Coeff, k=BSplineDegree, extrapolate=False)
+                BSplineBasis_Req.append(BaseFunc(ReqCoord))
+            BSplineBasis_Req = np.array(BSplineBasis_Req)
+            return BSplineBasis_Req
+        
+        ta = time.time()
+        # * Read SFFT parameters
+        SFFTParam_dict, SFFTModule_dict = SFFTConfig
+
+        KerHW = SFFTParam_dict['KerHW']
+        KerSpType = SFFTParam_dict['KerSpType']
+        KerSpDegree = SFFTParam_dict['KerSpDegree']
+        KerIntKnotX = SFFTParam_dict['KerIntKnotX']
+        KerIntKnotY = SFFTParam_dict['KerIntKnotY']
+
+        SEPARATE_SCALING = SFFTParam_dict['SEPARATE_SCALING']
+        if SEPARATE_SCALING:
+            ScaSpType = SFFTParam_dict['ScaSpType']
+            ScaSpDegree = SFFTParam_dict['ScaSpDegree']
+            ScaIntKnotX = SFFTParam_dict['ScaIntKnotX']
+            ScaIntKnotY = SFFTParam_dict['ScaIntKnotY']
+
+        BkgSpType = SFFTParam_dict['BkgSpType']
+        BkgSpDegree = SFFTParam_dict['BkgSpDegree']
+        BkgIntKnotX = SFFTParam_dict['BkgIntKnotX']
+        BkgIntKnotY = SFFTParam_dict['BkgIntKnotY']
+        
+        REGULARIZE_KERNEL = SFFTParam_dict['REGULARIZE_KERNEL']
+        IGNORE_LAPLACIAN_KERCENT = SFFTParam_dict['IGNORE_LAPLACIAN_KERCENT']
+        XY_REGULARIZE = SFFTParam_dict['XY_REGULARIZE']
+        WEIGHT_REGULARIZE = SFFTParam_dict['WEIGHT_REGULARIZE']
+        LAMBDA_REGULARIZE = SFFTParam_dict['LAMBDA_REGULARIZE']
+
+        MAX_THREADS_PER_BLOCK = SFFTParam_dict['MAX_THREADS_PER_BLOCK']
+        MINIMIZE_GPU_MEMORY_USAGE = SFFTParam_dict['MINIMIZE_GPU_MEMORY_USAGE']
+
+        SCALING_MODE = None
+        if not SEPARATE_SCALING:
+            SCALING_MODE = 'ENTANGLED'
+        elif ScaSpDegree == 0:
+            SCALING_MODE = 'SEPARATE-CONSTANT'
+        else: SCALING_MODE = 'SEPARATE-VARYING'
+        assert SCALING_MODE is not None
+
+        if VERBOSE_LEVEL in [1, 2]:
+            print('--//--//--//--//-- TRIGGER SFFT EXECUTION [Numpy] --//--//--//--//-- ')
+
+            if KerSpType == 'Polynomial':
+                print('---//--- Polynomial Kernel | KerSpDegree %d | KerHW %d ---//---' %(KerSpDegree, KerHW))
+                if not SEPARATE_SCALING:
+                    print('---//--- [ENTANGLED] Polynomial Scaling | KerSpDegree %d ---//---' %KerSpDegree)
+
+            if KerSpType == 'B-Spline':
+                print('---//--- B-Spline Kernel | Internal Knots %d,%d | KerSpDegree %d | KerHW %d ---//---' \
+                      %(len(KerIntKnotX), len(KerIntKnotY), KerSpDegree, KerHW))
+                if not SEPARATE_SCALING: 
+                    print('---//--- [ENTANGLED] B-Spline Scaling | Internal Knots %d,%d | KerSpDegree %d ---//---' \
+                          %(len(KerIntKnotX), len(KerIntKnotY), KerSpDegree))
+            
+            if SEPARATE_SCALING:
+                if ScaSpType == 'Polynomial':
+                    print('---//--- [SEPARATE] Polynomial Scaling | ScaSpDegree %d ---//---' %ScaSpDegree)
+                
+                if ScaSpType == 'B-Spline':
+                    print('---//--- [SEPARATE] B-Spline Scaling | Internal Knots %d,%d | ScaSpDegree %d ---//---' \
+                          %(len(ScaIntKnotX), len(ScaIntKnotY), ScaSpDegree))
+            
+            if BkgSpType == 'Polynomial':
+                print('---//--- Polynomial Background | BkgSpDegree %d ---//---' %BkgSpDegree)
+            
+            if BkgSpType == 'B-Spline':
+                print('---//--- B-Spline Background | Internal Knots %d,%d | BkgSpDegree %d ---//---' \
+                    %(len(BkgIntKnotX), len(BkgIntKnotY), BkgSpDegree))
+
+
+        if VERBOSE_LEVEL in [1, 2]:
+            print('MeLOn CheckPoint: Start SFFT-EXECUTION Preliminary Steps')
+
+
+        N0 = SFFTParam_dict['N0']               # a.k.a, NX
+        N1 = SFFTParam_dict['N1']               # a.k.a, NY
+        w0 = SFFTParam_dict['w0']               # a.k.a, KerHW
+        w1 = SFFTParam_dict['w1']               # a.k.a, KerHW
+        DK = SFFTParam_dict['DK']               # a.k.a, KerSpDegree
+        DB = SFFTParam_dict['DB']               # a.k.a, BkgSpDegree
+        if SEPARATE_SCALING: 
+            DS = SFFTParam_dict['DS']           # a.k.a, PolyScaSpDegree
+
+        SCALE = SFFTParam_dict['SCALE']
+        SCALE_L = SFFTParam_dict['SCALE_L']
+
+        L0 = SFFTParam_dict['L0']
+        L1 = SFFTParam_dict['L1']
+        Fab = SFFTParam_dict['Fab']
+        Fi = SFFTParam_dict['Fi']
+        Fj = SFFTParam_dict['Fj']
+        Fij = SFFTParam_dict['Fij']
+        Fp = SFFTParam_dict['Fp']
+        Fq = SFFTParam_dict['Fq']
+        Fpq = SFFTParam_dict['Fpq']
+
+        if SCALING_MODE == 'SEPARATE-VARYING':
+            ScaFi = SFFTParam_dict['ScaFi']
+            ScaFj = SFFTParam_dict['ScaFj']
+            ScaFij = SFFTParam_dict['ScaFij']
+        Fijab = SFFTParam_dict['Fijab']
+        
+        FOMG = SFFTParam_dict['FOMG']
+        FGAM = SFFTParam_dict['FGAM']
+        FTHE = SFFTParam_dict['FTHE']
+        FPSI = SFFTParam_dict['FPSI']
+        FPHI = SFFTParam_dict['FPHI']
+        FDEL = SFFTParam_dict['FDEL']
+        
+        NEQ = SFFTParam_dict['NEQ']
+        NEQt = SFFTParam_dict['NEQt']
+
+        # check input image size 
+        assert PixA_I.shape == (N0, N1) and PixA_J.shape == (N0, N1)
+
+        # * Define First-order MultiIndex Reference
+        if KerSpType == 'Polynomial':
+            REF_ij = np.array([(i, j) for i in range(DK+1) for j in range(DK+1-i)]).astype(np.int32)
+        if KerSpType == 'B-Spline':
+            REF_ij = np.array([(i, j) for i in range(Fi) for j in range(Fj)]).astype(np.int32)
+
+        if BkgSpType == 'Polynomial':
+            REF_pq = np.array([(p, q) for p in range(DB+1) for q in range(DB+1-p)]).astype(np.int32)
+        if BkgSpType == 'B-Spline':
+            REF_pq = np.array([(p, q) for p in range(Fp) for q in range(Fq)]).astype(np.int32)
+        REF_ab = np.array([(a_pos-w0, b_pos-w1) for a_pos in range(L0) for b_pos in range(L1)]).astype(np.int32)
+
+
+
+        if SCALING_MODE == 'SEPARATE-VARYING':
+            
+            if ScaSpType == 'Polynomial':
+                ScaREF_ij = np.array(
+                    [(i, j) for i in range(DS+1) for j in range(DS+1-i)] \
+                    + [(-1, -1)] * (Fij - ScaFij)
+                ).astype(np.int32)
+
+            if ScaSpType == 'B-Spline':
+                ScaREF_ij = np.array(
+                    [(i, j) for i in range(ScaFi) for j in range(ScaFj)] \
+                    + [(-1, -1)] * (Fij - ScaFij)
+                ).astype(np.int32)
+
+        # * Define Second-order MultiIndex Reference
+        SREF_iji0j0 = np.array([(ij, i0j0) for ij in range(Fij) for i0j0 in range(Fij)]).astype(np.int32)
+        SREF_pqp0q0 = np.array([(pq, p0q0) for pq in range(Fpq) for p0q0 in range(Fpq)]).astype(np.int32)
+        SREF_ijpq = np.array([(ij, pq) for ij in range(Fij) for pq in range(Fpq)]).astype(np.int32)
+        SREF_pqij = np.array([(pq, ij) for pq in range(Fpq) for ij in range(Fij)]).astype(np.int32)
+        SREF_ijab = np.array([(ij, ab) for ij in range(Fij) for ab in range(Fab)]).astype(np.int32)
+
+        # * Indices related to Constant Scaling Case
+        ij00 = np.arange(w0 * L1 + w1, Fijab, Fab).astype(np.int32)
+
+        t0 = time.time()
+        # * Read input images as C-order arrays
+        if not PixA_I.flags['C_CONTIGUOUS']:
+            PixA_I = np.ascontiguousarray(PixA_I, np.float64)
+        else: PixA_I = np.array(PixA_I.astype(np.float64))
+        
+        if not PixA_J.flags['C_CONTIGUOUS']:
+            PixA_J = np.ascontiguousarray(PixA_J, np.float64)
+        else: PixA_J = np.array(PixA_J.astype(np.float64))
+        dt0 = time.time() - t0
+        
+        # * Symbol Convention Notes
+        #   X (x) / Y (y) ----- pixel row / column index
+        #   CX (cx) / CY (cy) ----- ScaledFortranCoord of pixel (x, y) center   
+        #   e.g. pixel (x, y) = (3, 5) corresponds (cx, cy) = (4.0/N0, 6.0/N1)
+        #   NOTE cx / cy is literally \mathtt{x} / \mathtt{y} in SFFT paper.
+        #   NOTE Without special definition, MeLOn convention refers to X (x) / Y (y) as FortranCoord.
+
+        # * Get Spatial Coordinates
+        t1 = time.time()
+        PixA_X = np.zeros((N0, N1), dtype=np.int32)      # row index, [0, N0)
+        PixA_Y = np.zeros((N0, N1), dtype=np.int32)      # column index, [0, N1)
+        PixA_CX = np.zeros((N0, N1), dtype=np.float64)   # coordinate.x
+        PixA_CY = np.zeros((N0, N1), dtype=np.float64)   # coordinate.y 
+
+        _func = SFFTModule_dict['SpatialCoord']
+        PixA_X, PixA_Y, PixA_CX, PixA_CY = _func(PixA_X=PixA_X, PixA_Y=PixA_Y, PixA_CX=PixA_CX, PixA_CY=PixA_CY)
+
+
+        # <*****> produce Iij <*****> #
+        SPixA_Iij = np.zeros((Fij, N0, N1), dtype=np.float64)
+        if KerSpType == 'Polynomial':
+            _func = SFFTModule_dict['KerSpatial']
+            SPixA_Iij = _func(REF_ij=REF_ij, PixA_CX=PixA_CX, PixA_CY=PixA_CY, PixA_I=PixA_I, SPixA_Iij=SPixA_Iij)
+        
+        if KerSpType == 'B-Spline':
+            KerSplBasisX = Create_BSplineBasis(N=N0, IntKnot=KerIntKnotX, BSplineDegree=DK).astype(np.float64)
+            KerSplBasisY = Create_BSplineBasis(N=N1, IntKnot=KerIntKnotY, BSplineDegree=DK).astype(np.float64)
+
+            _func = SFFTModule_dict['KerSpatial']
+            SPixA_Iij = _func(REF_ij=REF_ij, KerSplBasisX=KerSplBasisX, KerSplBasisY=KerSplBasisY, PixA_I=PixA_I, SPixA_Iij=SPixA_Iij)
+
+        
+        if fft_type == 'pyfftw':
+            import pyfftw
+            pyfftw.config.NUM_THREADS = NUM_CPU_THREADS_4SUBTRACT
+            pyfftw.interfaces.cache.enable()
+            pyfftw.interfaces.cache.set_keepalive_time(10)
+
+            fft2d_func = pyfftw.interfaces.dask_fft.fft2
+            fft3d_func = pyfftw.interfaces.dask_fft.fft2
+            ifft2d_func = pyfftw.interfaces.dask_fft.ifft2
+            
+        elif fft_type == 'mkl':
+            from mkl_fft._numpy_fft import fft2, ifft2
+            
+            fft2d_func = fft2
+            fft3d_func = fft2
+            ifft2d_func = ifft2
+            
+
+
+
+        if SCALING_MODE == 'SEPARATE-VARYING':
+
+            if ScaSpType == 'Polynomial':
+                ScaSPixA_Iij = np.zeros((Fij, N0, N1), dtype=np.float64)
+                _func = SFFTModule_dict['ScaSpatial']
+                ScaSPixA_Iij = _func(ScaREF_ij=ScaREF_ij, PixA_CX=PixA_CX, PixA_CY=PixA_CY, PixA_I=PixA_I, ScaSPixA_Iij=ScaSPixA_Iij)
+
+            if ScaSpType == 'B-Spline':
+                ScaSplBasisX = Create_BSplineBasis(N=N0, IntKnot=ScaIntKnotX, BSplineDegree=DS).astype(np.float64)
+                ScaSplBasisY = Create_BSplineBasis(N=N1, IntKnot=ScaIntKnotY, BSplineDegree=DS).astype(np.float64)
+
+                ScaSPixA_Iij = np.zeros((Fij, N0, N1), dtype=np.float64)
+                _func = SFFTModule_dict['ScaSpatial']
+                ScaSPixA_Iij = _func(ScaREF_ij=ScaREF_ij, ScaSplBasisX=ScaSplBasisX, ScaSplBasisY=ScaSplBasisY, PixA_I=PixA_I, ScaSPixA_Iij=ScaSPixA_Iij)
+
+        del PixA_I
+
+        # <*****> produce Tpq <*****> #
+        SPixA_Tpq = np.zeros((Fpq, N0, N1), dtype=np.float64)
+        
+        if BkgSpType == 'Polynomial':
+            _func = SFFTModule_dict['BkgSpatial']
+            SPixA_Tpq = _func(REF_pq=REF_pq, PixA_CX=PixA_CX, PixA_CY=PixA_CY, SPixA_Tpq=SPixA_Tpq)
+        
+        if BkgSpType == 'B-Spline':
+            BkgSplBasisX = Create_BSplineBasis(N=N0, IntKnot=BkgIntKnotX, BSplineDegree=DB).astype(np.float64)
+            BkgSplBasisY = Create_BSplineBasis(N=N1, IntKnot=BkgIntKnotY, BSplineDegree=DB).astype(np.float64)
+
+            _func = SFFTModule_dict['BkgSpatial']
+            SPixA_Tpq = _func(REF_pq=REF_pq, BkgSplBasisX=BkgSplBasisX, BkgSplBasisY=BkgSplBasisY, SPixA_Tpq=SPixA_Tpq)
+
+        
+        dt1 = time.time() - t1
+        t2 = time.time()
+
+
+        # * Make DFT of J, Iij, Tpq and their conjugates
+        PixA_FJ = np.empty((N0, N1), dtype=np.complex128)
+        PixA_FJ[:, :] = PixA_J.astype(np.complex128)
+        PixA_FJ[:, :] = fft2d_func(PixA_FJ)
+        PixA_FJ[:, :] *= SCALE
+
+        SPixA_FIij = np.empty((Fij, N0, N1), dtype=np.complex128)
+        SPixA_FIij[:, :, :] = SPixA_Iij.astype(np.complex128)
+        for k in range(Fij): 
+            SPixA_FIij[k: k+1] = fft3d_func(SPixA_FIij[k: k+1])
+        SPixA_FIij[:, :] *= SCALE
+
+        SPixA_FTpq = np.empty((Fpq, N0, N1), dtype=np.complex128)
+        SPixA_FTpq[:, :, :] = SPixA_Tpq.astype(np.complex128)
+        for k in range(Fpq): 
+            SPixA_FTpq[k: k+1] = fft3d_func(SPixA_FTpq[k: k+1])
+        SPixA_FTpq[:, :] *= SCALE
+
+        del PixA_J
+        del SPixA_Iij
+        del SPixA_Tpq
+
+        PixA_CFJ = np.conj(PixA_FJ)
+        SPixA_CFIij = np.conj(SPixA_FIij)
+        SPixA_CFTpq = np.conj(SPixA_FTpq)
+
+
+
+        if SCALING_MODE == 'SEPARATE-VARYING':
+            # TODO: this variable can be too GPU memory consuming
+            ScaSPixA_FIij = np.empty((Fij, N0, N1), dtype=np.complex128)
+            ScaSPixA_FIij[:, :, :] = ScaSPixA_Iij.astype(np.complex128)
+            for k in range(ScaFij):
+                # ScaSPixA_FIij[k: k+1] = pyfftw.interfaces.numpy_fft.fft2(ScaSPixA_FIij[k: k+1])
+                ScaSPixA_FIij[k: k+1] = fft3d_func(ScaSPixA_FIij[k: k+1])
+            ScaSPixA_FIij[:, :] *= SCALE
+
+            del ScaSPixA_Iij
+            ScaSPixA_CFIij = np.conj(ScaSPixA_FIij)
+        
+        dt2 = time.time() - t2
+        dta = time.time() - ta
+
+        if VERBOSE_LEVEL in [1, 2]:
+            print('MeLOn CheckPoint: SFFT-EXECUTION Preliminary Steps takes [%.4fs]' %dta)
+            
+        if VERBOSE_LEVEL in [2]:
+            print('/////   a   ///// Read Input Images  (%.4fs)' %dt0)
+            print('/////   b   ///// Spatial Polynomial (%.4fs)' %dt1)
+            print('/////   c   ///// DFT-%d             (%.4fs)' %(1 + Fij + Fpq, dt2))
+
+        # * Consider The Major Sources of the Linear System 
+        #    OMEGA_i8j8ij   &    DELTA_i8j8pq    ||   THETA_i8j8
+        #    PSI_p8q8ij     &    PHI_p8q8pq      ||   DELTA_p8q8
+        #
+        # - Remarks
+        #    a. They have consistent form: Greek(rho, eps) = PreGreek(Mod_N0(rho), Mod_N1(eps))
+        #    b. PreGreek = s * Re[DFT(HpGreek)], where HpGreek = GLH * GRH and s is some real-scale
+        #    c. Considering the subscripted variables, HpGreek/PreGreek is Complex/Real 3D with shape (F_Greek, N0, N1)
+        
+        if SFFTSolution is not None:
+            Solution = SFFTSolution 
+            Solution = np.array(Solution.astype(np.float64))
+            a_ijab = Solution[: Fijab]
+            b_pq = Solution[Fijab: ]
+
+
+
+        if SFFTSolution is None:
+            tb = time.time()
+
+            LHMAT = np.empty((NEQ, NEQ), dtype=np.float64)
+            RHb = np.empty(NEQ, dtype=np.float64)
+
+            t3 = time.time()
+            if SCALING_MODE in ['ENTANGLED', 'SEPARATE-CONSTANT']:
+
+                if not MINIMIZE_GPU_MEMORY_USAGE:
+
+                    # <*****> Establish Linear System through OMEGA <*****> #
+                    
+                    # a. Hadamard Product for OMEGA [HpOMG]
+                    _func = SFFTModule_dict['HadProd_OMG']
+                    HpOMG = np.empty((FOMG, N0, N1), dtype=np.complex128)
+                    HpOMG = _func(SREF_iji0j0=SREF_iji0j0, SPixA_FIij=SPixA_FIij, SPixA_CFIij=SPixA_CFIij, HpOMG=HpOMG)
+
+                    # b. PreOMG = SCALE * Re[DFT(HpOMG)]
+                    for k in range(FOMG):
+                        HpOMG[k: k+1] = pyfftw.interfaces.numpy_fft.fft2(HpOMG[k: k+1])
+                    HpOMG *= SCALE
+
+                    PreOMG = np.empty((FOMG, N0, N1), dtype=np.float64)
+                    PreOMG[:, :, :] = HpOMG.real
+                    PreOMG[:, :, :] *= SCALE
+                    del HpOMG
+
+                    # c. Fill Linear System with PreOMG
+                    _func = SFFTModule_dict['FillLS_OMG']
+                    LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, PreOMG=PreOMG, LHMAT=LHMAT)
+                    del PreOMG
+
+                    dt3 = time.time() - t3
+                    t4 = time.time()
+
+                    # <*****> Establish Linear System through GAMMA <*****> #
+
+                    # a. Hadamard Product for GAMMA [HpGAM]
+                    _func = SFFTModule_dict['HadProd_GAM']
+                    HpGAM = np.empty((FGAM, N0, N1), dtype=np.complex128)
+                    HpGAM = _func(SREF_ijpq=SREF_ijpq, SPixA_FIij=SPixA_FIij, SPixA_CFTpq=SPixA_CFTpq, HpGAM=HpGAM)
+
+                    # b. PreGAM = 1 * Re[DFT(HpGAM)]
+                    for k in range(FGAM):
+                        HpGAM[k: k+1] = fft2d_func(HpGAM[k: k+1])
+                    HpGAM *= SCALE
+
+                    PreGAM = np.empty((FGAM, N0, N1), dtype=np.float64)
+                    PreGAM[:, :, :] = HpGAM.real
+                    del HpGAM
+
+                    # c. Fill Linear System with PreGAM
+                    _func = SFFTModule_dict['FillLS_GAM']
+                    LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, PreGAM=PreGAM, LHMAT=LHMAT)
+                    del PreGAM
+                    
+                    dt4 = time.time() - t4
+                    t5 = time.time()
+                    
+                    # <*****> Establish Linear System through PSI <*****> #
+
+                    # a. Hadamard Product for PSI [HpPSI]
+                    _func = SFFTModule_dict['HadProd_PSI']
+                    HpPSI = np.empty((FPSI, N0, N1), dtype=np.complex128)
+                    HpPSI = _func(SREF_pqij=SREF_pqij, SPixA_CFIij=SPixA_CFIij, SPixA_FTpq=SPixA_FTpq, HpPSI=HpPSI)
+                    
+                    # b. PrePSI = 1 * Re[DFT(HpPSI)]
+                    for k in range(FPSI):
+                        HpPSI[k: k+1] = fft2d_func(HpPSI[k: k+1])
+                    HpPSI *= SCALE
+
+                    PrePSI = np.empty((FPSI, N0, N1), dtype=np.float64)
+                    PrePSI[:, :, :] = HpPSI.real
+                    del HpPSI
+
+                    # c. Fill Linear System with PrePSI
+                    _func = SFFTModule_dict['FillLS_PSI']
+                    LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, PrePSI=PrePSI, LHMAT=LHMAT)
+                    del PrePSI
+
+                    dt5 = time.time() - t5
+                    t6 = time.time()
+
+                    # <*****> Establish Linear System through PHI <*****> #
+
+                    # a. Hadamard Product for PHI  [HpPHI]
+                    _func = SFFTModule_dict['HadProd_PHI']
+                    HpPHI = np.empty((FPHI, N0, N1), dtype=np.complex128)
+                    HpPHI = _func(SREF_pqp0q0=SREF_pqp0q0, SPixA_FTpq=SPixA_FTpq, SPixA_CFTpq=SPixA_CFTpq, HpPHI=HpPHI)
+
+                    # b. PrePHI = SCALE_L * Re[DFT(HpPHI)]
+                    for k in range(FPHI):
+                        HpPHI[k: k+1] = fft2d_func(HpPHI[k: k+1])
+                    HpPHI *= SCALE
+
+                    PrePHI = np.empty((FPHI, N0, N1), dtype=np.float64)
+                    PrePHI[:, :, :] = HpPHI.real
+                    PrePHI[:, :, :] *= SCALE_L
+                    del HpPHI
+
+                    # c. Fill Linear System with PrePHI
+                    _func = SFFTModule_dict['FillLS_PHI']
+                    LHMAT = _func(PrePHI=PrePHI, LHMAT=LHMAT)
+                    del PrePHI
+
+
+
+
+                if MINIMIZE_GPU_MEMORY_USAGE:
+
+                    # <*****> Establish Linear System through OMEGA <*****> #
+
+                    for cIdx in range(FOMG):
+
+                        # a. Hadamard Product for OMEGA [HpOMG]
+                        _func = SFFTModule_dict['HadProd_OMG']
+                        cHpOMG = np.empty((N0, N1), dtype=np.complex128)
+                        cHpOMG = _func(SREF_iji0j0=SREF_iji0j0, SPixA_FIij=SPixA_FIij, SPixA_CFIij=SPixA_CFIij, cIdx=cIdx, cHpOMG=cHpOMG)
+                        
+                        # b. PreOMG = SCALE * Re[DFT(HpOMG)]
+                        cHpOMG = fft2d_func(cHpOMG)
+                        cHpOMG *= SCALE
+
+                        cPreOMG = np.empty((N0, N1), dtype=np.float64)
+                        cPreOMG[:, :] = cHpOMG.real
+                        cPreOMG[:, :] *= SCALE
+                        del cHpOMG
+
+                        # c. Fill Linear System with PreOMG
+                        _func = SFFTModule_dict['FillLS_OMG']
+                        LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, cIdx=cIdx, cPreOMG=cPreOMG, LHMAT=LHMAT)
+                        del cPreOMG
+
+                    dt3 = time.time() - t3
+                    t4 = time.time()
+
+                    # <*****> Establish Linear System through GAMMA <*****> #
+
+                    for cIdx in range(FGAM):
+
+                        # a. Hadamard Product for GAMMA [HpGAM]
+                        _func = SFFTModule_dict['HadProd_GAM']
+                        cHpGAM = np.empty((N0, N1), dtype=np.complex128)
+                        cHpGAM = _func(SREF_ijpq=SREF_ijpq, SPixA_FIij=SPixA_FIij, SPixA_CFTpq=SPixA_CFTpq, cIdx=cIdx, cHpGAM=cHpGAM)
+
+                        # b. PreGAM = 1 * Re[DFT(HpGAM)]
+                        cHpGAM = fft2d_func(cHpGAM)
+                        cHpGAM *= SCALE
+
+                        cPreGAM = np.empty((N0, N1), dtype=np.float64)
+                        cPreGAM[:, :] = cHpGAM.real
+                        del cHpGAM
+
+                        # c. Fill Linear System with PreGAM
+                        _func = SFFTModule_dict['FillLS_GAM']
+                        LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, cIdx=cIdx, cPreGAM=cPreGAM, LHMAT=LHMAT)
+                        del cPreGAM
+
+                    dt4 = time.time() - t4
+                    t5 = time.time()
+
+                    # <*****> Establish Linear System through PSI <*****> #
+
+                    for cIdx in range(FPSI):
+
+                        # a. Hadamard Product for PSI [HpPSI]
+                        _func = SFFTModule_dict['HadProd_PSI']
+                        cHpPSI = np.empty((N0, N1), dtype=np.complex128)
+                        cHpPSI = _func(SREF_pqij=SREF_pqij, SPixA_CFIij=SPixA_CFIij, SPixA_FTpq=SPixA_FTpq, cIdx=cIdx, cHpPSI=cHpPSI)
+
+                        # b. PrePSI = 1 * Re[DFT(HpPSI)]
+                        cHpPSI = fft2d_func(cHpPSI)
+                        cHpPSI *= SCALE
+
+                        cPrePSI = np.empty((N0, N1), dtype=np.float64)
+                        cPrePSI[:, :] = cHpPSI.real
+                        del cHpPSI
+
+                        # c. Fill Linear System with PrePSI
+                        _func = SFFTModule_dict['FillLS_PSI']
+                        LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, cIdx=cIdx, cPrePSI=cPrePSI, LHMAT=LHMAT)
+                        del cPrePSI
+
+                    dt5 = time.time() - t5
+                    t6 = time.time()
+
+                    # <*****> Establish Linear System through PHI <*****> #
+
+                    for cIdx in range(FPHI):
+
+                        # a. Hadamard Product for PHI  [HpPHI]
+                        _func = SFFTModule_dict['HadProd_PHI']
+                        cHpPHI = np.empty((N0, N1), dtype=np.complex128)
+                        cHpPHI = _func(SREF_pqp0q0=SREF_pqp0q0, SPixA_FTpq=SPixA_FTpq, SPixA_CFTpq=SPixA_CFTpq, cIdx=cIdx, cHpPHI=cHpPHI)
+
+                        # b. PrePHI = SCALE_L * Re[DFT(HpPHI)]
+                        cHpPHI = fft2d_func(cHpPHI)
+                        cHpPHI *= SCALE
+
+                        cPrePHI = np.empty((N0, N1), dtype=np.float64)
+                        cPrePHI[:, :] = cHpPHI.real
+                        cPrePHI[:, :] *= SCALE_L
+                        del cHpPHI
+
+                        # c. Fill Linear System with PrePHI
+                        _func = SFFTModule_dict['FillLS_PHI']
+                        LHMAT = _func(cIdx=cIdx, cPrePHI=cPrePHI, LHMAT=LHMAT)
+                        del cPrePHI
+                
+                dt6 = time.time() - t6
+                t7 = time.time()
+
+                # <*****> Establish Linear System through THETA & DELTA <*****> #
+
+                # a1. Hadamard Product for THETA [HpTHE]
+                _func = SFFTModule_dict['HadProd_THE']
+                HpTHE = np.empty((FTHE, N0, N1), dtype=np.complex128)
+                HpTHE = _func(SPixA_FIij=SPixA_FIij, PixA_CFJ=PixA_CFJ, HpTHE=HpTHE)
+
+                # a2. Hadamard Product for DELTA [HpDEL]
+                _func = SFFTModule_dict['HadProd_DEL']
+                HpDEL = np.empty((FDEL, N0, N1), dtype=np.complex128)
+                HpDEL = _func(SPixA_FTpq, PixA_CFJ, HpDEL)
+
+                # b1. PreTHE = 1 * Re[DFT(HpTHE)]
+                # b2. PreDEL = SCALE_L * Re[DFT(HpDEL)]
+                for k in range(FTHE):
+                    HpTHE[k: k+1] = fft2d_func(HpTHE[k: k+1])
+                HpTHE[:, :, :] *= SCALE
+                
+                for k in range(FDEL):
+                    HpDEL[k: k+1] = fft2d_func(HpDEL[k: k+1])
+                HpDEL[:, :, :] *= SCALE
+
+                PreTHE = np.empty((FTHE, N0, N1), dtype=np.float64)
+                PreTHE[:, :, :] = HpTHE.real
+                del HpTHE
+                
+                PreDEL = np.empty((FDEL, N0, N1), dtype=np.float64)
+                PreDEL[:, :, :] = HpDEL.real
+                PreDEL[:, :, :] *= SCALE_L
+                del HpDEL
+                
+                # c1. Fill Linear System with PreTHE
+                _func = SFFTModule_dict['FillLS_THE']
+                RHb = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, PreTHE=PreTHE, RHb=RHb)
+                del PreTHE
+
+                # c2. Fill Linear System with PreDEL
+                _func = SFFTModule_dict['FillLS_DEL']
+                RHb = _func(PreDEL=PreDEL, RHb=RHb)
+                del PreDEL
+
+
+
+            if SCALING_MODE == 'SEPARATE-VARYING':
+                ###assert MINIMIZE_GPU_MEMORY_USAGE
+
+                if not MINIMIZE_GPU_MEMORY_USAGE:
+                    
+                    # <*****> Establish Linear System through OMEGA <*****> #
+                    
+                    # a11. Hadamard Product for OMEGA_11 [HpOMG11]
+                    _func = SFFTModule_dict['HadProd_OMG11']
+                    HpOMG11 = np.empty((FOMG, N0, N1), dtype=np.complex128)
+                    HpOMG11 = _func(SREF_iji0j0=SREF_iji0j0, SPixA_FIij=SPixA_FIij, SPixA_CFIij=SPixA_CFIij, HpOMG11=HpOMG11)
+                
+                    # b11. PreOMG11 = SCALE * Re[DFT(HpOMG11)]
+                    for k in range(FOMG):
+                        HpOMG11[k: k+1] = fft2d_func(HpOMG11[k: k+1])
+                    HpOMG11 *= SCALE
+
+                    PreOMG11 = np.empty((FOMG, N0, N1), dtype=np.float64)
+                    PreOMG11[:, :, :] = HpOMG11.real
+                    PreOMG11[:, :, :] *= SCALE
+                    del HpOMG11
+                    
+                    
+                    # a01. Hadamard Product for OMEGA_01 [HpOMG01]
+                    _func = SFFTModule_dict['HadProd_OMG01']
+                    HpOMG01 = np.empty((FOMG, N0, N1), dtype=np.complex128)
+                    HpOMG01 = _func(SREF_iji0j0=SREF_iji0j0, ScaSPixA_FIij=ScaSPixA_FIij, SPixA_CFIij=SPixA_CFIij, HpOMG01=HpOMG01)
+                    
+                    # b01. PreOMG01 = SCALE * Re[DFT(HpOMG01)]
+                    for k in range(FOMG):
+                        HpOMG01[k: k+1] = fft2d_func(HpOMG01[k: k+1])
+                    HpOMG01 *= SCALE
+                    
+                    PreOMG01 = np.empty((FOMG, N0, N1), dtype=np.float64)
+                    PreOMG01[:, :] = HpOMG01.real
+                    PreOMG01[:, :] *= SCALE
+                    del HpOMG01
+                    
+                    
+                    # a10. Hadamard Product for OMEGA_10 [HpOMG10]
+                    _func = SFFTModule_dict['HadProd_OMG10']
+                    HpOMG10 = np.empty((FOMG, N0, N1), dtype=np.complex128)
+                    HpOMG10 = _func(SREF_iji0j0=SREF_iji0j0, SPixA_FIij=SPixA_FIij, ScaSPixA_CFIij=ScaSPixA_CFIij, HpOMG10=HpOMG10)
+                    
+                    # b01. PreOMG10 = SCALE * Re[DFT(HpOMG10)]
+                    for k in range(FOMG):
+                        HpOMG10[k: k+1] = fft2d_func(HpOMG10[k: k+1])
+                    HpOMG10 *= SCALE
+                    
+                    PreOMG10 = np.empty((FOMG, N0, N1), dtype=np.float64)
+                    PreOMG10[:, :] = HpOMG10.real
+                    PreOMG10[:, :] *= SCALE
+                    del HpOMG10
+                    
+                    
+                    # a00. Hadamard Product for OMEGA_00 [HpOMG00]
+                    _func = SFFTModule_dict['HadProd_OMG00']
+                    HpOMG00 = np.empty((FOMG, N0, N1), dtype=np.complex128)
+                    HpOMG00 = _func(SREF_iji0j0=SREF_iji0j0, ScaSPixA_FIij=ScaSPixA_FIij, ScaSPixA_CFIij=ScaSPixA_CFIij, HpOMG00=HpOMG00)
+                    
+                    # b00. PreOMG00 = SCALE * Re[DFT(HpOMG00)]
+                    for k in range(FOMG):
+                        HpOMG00[k: k+1] = fft2d_func(HpOMG00[k: k+1])
+                    HpOMG00 *= SCALE
+
+                    PreOMG00 = np.empty((FOMG, N0, N1), dtype=np.float64)
+                    PreOMG00[:, :] = HpOMG00.real
+                    PreOMG00[:, :] *= SCALE
+                    del HpOMG00
+                    
+                    
+                    # c. Fill Linear System with PreOMG
+                    _func = SFFTModule_dict['FillLS_OMG']
+                    LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, \
+                        PreOMG11=PreOMG11, PreOMG01=PreOMG01, PreOMG10=PreOMG10, PreOMG00=PreOMG00, LHMAT=LHMAT)
+                    
+                    del PreOMG11
+                    del PreOMG01
+                    del PreOMG10
+                    del PreOMG00
+                    
+                    dt3 = time.time() - t3
+                    t4 = time.time()
+                                        
+                    # <*****> Establish Linear System through GAMMA <*****> #
+
+                    # a1. Hadamard Product for GAMMA_1 [HpGAM1]
+                    _func = SFFTModule_dict['HadProd_GAM1']
+                    HpGAM1 = np.empty((FGAM, N0, N1), dtype=np.complex128)
+                    HpGAM1 = _func(SREF_ijpq=SREF_ijpq, SPixA_FIij=SPixA_FIij, SPixA_CFTpq=SPixA_CFTpq, HpGAM1=HpGAM1)
+
+                    # b1. PreGAM1 = 1 * Re[DFT(HpGAM1)]
+                    for k in range(FGAM):
+                        HpGAM1[k: k+1] = fft2d_func(HpGAM1[k: k+1])
+                    HpGAM1 *= SCALE
+
+                    PreGAM1 = np.empty((FGAM, N0, N1), dtype=np.float64)
+                    PreGAM1[:, :] = HpGAM1.real
+                    del HpGAM1
+                    
+                    # a0. Hadamard Product for GAMMA_0 [HpGAM0]
+                    _func = SFFTModule_dict['HadProd_GAM0']
+                    HpGAM0 = np.empty((FGAM, N0, N1), dtype=np.complex128)
+                    HpGAM0 = _func(SREF_ijpq=SREF_ijpq, ScaSPixA_FIij=ScaSPixA_FIij, SPixA_CFTpq=SPixA_CFTpq, HpGAM0=HpGAM0)
+
+                    # b0. PreGAM0 = 1 * Re[DFT(HpGAM0)]
+                    for k in range(FGAM):
+                        HpGAM0[k: k+1] = fft2d_func(HpGAM0[k: k+1])
+                    HpGAM0 *= SCALE
+
+                    PreGAM0 = np.empty((FGAM, N0, N1), dtype=np.float64)
+                    PreGAM0[:, :] = HpGAM0.real
+                    del HpGAM0
+
+                    # c. Fill Linear System with PreGAM
+                    _func = SFFTModule_dict['FillLS_GAM']
+                    LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, PreGAM1=PreGAM1, PreGAM0=PreGAM0, LHMAT=LHMAT)
+                    
+                    del PreGAM1
+                    del PreGAM0
+
+                    dt4 = time.time() - t4
+                    t5 = time.time()                        
+                        
+                    # <*****> Establish Linear System through PSI <*****> #
+
+                    # a1. Hadamard Product for PSI_1 [HpPSI1]
+                    _func = SFFTModule_dict['HadProd_PSI1']
+                    HpPSI1 = np.empty((FPSI, N0, N1), dtype=np.complex128)
+                    HpPSI1 = _func(SREF_pqij=SREF_pqij, SPixA_CFIij=SPixA_CFIij, SPixA_FTpq=SPixA_FTpq, HpPSI1=HpPSI1)
+
+                    # b1. PrePSI1 = 1 * Re[DFT(HpPSI1)]
+                    for k in range(FPSI):
+                        HpPSI1[k:k+1] = fft2d_func(HpPSI1[k:k+1])
+                    HpPSI1 *= SCALE
+
+                    PrePSI1 = np.empty((FPSI, N0, N1), dtype=np.float64)
+                    PrePSI1[:, :] = HpPSI1.real
+                    del HpPSI1
+
+                    # a0. Hadamard Product for PSI_0 [HpPSI0]
+                    _func = SFFTModule_dict['HadProd_PSI0']
+                    HpPSI0 = np.empty((FPSI, N0, N1), dtype=np.complex128)
+                    HpPSI0 = _func(SREF_pqij=SREF_pqij, ScaSPixA_CFIij=ScaSPixA_CFIij, SPixA_FTpq=SPixA_FTpq, HpPSI0=HpPSI0)
+
+                    # b1. PrePSI0 = 1 * Re[DFT(HpPSI0)]
+                    for k in range(FPSI):
+                        HpPSI0[k:k+1] = fft2d_func(HpPSI0[k:k+1])
+                    HpPSI0 *= SCALE
+
+                    PrePSI0 = np.empty((FPSI, N0, N1), dtype=np.float64)
+                    PrePSI0[:, :] = HpPSI0.real
+                    del HpPSI0
+
+                    # c. Fill Linear System with PrePSI
+                    _func = SFFTModule_dict['FillLS_PSI']
+                    LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, PrePSI1=PrePSI1, PrePSI0=PrePSI0, LHMAT=LHMAT)
+                    
+                    del PrePSI1
+                    del PrePSI0
+
+                    dt5 = time.time() - t5
+                    t6 = time.time()
+                    
+                    
+                    # <*****> Establish Linear System through PHI <*****> #
+
+                    # a. Hadamard Product for PHI [HpPHI]
+                    _func = SFFTModule_dict['HadProd_PHI']
+                    HpPHI = np.empty((FPHI, N0, N1), dtype=np.complex128)
+                    HpPHI = _func(SREF_pqp0q0=SREF_pqp0q0, SPixA_FTpq=SPixA_FTpq, SPixA_CFTpq=SPixA_CFTpq, HpPHI=HpPHI)
+
+                    # b. PrePHI = SCALE_L * Re[DFT(HpPHI)]
+                    for k in range(FPHI):
+                        HpPHI[k: k+1] = fft2d_func(HpPHI[k: k+1])
+                    HpPHI *= SCALE
+
+                    PrePHI = np.empty((FPHI, N0, N1), dtype=np.float64)
+                    PrePHI[:, :] = HpPHI.real
+                    PrePHI[:, :] *= SCALE_L
+                    del HpPHI
+
+                    # c. Fill Linear System with PrePHI
+                    _func = SFFTModule_dict['FillLS_PHI']
+                    LHMAT = _func(PrePHI=PrePHI, LHMAT=LHMAT)
+                    del PrePHI
+
+                    dt6 = time.time() - t6
+                    t7 = time.time()
+                
+                if MINIMIZE_GPU_MEMORY_USAGE:
+
+                    # <*****> Establish Linear System through OMEGA <*****> #
+
+                    for cIdx in range(FOMG):
+                        
+                        # a11. Hadamard Product for OMEGA_11 [HpOMG11]
+                        _func = SFFTModule_dict['HadProd_OMG11']
+                        cHpOMG11 = np.empty((N0, N1), dtype=np.complex128)
+                        cHpOMG11 = _func(SREF_iji0j0=SREF_iji0j0, SPixA_FIij=SPixA_FIij, SPixA_CFIij=SPixA_CFIij, cIdx=cIdx, cHpOMG11=cHpOMG11)
+                        
+                        # b11. PreOMG11 = SCALE * Re[DFT(HpOMG11)]
+                        cHpOMG11 = fft2d_func(cHpOMG11)
+                        cHpOMG11 *= SCALE
+
+                        cPreOMG11 = np.empty((N0, N1), dtype=np.float64)
+                        cPreOMG11[:, :] = cHpOMG11.real
+                        cPreOMG11[:, :] *= SCALE
+                        del cHpOMG11
+
+                        # a01. Hadamard Product for OMEGA_01 [HpOMG01]
+                        _func = SFFTModule_dict['HadProd_OMG01']
+                        cHpOMG01 = np.empty((N0, N1), dtype=np.complex128)
+                        cHpOMG01 = _func(SREF_iji0j0=SREF_iji0j0, ScaSPixA_FIij=ScaSPixA_FIij, SPixA_CFIij=SPixA_CFIij, cIdx=cIdx, cHpOMG01=cHpOMG01)
+                        
+                        # b01. PreOMG01 = SCALE * Re[DFT(HpOMG01)]
+                        cHpOMG01 = fft2d_func(cHpOMG01)
+                        cHpOMG01 *= SCALE
+
+                        cPreOMG01 = np.empty((N0, N1), dtype=np.float64)
+                        cPreOMG01[:, :] = cHpOMG01.real
+                        cPreOMG01[:, :] *= SCALE
+                        del cHpOMG01
+
+                        # a10. Hadamard Product for OMEGA_10 [HpOMG10]
+                        _func = SFFTModule_dict['HadProd_OMG10']
+                        cHpOMG10 = np.empty((N0, N1), dtype=np.complex128)
+                        cHpOMG10 = _func(SREF_iji0j0=SREF_iji0j0, SPixA_FIij=SPixA_FIij, ScaSPixA_CFIij=ScaSPixA_CFIij, cIdx=cIdx, cHpOMG10=cHpOMG10)
+                        
+                        # b10. PreOMG10 = SCALE * Re[DFT(HpOMG10)]
+                        cHpOMG10 = fft2d_func(cHpOMG10)
+                        cHpOMG10 *= SCALE
+
+                        cPreOMG10 = np.empty((N0, N1), dtype=np.float64)
+                        cPreOMG10[:, :] = cHpOMG10.real
+                        cPreOMG10[:, :] *= SCALE
+                        del cHpOMG10
+
+                        # a00. Hadamard Product for OMEGA_00 [HpOMG00]
+                        _func = SFFTModule_dict['HadProd_OMG00']
+                        cHpOMG00 = np.empty((N0, N1), dtype=np.complex128)
+                        cHpOMG00 = _func(SREF_iji0j0=SREF_iji0j0, ScaSPixA_FIij=ScaSPixA_FIij, ScaSPixA_CFIij=ScaSPixA_CFIij, cIdx=cIdx, cHpOMG00=cHpOMG00)
+                        
+                        # b00. PreOMG00 = SCALE * Re[DFT(HpOMG00)]
+                        cHpOMG00 = fft2d_func(cHpOMG00)
+                        cHpOMG00 *= SCALE
+
+                        cPreOMG00 = np.empty((N0, N1), dtype=np.float64)
+                        cPreOMG00[:, :] = cHpOMG00.real
+                        cPreOMG00[:, :] *= SCALE
+                        del cHpOMG00
+
+                        # c. Fill Linear System with PreOMG
+                        _func = SFFTModule_dict['FillLS_OMG']
+                        LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, cIdx=cIdx, \
+                            cPreOMG11=cPreOMG11, cPreOMG01=cPreOMG01, cPreOMG10=cPreOMG10, cPreOMG00=cPreOMG00, LHMAT=LHMAT)
+                        
+                        del cPreOMG11
+                        del cPreOMG01
+                        del cPreOMG10
+                        del cPreOMG00
+
+                    dt3 = time.time() - t3
+                    t4 = time.time()
+                    
+                    # <*****> Establish Linear System through GAMMA <*****> #
+
+                    for cIdx in range(FGAM):
+
+                        # a1. Hadamard Product for GAMMA_1 [HpGAM1]
+                        _func = SFFTModule_dict['HadProd_GAM1']
+                        cHpGAM1 = np.empty((N0, N1), dtype=np.complex128)
+                        cHpGAM1 = _func(SREF_ijpq=SREF_ijpq, SPixA_FIij=SPixA_FIij, SPixA_CFTpq=SPixA_CFTpq, cIdx=cIdx, cHpGAM1=cHpGAM1)
+
+                        # b1. PreGAM1 = 1 * Re[DFT(HpGAM1)]
+                        cHpGAM1 = fft2d_func(cHpGAM1)
+                        cHpGAM1 *= SCALE
+
+                        cPreGAM1 = np.empty((N0, N1), dtype=np.float64)
+                        cPreGAM1[:, :] = cHpGAM1.real
+                        del cHpGAM1
+                        
+                        # a0. Hadamard Product for GAMMA_0 [HpGAM0]
+                        _func = SFFTModule_dict['HadProd_GAM0']
+                        cHpGAM0 = np.empty((N0, N1), dtype=np.complex128)
+                        cHpGAM0 = _func(SREF_ijpq=SREF_ijpq, ScaSPixA_FIij=ScaSPixA_FIij, SPixA_CFTpq=SPixA_CFTpq, cIdx=cIdx, cHpGAM0=cHpGAM0)
+
+                        # b0. PreGAM0 = 1 * Re[DFT(HpGAM0)]
+                        cHpGAM0 = fft2d_func(cHpGAM0)
+                        cHpGAM0 *= SCALE
+
+                        cPreGAM0 = np.empty((N0, N1), dtype=np.float64)
+                        cPreGAM0[:, :] = cHpGAM0.real
+                        del cHpGAM0
+
+                        # c. Fill Linear System with PreGAM
+                        _func = SFFTModule_dict['FillLS_GAM']
+                        LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, cIdx=cIdx, cPreGAM1=cPreGAM1, cPreGAM0=cPreGAM0, LHMAT=LHMAT)
+                        
+                        del cPreGAM1
+                        del cPreGAM0
+
+                    dt4 = time.time() - t4
+                    t5 = time.time()
+                    
+                    # <*****> Establish Linear System through PSI <*****> #
+
+                    for cIdx in range(FPSI):
+
+                        # a1. Hadamard Product for PSI_1 [HpPSI1]
+                        _func = SFFTModule_dict['HadProd_PSI1']
+                        cHpPSI1 = np.empty((N0, N1), dtype=np.complex128)
+                        cHpPSI1 = _func(SREF_pqij=SREF_pqij, SPixA_CFIij=SPixA_CFIij, SPixA_FTpq=SPixA_FTpq, cIdx=cIdx, cHpPSI1=cHpPSI1)
+
+                        # b1. PrePSI1 = 1 * Re[DFT(HpPSI1)]
+                        # cHpPSI1 = pyfftw.interfaces.numpy_fft.fft2(cHpPSI1)
+                        cHpPSI1 = fft2d_func(cHpPSI1)
+                        cHpPSI1 *= SCALE
+
+                        cPrePSI1 = np.empty((N0, N1), dtype=np.float64)
+                        cPrePSI1[:, :] = cHpPSI1.real
+                        del cHpPSI1
+
+                        # a0. Hadamard Product for PSI_0 [HpPSI0]
+                        _func = SFFTModule_dict['HadProd_PSI0']
+                        cHpPSI0 = np.empty((N0, N1), dtype=np.complex128)
+                        cHpPSI0 = _func(SREF_pqij=SREF_pqij, ScaSPixA_CFIij=ScaSPixA_CFIij, SPixA_FTpq=SPixA_FTpq, cIdx=cIdx, cHpPSI0=cHpPSI0)
+
+                        # b1. PrePSI0 = 1 * Re[DFT(HpPSI0)]
+                        cHpPSI0 = fft2d_func(cHpPSI0)
+                        cHpPSI0 *= SCALE
+
+                        cPrePSI0 = np.empty((N0, N1), dtype=np.float64)
+                        cPrePSI0[:, :] = cHpPSI0.real
+                        del cHpPSI0
+
+                        # c. Fill Linear System with PrePSI
+                        _func = SFFTModule_dict['FillLS_PSI']
+                        LHMAT = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, cIdx=cIdx, cPrePSI1=cPrePSI1, cPrePSI0=cPrePSI0, LHMAT=LHMAT)
+                        
+                        del cPrePSI1
+                        del cPrePSI0
+
+                    dt5 = time.time() - t5
+                    t6 = time.time()
+                    
+                    # <*****> Establish Linear System through PHI <*****> #
+
+                    for cIdx in range(FPHI):
+                        # a. Hadamard Product for PHI [HpPHI]
+                        _func = SFFTModule_dict['HadProd_PHI']
+                        cHpPHI = np.empty((N0, N1), dtype=np.complex128)
+                        cHpPHI = _func(SREF_pqp0q0=SREF_pqp0q0, SPixA_FTpq=SPixA_FTpq, SPixA_CFTpq=SPixA_CFTpq, cIdx=cIdx, cHpPHI=cHpPHI)
+
+                        # b. PrePHI = SCALE_L * Re[DFT(HpPHI)]
+                        cHpPHI = fft2d_func(cHpPHI)
+                        cHpPHI *= SCALE
+
+                        cPrePHI = np.empty((N0, N1), dtype=np.float64)
+                        cPrePHI[:, :] = cHpPHI.real
+                        cPrePHI[:, :] *= SCALE_L
+                        del cHpPHI
+
+                        # c. Fill Linear System with PrePHI
+                        _func = SFFTModule_dict['FillLS_PHI']
+                        LHMAT = _func(cIdx=cIdx, cPrePHI=cPrePHI, LHMAT=LHMAT)
+                        del cPrePHI
+
+                dt6 = time.time() - t6
+                t7 = time.time()
+                
+                # <*****> Establish Linear System through THETA & DELTA <*****> #
+
+                # a1. Hadamard Product for THETA_1 [HpTHE1]
+                _func = SFFTModule_dict['HadProd_THE1']
+                HpTHE1 = np.empty((FTHE, N0, N1), dtype=np.complex128)
+                HpTHE1 = _func(SPixA_FIij=SPixA_FIij, PixA_CFJ=PixA_CFJ, HpTHE1=HpTHE1)
+
+                # a0. Hadamard Product for THETA_0 [HpTHE0]
+                _func = SFFTModule_dict['HadProd_THE0']
+                HpTHE0 = np.empty((FTHE, N0, N1), dtype=np.complex128)
+                HpTHE0 = _func(ScaSPixA_FIij=ScaSPixA_FIij, PixA_CFJ=PixA_CFJ, HpTHE0=HpTHE0)
+
+                # x. Hadamard Product for DELTA [HpDEL]
+                _func = SFFTModule_dict['HadProd_DEL']
+                HpDEL = np.empty((FDEL, N0, N1), dtype=np.complex128)
+                HpDEL = _func(SPixA_FTpq=SPixA_FTpq, PixA_CFJ=PixA_CFJ, HpDEL=HpDEL)
+
+                # b1. PreTHE1 = 1 * Re[DFT(HpTHE1)]
+                # b0. PreTHE0 = 1 * Re[DFT(HpTHE0)]
+                # y. PreDEL = SCALE_L * Re[DFT(HpDEL)]
+
+                for k in range(FTHE):
+                    HpTHE1[k: k+1] = fft3d_func(HpTHE1[k: k+1])
+                HpTHE1[:, :, :] *= SCALE
+
+                PreTHE1 = np.empty((FTHE, N0, N1), dtype=np.float64)
+                PreTHE1[:, :, :] = HpTHE1.real
+                del HpTHE1
+
+                for k in range(FTHE):
+                    HpTHE0[k: k+1] = fft3d_func(HpTHE0[k: k+1])
+                HpTHE0[:, :, :] *= SCALE
+
+                PreTHE0 = np.empty((FTHE, N0, N1), dtype=np.float64)
+                PreTHE0[:, :, :] = HpTHE0.real
+                del HpTHE0
+
+                for k in range(FDEL):
+                    HpDEL[k: k+1] = fft3d_func(HpDEL[k: k+1])
+                HpDEL[:, :, :] *= SCALE
+
+                PreDEL = np.empty((FDEL, N0, N1), dtype=np.float64)
+                PreDEL[:, :, :] = HpDEL.real
+                PreDEL[:, :, :] *= SCALE_L
+                del HpDEL
+
+                # c. Fill Linear System with PreTHE
+                _func = SFFTModule_dict['FillLS_THE']
+                RHb = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, PreTHE1=PreTHE1, PreTHE0=PreTHE0, RHb=RHb)
+                
+                del PreTHE1
+                del PreTHE0
+
+                # z. Fill Linear System with PreDEL
+                _func = SFFTModule_dict['FillLS_DEL']
+                RHb = _func(PreDEL=PreDEL, RHb=RHb)
+                del PreDEL
+                
+            dt7 = time.time() - t7
+            t8 = time.time()
+
+            # <*****> Regularize Linear System <*****> #
+
+            if REGULARIZE_KERNEL:
+                
+                NREG = XY_REGULARIZE.shape[0]
+                CX_REG = XY_REGULARIZE[:, 0]/N0
+                CY_REG = XY_REGULARIZE[:, 1]/N1
+
+                if KerSpType == 'Polynomial':
+
+                    SPMAT = np.array([
+                        CX_REG**i * CY_REG**j 
+                        for i in range(DK+1) for j in range(DK+1-i)
+                    ])
+
+                if KerSpType == 'B-Spline':
+                    KerSplBasisX_REG = Create_BSplineBasis_Req(N=N0, IntKnot=KerIntKnotX, BSplineDegree=DK, ReqCoord=CX_REG)
+                    KerSplBasisY_REG = Create_BSplineBasis_Req(N=N1, IntKnot=KerIntKnotY, BSplineDegree=DK, ReqCoord=CY_REG)
+                    
+                    SPMAT = np.array([
+                        KerSplBasisX_REG[i] * KerSplBasisY_REG[j]
+                        for i in range(Fi) for j in range(Fj)
+                    ])
+
+                SPMAT = np.array(SPMAT, dtype=np.float64)
+
+                if SCALING_MODE == 'SEPARATE-VARYING':
+
+                    if ScaSpType == 'Polynomial':
+
+                        ScaSPMAT = np.array([
+                            CX_REG**i * CY_REG**j 
+                            for i in range(DS+1) for j in range(DS+1-i)
+                        ])
+
+                    if ScaSpType == 'B-Spline':
+                        ScaSplBasisX_REG = Create_BSplineBasis_Req(N=N0, IntKnot=ScaIntKnotX, BSplineDegree=DS, ReqCoord=CX_REG)
+                        ScaSplBasisY_REG = Create_BSplineBasis_Req(N=N1, IntKnot=ScaIntKnotY, BSplineDegree=DS, ReqCoord=CY_REG)
+                        
+                        ScaSPMAT = np.array([
+                            ScaSplBasisX_REG[i] * ScaSplBasisY_REG[j]
+                            for i in range(ScaFi) for j in range(ScaFj)
+                        ])
+                    
+                    # placeholder
+                    if ScaFij < Fij:
+                        ScaSPMAT = np.concatenate((
+                            ScaSPMAT, 
+                            np.zeros((Fij-ScaFij, NREG), dtype=np.float64)
+                            ), axis=0
+                        )
+
+                    ScaSPMAT = np.array(ScaSPMAT, dtype=np.float64)
+
+                if WEIGHT_REGULARIZE is None:
+                    SSTMAT = np.matmul(SPMAT, SPMAT.T)/NREG   # symmetric
+                    if SCALING_MODE == 'SEPARATE-VARYING':
+                        CSSTMAT = np.matmul(SPMAT, ScaSPMAT.T)/NREG     # C: Cross
+                        DSSTMAT = np.matmul(ScaSPMAT, ScaSPMAT.T)/NREG  # D: Double, symmetric
+
+                if WEIGHT_REGULARIZE is not None:
+                    # weighted average over regularization points
+                    WSPMAT = np.diag(WEIGHT_REGULARIZE)
+                    WSPMAT /= np.sum(WEIGHT_REGULARIZE)  # normalize to have unit sum
+                    WSPMAT = np.array(WSPMAT, dtype=np.float64)
+
+                    SSTMAT = np.matmul(np.matmul(SPMAT, WSPMAT), SPMAT.T)   # symmetric
+                    if SCALING_MODE == 'SEPARATE-VARYING':
+                        CSSTMAT = np.matmul(p.matmul(SPMAT, WSPMAT), ScaSPMAT.T)   # C: Cross
+                        DSSTMAT = np.matmul(p.matmul(ScaSPMAT, WSPMAT), ScaSPMAT.T)   # D: Double, symmetric
+
+                # Create Laplacian Matrix
+                LAPMAT = np.zeros((Fab, Fab)).astype(np.int32)
+                RR, CC = np.mgrid[0: L0, 0: L1]
+                RRF = RR.flatten().astype(np.int32)
+                CCF = CC.flatten().astype(np.int32)
+
+                AdCOUNT = signal.correlate2d(
+                    np.ones((L0, L1)), 
+                    np.array([[0, 1, 0],
+                              [1, 0, 1],
+                              [0, 1, 0]]),
+                    mode='same', 
+                    boundary='fill',
+                    fillvalue=0
+                ).astype(np.int32)
+
+                # fill diagonal elements
+                KIDX = np.arange(Fab)
+                LAPMAT[KIDX, KIDX] = AdCOUNT.flatten()[KIDX]
+
+                LAPMAT = np.array(LAPMAT, dtype=np.int32)
+                RRF = np.array(RRF, dtype=np.int32)
+                CCF = np.array(CCF, dtype=np.int32)
+
+                # fill non-diagonal 
+                _func = SFFTModule_dict['fill_lapmat_nondiagonal']
+                LAPMAT = _func(LAPMAT=LAPMAT, RRF=RRF, CCF=CCF)
+
+                # zero-out kernel-center rows of laplacian matrix
+                # FIXME: one can multiply user-defined weights of kernel pixels 
+                if IGNORE_LAPLACIAN_KERCENT:
+                    
+                    LAPMAT[(w0-1)*L1+w1, :] = 0.0 
+                    LAPMAT[w0*L1+w1-1, :] = 0.0
+                    LAPMAT[w0*L1+w1, :] = 0.0
+                    LAPMAT[w0*L1+w1+1, :] = 0.0
+                    LAPMAT[(w0+1)*L1+w1, :] = 0.0
+
+                LTLMAT = np.matmul(LAPMAT.T, LAPMAT)   # symmetric
+                
+                # Create iREGMAT
+                iREGMAT = np.zeros((Fab, Fab), dtype=np.int32)
+                _func = SFFTModule_dict['fill_iregmat']    
+                iREGMAT = _func(iREGMAT=iREGMAT, LTLMAT=LTLMAT)
+
+                # Create REGMAT
+                REGMAT = np.zeros((NEQ, NEQ), dtype=np.float64)
+                if SCALING_MODE in ['ENTANGLED', 'SEPARATE-CONSTANT']:
+                    _func = SFFTModule_dict['fill_regmat']    
+                    REGMAT = _func(iREGMAT=iREGMAT, SSTMAT=SSTMAT, REGMAT=REGMAT)
+
+                if SCALING_MODE == 'SEPARATE-VARYING':
+                    _func = SFFTModule_dict['fill_regmat']    
+                    REGMAT = _func(iREGMAT=iREGMAT, SSTMAT=SSTMAT, CSSTMAT=CSSTMAT, DSSTMAT=DSSTMAT, REGMAT=REGMAT)
+
+                # UPDATE LHMAT
+                LHMAT += LAMBDA_REGULARIZE * REGMAT
+            
+            # <*****> Tweak Linear System <*****> #
+
+            if SCALING_MODE == 'ENTANGLED' or (SCALING_MODE == 'SEPARATE-VARYING' and NEQt == NEQ):
+                pass
+
+            if SCALING_MODE == 'SEPARATE-CONSTANT':
+                
+                LHMAT_tweaked = np.empty((NEQt, NEQt), dtype=np.float64)
+                RHb_tweaked = np.empty(NEQt, dtype=np.float64)
+
+                PresIDX = np.setdiff1d(np.arange(NEQ), ij00[1:], assume_unique=True).astype(np.int32)
+                assert np.all(PresIDX[:-1] < PresIDX[1:])
+                assert PresIDX[ij00[0]] == ij00[0]
+                PresIDX = np.array(PresIDX)
+
+
+                if KerSpType == 'Polynomial':
+                    _func = SFFTModule_dict['TweakLS']
+                    LHMAT_tweaked, RHb_tweaked = _func(LHMAT=LHMAT, RHb=RHb, PresIDX=PresIDX, LHMAT_tweaked=LHMAT_tweaked, \
+                                                       RHb_tweaked=RHb_tweaked)
+                
+                if KerSpType == 'B-Spline':
+                    _func = SFFTModule_dict['TweakLS']
+                    LHMAT_tweaked, RHb_tweaked = _func(LHMAT=LHMAT, RHb=RHb, PresIDX=PresIDX, ij00=ij00, \
+                                                       LHMAT_tweaked=LHMAT_tweaked, RHb_tweaked=RHb_tweaked)
+            
+            
+            
+            if SCALING_MODE == 'SEPARATE-VARYING' and NEQt < NEQ:
+
+                LHMAT_tweaked = np.empty((NEQt, NEQt), dtype=np.float64)
+                RHb_tweaked = np.empty(NEQt, dtype=np.float64)
+
+                PresIDX = np.setdiff1d(np.arange(NEQ), ij00[ScaFij:], assume_unique=True).astype(np.int32)
+                assert np.all(PresIDX[:-1] < PresIDX[1:])
+                assert PresIDX[ij00[0]] == ij00[0]
+                PresIDX = np.array(PresIDX)
+
+                
+                _func = SFFTModule_dict['TweakLS']
+                LHMAT_tweaked, RHb_tweaked = _func(LHMAT=LHMAT, RHb=RHb, PresIDX=PresIDX, LHMAT_tweaked=LHMAT_tweaked, \
+                                                   RHb_tweaked=RHb_tweaked)
+            
+            # <*****> Solve Linear System & Restore Solution <*****> #
+
+            if SCALING_MODE == 'ENTANGLED' or (SCALING_MODE == 'SEPARATE-VARYING' and NEQt == NEQ):
+                Solution = solver(LHMAT, RHb)
+
+            if SCALING_MODE == 'SEPARATE-CONSTANT':
+                Solution_tweaked = solver(LHMAT_tweaked, RHb_tweaked)
+
+                if KerSpType == 'Polynomial':
+                    Solution = np.zeros(NEQ, dtype=np.float64)
+                
+                if KerSpType == 'B-Spline':
+                    Solution = np.zeros(NEQ, dtype=np.float64)
+                    Solution[ij00[1:]] = Solution_tweaked[ij00[0]]
+
+                _func = SFFTModule_dict['Restore_Solution']
+                Solution = _func(Solution_tweaked=Solution_tweaked, PresIDX=PresIDX, Solution=Solution)
+
+
+            if SCALING_MODE == 'SEPARATE-VARYING' and NEQt < NEQ:
+                Solution_tweaked = solver(LHMAT_tweaked, RHb_tweaked)
+
+                Solution = np.zeros(NEQ, dtype=np.float64)
+                _func = SFFTModule_dict['Restore_Solution']
+                Solution = _func(Solution_tweaked=Solution_tweaked, PresIDX=PresIDX, Solution=Solution)
+
+            a_ijab = Solution[: Fijab]
+            b_pq = Solution[Fijab: ]
+
+            dt8 = time.time() - t8
+            dtb = time.time() - tb
+
+            if VERBOSE_LEVEL in [1, 2]:
+                print('MeLOn CheckPoint: SFFT-EXECUTION Establish & Solve Linear System takes [%.4fs]' %dtb)
+
+            if VERBOSE_LEVEL in [2]:
+                print('/////   d   ///// Establish OMG                       (%.4fs)' %dt3)
+                print('/////   e   ///// Establish GAM                       (%.4fs)' %dt4)
+                print('/////   f   ///// Establish PSI                       (%.4fs)' %dt5)
+                print('/////   g   ///// Establish PHI                       (%.4fs)' %dt6)
+                print('/////   h   ///// Establish THE & DEL                 (%.4fs)' %dt7)
+                print('/////   i   ///// Solve Linear System                 (%.4fs)' %dt8)
+
+        # <*****> Perform Subtraction  <*****> #
+        PixA_OUT = None
+        if Subtract:
+            tc = time.time()
+            t9 = time.time()
+
+            # Calculate Kab components
+            Wl = np.exp((-2j*np.pi/N0) * PixA_X.astype(np.float64))    # row index l, [0, N0)
+            Wm = np.exp((-2j*np.pi/N1) * PixA_Y.astype(np.float64))    # column index m, [0, N1)
+            Kab_Wla = np.empty((L0, N0, N1), dtype=np.complex128)
+            Kab_Wmb = np.empty((L1, N0, N1), dtype=np.complex128)
+
+            if w0 == w1:
+                wx = w0   # a little bit faster
+                for aob in range(-wx, wx+1):
+                    Kab_Wla[aob + wx] = Wl ** aob    # offset 
+                    Kab_Wmb[aob + wx] = Wm ** aob    # offset 
+            else:
+                for a in range(-w0, w0+1): 
+                    Kab_Wla[a + w0] = Wl ** a        # offset 
+                for b in range(-w1, w1+1): 
+                    Kab_Wmb[b + w1] = Wm ** b        # offset 
+            
+            dt9 = time.time() - t9
+            t10 = time.time()
+            
+
+        if Subtract:
+            # Construct Difference in Fourier Space
+            if SCALING_MODE in ['ENTANGLED', 'SEPARATE-CONSTANT']:
+                _func = SFFTModule_dict['Construct_FDIFF']  
+                PixA_FDIFF = np.empty((N0, N1), dtype=np.complex128)
+                PixA_FDIFF = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, a_ijab=a_ijab.astype(np.complex128), \
+                    SPixA_FIij=SPixA_FIij, Kab_Wla=Kab_Wla, Kab_Wmb=Kab_Wmb, b_pq=b_pq.astype(np.complex128), \
+                    SPixA_FTpq=SPixA_FTpq, PixA_FJ=PixA_FJ, PixA_FDIFF=PixA_FDIFF)
+                
+            if SCALING_MODE == 'SEPARATE-VARYING':
+                _func = SFFTModule_dict['Construct_FDIFF']   
+                PixA_FDIFF = np.empty((N0, N1), dtype=np.complex128)
+                PixA_FDIFF = _func(SREF_ijab=SREF_ijab, REF_ab=REF_ab, a_ijab=a_ijab.astype(np.complex128), \
+                    SPixA_FIij=SPixA_FIij, ScaSPixA_FIij=ScaSPixA_FIij, Kab_Wla=Kab_Wla, Kab_Wmb=Kab_Wmb, b_pq=b_pq.astype(np.complex128), \
+                    SPixA_FTpq=SPixA_FTpq, PixA_FJ=PixA_FJ, PixA_FDIFF=PixA_FDIFF)
+            
+            # Get Difference & Reconstructed Images
+            PixA_DIFF = np.empty_like(PixA_FDIFF)
+            PixA_DIFF = SCALE_L * ifft2d_func(PixA_FDIFF)
+            PixA_DIFF = PixA_DIFF.real
+            
+            
+            dt10 = time.time() - t10
+            dtc = time.time() - tc
+
+            if VERBOSE_LEVEL in [1, 2]:
+                print('MeLOn CheckPoint: SFFT-SUBTRACTION Perform Subtraction takes [%.4fs]' %dtc)
+            
+            if VERBOSE_LEVEL in [2]:
+                print('/////   j   ///// Calculate Kab         (%.4fs)' %dt9)
+                print('/////   k   ///// Construct DIFF        (%.4fs)' %dt10)
+                
+                
+        if VERBOSE_LEVEL in [1, 2]:
+            print('--||--||--||--||-- EXIT SFFT [Numpy] --||--||--||--||--')
+
+        return Solution, PixA_DIFF
 
 class ElementalSFFTSubtract:
     @staticmethod
     def ESS(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, \
-        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
+        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, fft_type='mkl', 
+        VERBOSE_LEVEL=2):
 
         if BACKEND_4SUBTRACT == 'Cupy':
             Solution, PixA_DIFF = ElementalSFFTSubtract_Cupy.ESSC(PixA_I=PixA_I, PixA_J=PixA_J, \
@@ -3873,14 +2605,18 @@ class ElementalSFFTSubtract:
                 VERBOSE_LEVEL=VERBOSE_LEVEL)
 
         if BACKEND_4SUBTRACT == 'Numpy':
-            print('MeLOn ERROR: Numpy backend is not supported for B-Spline SFFT in current version! Will implement in future!')
-        
+            Solution, PixA_DIFF = ElementalSFFTSubtract_Numpy.ESSN(PixA_I=PixA_I, PixA_J=PixA_J, \
+                SFFTConfig=SFFTConfig, SFFTSolution=SFFTSolution, Subtract=Subtract, \
+                fft_type=fft_type, VERBOSE_LEVEL=VERBOSE_LEVEL)
+
         return Solution, PixA_DIFF
+
 
 class GeneralSFFTSubtract:
     @staticmethod
     def GSS(PixA_I, PixA_J, PixA_mI, PixA_mJ, SFFTConfig, ContamMask_I=None, \
-        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
+        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, fft_type='mkl', 
+        VERBOSE_LEVEL=2):
 
         """
         # Perform image subtraction on I & J with SFFT parameters solved from mI & mJ
@@ -3939,12 +2675,14 @@ class GeneralSFFTSubtract:
         # * Subtraction Solution derived from input masked image-pair
         Solution = ElementalSFFTSubtract.ESS(PixA_I=PixA_mI, PixA_J=PixA_mJ, SFFTConfig=SFFTConfig, \
             SFFTSolution=None, Subtract=False, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)[0]
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, fft_type=fft_type, \
+            VERBOSE_LEVEL=VERBOSE_LEVEL)[0]
             
         # * Subtraction of the input image-pair (use above solution)
         PixA_DIFF = ElementalSFFTSubtract.ESS(PixA_I=PixA_I, PixA_J=PixA_J, SFFTConfig=SFFTConfig, \
             SFFTSolution=Solution, Subtract=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)[1]
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, fft_type=fft_type, \
+            VERBOSE_LEVEL=VERBOSE_LEVEL)[1]
         
         # * Identify propagated contamination region through convolving I
         ContamMask_CI = None
@@ -3957,7 +2695,8 @@ class GeneralSFFTSubtract:
             _tmpJ = np.zeros(PixA_J.shape).astype(np.float64)
             _tmpD = ElementalSFFTSubtract.ESS(PixA_I=_tmpI, PixA_J=_tmpJ, SFFTConfig=SFFTConfig, \
                 SFFTSolution=tSolution, Subtract=True, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-                NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)[1]
+                NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, fft_type=fft_type, \
+                VERBOSE_LEVEL=VERBOSE_LEVEL)[1]
             
             FTHRESH = -0.001  # emperical value
             ContamMask_CI = _tmpD < FTHRESH
@@ -3973,7 +2712,7 @@ class BSpline_Packet:
         REGULARIZE_KERNEL=False, IGNORE_LAPLACIAN_KERCENT=True, XY_REGULARIZE=None, 
         WEIGHT_REGULARIZE=None, LAMBDA_REGULARIZE=1e-6, BACKEND_4SUBTRACT='Cupy', \
         CUDA_DEVICE_4SUBTRACT='0', MAX_THREADS_PER_BLOCK=8, MINIMIZE_GPU_MEMORY_USAGE=False, \
-        NUM_CPU_THREADS_4SUBTRACT=8, VERBOSE_LEVEL=2):
+        NUM_CPU_THREADS_4SUBTRACT=8, fft_type='mkl', VERBOSE_LEVEL=2):
         
         """
         * Parameters of Customized SFFT
@@ -4008,7 +2747,10 @@ class BSpline_Packet:
                                             # Numpy backend sfft is implemented with pyFFTW and numba, that allow for 
                                             # parallel computing on CPUs.
                                             # NOTE: the argument only works for Numpy backend.
-        
+
+        -fft_type ['mkl']                   # it specifies the FFT implementation to use, can be 'mkl' or 'pyfftw'.
+                                            # NOTE: the argument only works for Numpy backend.
+
         # ----------------------------- SFFT Subtraction --------------------------------- #
 
         -ForceConv ['REF']                  # it determines which image will be convolved, can be 'REF' or 'SCI'.
