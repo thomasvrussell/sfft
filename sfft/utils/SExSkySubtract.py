@@ -12,26 +12,27 @@ __version__ = "v1.4"
 
 class SEx_SkySubtract:
     @staticmethod
-    def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
-        BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
-        VERBOSE_LEVEL=2, MDIR=None):
+    def SSS(FITS_obj, FITS_skysub=None, FITS_sky=None, FITS_skyrms=None, FITS_detmask=None,
+            SATUR_KEY='SATURATE', ESATUR_KEY='ESATUR', \
+            BACK_SIZE=64, BACK_FILTERSIZE=3, DETECT_THRESH=1.5, DETECT_MINAREA=5, DETECT_MAXAREA=0, \
+            VERBOSE_LEVEL=2, MDIR=None):
 
         """
         # Inputs & Outputs:
 
-        -FITS_obj []                    # FITS file path of the input image 
- 
+        -FITS_obj []                    # FITS file path of the input image
+
         -FITS_skysub [None]             # FITS file path of the output sky-subtracted image
 
         -FITS_sky [None]                # FITS file path of the output sky image
-        
+
         -FITS_skyrms [None]             # FITS file path of the output sky RMS image
 
         -ESATUR_KEY ['ESATUR']          # Keyword for the effective saturation level of sky-subtracted image
                                         # P.S. the value will be saved in the primary header of -FITS_skysub
 
         # Configurations for SExtractor:
-        
+
         -SATUR_KEY ['SATURATE']         # SExtractor Parameter SATUR_KEY
                                         # i.e., keyword of the saturation level in the input image header
 
@@ -42,16 +43,16 @@ class SEx_SkySubtract:
         -DETECT_THRESH [1.5]            # SExtractor Parameter DETECT_THRESH
 
         -DETECT_MINAREA [5]             # SExtractor Parameter DETECT_MINAREA
-        
+
         -DETECT_MAXAREA [0]             # SExtractor Parameter DETECT_MAXAREA
 
         # Miscellaneous
-        
+
         -VERBOSE_LEVEL [2]              # The level of verbosity, can be [0, 1, 2]
                                         # 0/1/2: QUIET/NORMAL/FULL mode
-        
+
         -MDIR [None]                    # Parent Directory for output files
-                                        # PYSEx will generate a child directory with a random name under the paraent directory 
+                                        # PYSEx will generate a child directory with a random name under the paraent directory
                                         # all output files are stored in the child directory
 
         # Returns:
@@ -59,12 +60,12 @@ class SEx_SkySubtract:
             SKYDIP                      # The flux peak of the sky image (outliers rejected)
 
             SKYPEAK                     # The flux dip of the sky image (outliers rejected)
-            
-            PixA_skysub                 # Pixel Array of the sky-subtracted image 
-            
-            PixA_sky                    # Pixel Array of the sky image 
-            
-            PixA_skyrms                 # Pixel Array of the sky RMS image 
+
+            PixA_skysub                 # Pixel Array of the sky-subtracted image
+
+            PixA_sky                    # Pixel Array of the sky image
+
+            PixA_skyrms                 # Pixel Array of the sky RMS image
 
         """
 
@@ -76,7 +77,7 @@ class SEx_SkySubtract:
                 BACK_TYPE='AUTO', BACK_SIZE=BACK_SIZE, BACK_FILTERSIZE=BACK_FILTERSIZE, DETECT_THRESH=DETECT_THRESH, \
                 ANALYSIS_THRESH=1.5, DETECT_MINAREA=DETECT_MINAREA, DETECT_MAXAREA=DETECT_MAXAREA, DEBLEND_MINCONT=0.005, \
                 BACKPHOTO_TYPE='GLOBAL', CHECKIMAGE_TYPE='OBJECTS', MDIR=MDIR, VERBOSE_LEVEL=VERBOSE_LEVEL)[1][0].astype(bool)
-        
+
         # * Extract SExtractor SKY-MAP from the Unmasked Image
         PixA_obj = fits.getdata(FITS_obj, ext=0).T
         _PixA = PixA_obj.astype(np.float64, copy=True)    # default copy=True, just to emphasize
@@ -94,29 +95,33 @@ class SEx_SkySubtract:
         IQR = iqr(PixA_sky)
         SKYDIP = Q1 - 1.5*IQR    # outlier rejected dip
         SKYPEAK = Q3 + 1.5*IQR   # outlier rejected peak
-        
+
+        with fits.open(FITS_obj) as hdl:
+            FITS_obj_hdr = hdl[0].header
+            FITS_obj_hdr['SKYRMS'] = ( np.median( PixA_skyrms ), 'MeLOn: Median of sky RMS' )
+
         if FITS_skysub is not None:
-            with fits.open(FITS_obj) as hdl:
-                hdl[0].header['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
-                hdl[0].header['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
-                if SATUR_KEY in hdl[0].header:
-                    ESATUR = float(hdl[0].header[SATUR_KEY]) - SKYPEAK    # use a conservative value
-                    hdl[0].header[ESATUR_KEY] = (ESATUR, 'MeLOn: Effective SATURATE after SEx-SKY-SUB')
-                hdl[0].data[:, :] = PixA_skysub.T
-                hdl.writeto(FITS_skysub, overwrite=True)
-        
+            hdr = FITS_obj_hdr.copy()
+            hdr['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
+            hdr['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
+            if SATUR_KEY in hdr:
+                ESATUR = float(hdr[SATUR_KEY]) - SKYPEAK    # use a conservative value
+                hdr[ESATUR_KEY] = (ESATUR, 'MeLOn: Effective SATURATE after SEx-SKY-SUB')
+            fits.writeto( FITS_skysub, PixA_skysub.T, hdr, overwrite=True )
+
         if FITS_sky is not None:
-            with fits.open(FITS_obj) as hdl:
-                hdl[0].header['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
-                hdl[0].header['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
-                hdl[0].data[:, :] = PixA_sky.T
-                hdl.writeto(FITS_sky, overwrite=True)
-        
+            hdr = FITS_obj_hdr.copy()
+            hdr['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
+            hdr['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
+            fits.writeto(FITS_sky, PixA_sky.T, hdr, overwrite=True)
+
         if FITS_skyrms is not None:
-            with fits.open(FITS_obj) as hdl:
-                hdl[0].header['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
-                hdl[0].header['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
-                hdl[0].data[:, :] = PixA_skyrms.T
-                hdl.writeto(FITS_skyrms, overwrite=True)
+            hdr = FITS_obj_hdr.copy()
+            hdr['SKYDIP'] = (SKYDIP, 'MeLOn: IQR-MINIMUM of SEx-SKY-MAP')
+            hdr['SKYPEAK'] = (SKYPEAK, 'MeLOn: IQR-MAXIMUM of SEx-SKY-MAP')
+            fits.writeto(FITS_skyrms, PixA_skyrms.T, hdr, overwrite=True)
+
+        if FITS_detmask is not None:
+            fits.writeto( FITS_detmask, DETECT_MASK.T.astype( np.uint8 ), overwrite=True )
 
         return SKYDIP, SKYPEAK, PixA_skysub, PixA_sky, PixA_skyrms
