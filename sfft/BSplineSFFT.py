@@ -1273,7 +1273,7 @@ class ElementalSFFTSubtract_Cupy:
 class ElementalSFFTSubtract_Numpy:
     @staticmethod
     def ESSN(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, NUM_CPU_THREADS_4SUBTRACT=8, \
-             VERBOSE_LEVEL=2, fft_type='mkl'):
+             VERBOSE_LEVEL=2, fft_type='pyfftw'):
         
         import scipy.linalg as linalg
         def solver(A, b):
@@ -2596,7 +2596,7 @@ class ElementalSFFTSubtract_Numpy:
 class ElementalSFFTSubtract:
     @staticmethod
     def ESS(PixA_I, PixA_J, SFFTConfig, SFFTSolution=None, Subtract=False, \
-        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, fft_type='mkl', 
+        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, fft_type='pyfftw', 
         VERBOSE_LEVEL=2):
 
         if BACKEND_4SUBTRACT == 'Cupy':
@@ -2615,7 +2615,7 @@ class ElementalSFFTSubtract:
 class GeneralSFFTSubtract:
     @staticmethod
     def GSS(PixA_I, PixA_J, PixA_mI, PixA_mJ, SFFTConfig, ContamMask_I=None, \
-        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, fft_type='mkl', 
+        BACKEND_4SUBTRACT='Cupy', NUM_CPU_THREADS_4SUBTRACT=8, fft_type='pyfftw', 
         VERBOSE_LEVEL=2):
 
         """
@@ -2712,7 +2712,7 @@ class BSpline_Packet:
         REGULARIZE_KERNEL=False, IGNORE_LAPLACIAN_KERCENT=True, XY_REGULARIZE=None, 
         WEIGHT_REGULARIZE=None, LAMBDA_REGULARIZE=1e-6, BACKEND_4SUBTRACT='Cupy', \
         CUDA_DEVICE_4SUBTRACT='0', MAX_THREADS_PER_BLOCK=8, MINIMIZE_GPU_MEMORY_USAGE=False, \
-        NUM_CPU_THREADS_4SUBTRACT=8, fft_type='mkl', VERBOSE_LEVEL=2):
+        NUM_CPU_THREADS_4SUBTRACT=8, fft_type='pyfftw', VERBOSE_LEVEL=2):
         
         """
         * Parameters of Customized SFFT
@@ -2748,7 +2748,7 @@ class BSpline_Packet:
                                             # parallel computing on CPUs.
                                             # NOTE: the argument only works for Numpy backend.
 
-        -fft_type ['mkl']                   # it specifies the FFT implementation to use, can be 'mkl' or 'pyfftw'.
+        -fft_type ['pyfftw']                # it specifies the FFT implementation to use, can be 'mkl' or 'pyfftw'.
                                             # NOTE: the argument only works for Numpy backend.
 
         # ----------------------------- SFFT Subtraction --------------------------------- #
@@ -2939,7 +2939,8 @@ class BSpline_Packet:
         Tsub_start = time.time()
         _tmp = GeneralSFFTSubtract.GSS(PixA_I=PixA_I, PixA_J=PixA_J, PixA_mI=PixA_mI, PixA_mJ=PixA_mJ, \
             SFFTConfig=SFFTConfig, ContamMask_I=None, BACKEND_4SUBTRACT=BACKEND_4SUBTRACT, \
-            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, VERBOSE_LEVEL=VERBOSE_LEVEL)
+            NUM_CPU_THREADS_4SUBTRACT=NUM_CPU_THREADS_4SUBTRACT, fft_type=fft_type, \
+            VERBOSE_LEVEL=VERBOSE_LEVEL)
 
         Solution, PixA_DIFF = _tmp[:2]
         if VERBOSE_LEVEL in [1, 2]:
