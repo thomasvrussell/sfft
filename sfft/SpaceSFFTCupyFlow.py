@@ -6,7 +6,8 @@ import numpy as np
 from sfft.PureCupyCustomizedPacket import PureCupy_Customized_Packet
 from sfft.utils.PureCupyFFTKits import PureCupy_FFTKits
 from sfft.utils.PatternRotationCalculator import PatternRotation_Calculator
-from sfft.utils.PureCupyDeCorrelationCalculator import PureCupy_DeCorrelation_Calculator
+# from sfft.utils.PureCupyDeCorrelationCalculator import PureCupy_DeCorrelation_Calculator
+from sfft.utils.DeCorrelationCalculator import DeCorrelation_Calculator, KERNEL_CSZ, KERNEL_CSZ_INV
 from sfft.utils.ResampKits import Cupy_ZoomRotate
 from sfft.utils.ResampKits import Cupy_Resampling
 from sfft.utils.SkyLevelEstimator import SkyLevel_Estimator
@@ -291,7 +292,7 @@ class SpaceSFFT_CupyFlow:
         )
         self.PixA_DIFF_GPU[self.BlankMask_GPU] = 0.
 
-    def find_decorrelation( self ):
+    def find_decorrelation( self , Consider_Matching_Kernel=False):
         # * step 3. perform decorrelation in Fourier domain
         # extract matching kernel at the center
         N0, N1 = self.PixA_DIFF_GPU.shape
@@ -307,40 +308,73 @@ class SpaceSFFT_CupyFlow:
 
         # NOTE -- assuming below that the resampled object image has the same
         #   skyrms as the original object image.  (This is ~OK.)
-        self.FKDECO_GPU = PureCupy_DeCorrelation_Calculator.PCDC(NX_IMG=N0,
-                                                                 NY_IMG=N1,
-                                                                 KERNEL_GPU_JQueue=[self.PSF_target_GPU], 
-                                                                 BKGSIG_JQueue=[self.object_skyrms],
-                                                                 KERNEL_GPU_IQueue=[self.PSF_resamp_object_GPU],
-                                                                 BKGSIG_IQueue=[self.target_skyrms], 
-                                                                 MATCH_KERNEL_GPU=MATCH_KERNEL_GPU,
-                                                                 REAL_OUTPUT=False,
-                                                                 REAL_OUTPUT_SIZE=None, 
-                                                                 NORMALIZE_OUTPUT=True,
-                                                                 VERBOSE_LEVEL=2)
-
-
+        # self.FKDECO_GPU = PureCupy_DeCorrelation_Calculator.PCDC(NX_IMG=N0,
+        #                                                          NY_IMG=N1,
+        #                                                          KERNEL_GPU_JQueue=[self.PSF_target_GPU], 
+        #                                                          BKGSIG_JQueue=[self.object_skyrms],
+        #                                                          KERNEL_GPU_IQueue=[self.PSF_resamp_object_GPU],
+        #                                                          BKGSIG_IQueue=[self.target_skyrms], 
+        #                                                          MATCH_KERNEL_GPU=MATCH_KERNEL_GPU,
+        #                                                          REAL_OUTPUT=False,
+        #                                                          REAL_OUTPUT_SIZE=None, 
+        #                                                          NORMALIZE_OUTPUT=True,
+        #                                                          VERBOSE_LEVEL=2)
+        if Consider_Matching_Kernel:
+            MK = cp.asnumpy(MATCH_KERNEL_GPU)
+        else:
+            MK = None
+        self.FKDECO = DeCorrelation_Calculator(NX_IMG=N0, 
+                                               NY_IMG=N1, 
+                                               KERNEL_JQueue=[cp.asnumpy(self.PSF_resamp_object_GPU)], 
+                                               BKGSIG_JQueue=[self.target_skyrms], 
+                                               KERNEL_IQueue=[cp.asnumpy(self.PSF_target_GPU)], 
+                                               BKGSIG_IQueue=[self.object_skyrms], 
+                                               MATCH_KERNEL=MK, 
+                                               REAL_OUTPUT=False, 
+                                               REAL_OUTPUT_SIZE=None, 
+                                               NORMALIZE_OUTPUT=True, 
+                                               VERBOSE_LEVEL=2)
+        self.FKDECO_GPU = cp.array(self.FKDECO, dtype=cp.complex128)
+    
     def apply_decorrelation( self, img ):
         # do decorrelation
 
-        padxl = 0
-        padyl = 0
-        padxh = 0
-        padyh = 0
-        # Implicitly assuming img is smaller here
-        if img.shape != self.FKDECO_GPU.shape:
-            padx = self.FKDECO_GPU.shape[0] - img.shape[0]
-            padxl = padx // 2
-            padxh = padx - padxl
-            pady = self.FKDECO_GPU.shape[1] - img.shape[1]
-            padyl = pady // 2
-            padyh = pady - padyl
-            img = cp.pad( img, ( (padxl, padxh), (padyl, padyh) ) )
-            
-        Fdecor = cp.fft.fft2( img )
-        decorimg = cp.fft.ifft2( Fdecor * self.FKDECO_GPU ).real
+        # decorrelate difference image
+        _img = cp.asnumpy(img)
+        if _img.shape == self.FKDECO.shape:
+            FPixA = np.fft.fft2(_img)
+            PixA_decorr = np.fft.ifft2(FPixA * self.FKDECO).real
+            decorimg = cp.array(PixA_decorr, dtype=cp.float64)
+        else:
+            NK0, NK1 = _img.shape
+            N0, N1 = self.FKDECO.shape
+            KERN_CSZ = KERNEL_CSZ(KERNEL=_img, NX_IMG=N0, NY_IMG=N1)
+            FKERN_decorr = np.fft.fft2(KERN_CSZ) * self.FKDECO
+            PixA_KERN_decorr = KERNEL_CSZ_INV(np.fft.ifft2(FKERN_decorr).real, NX_KERN=NK0, NY_KERN=NK1)
+            decorimg = cp.array(PixA_KERN_decorr, dtype=cp.float64)
+        return decorimg
+    
+    # def apply_decorrelation( self, img ):
+    #     # do decorrelation
 
-        return decorimg[ padxl:(decorimg.shape[0]-padxh) , padyl:(decorimg.shape[1]-padyh) ]
+    #     padxl = 0
+    #     padyl = 0
+    #     padxh = 0
+    #     padyh = 0
+    #     # Implicitly assuming img is smaller here
+    #     if img.shape != self.FKDECO_GPU.shape:
+    #         padx = self.FKDECO_GPU.shape[0] - img.shape[0]
+    #         padxl = padx // 2
+    #         padxh = padx - padxl
+    #         pady = self.FKDECO_GPU.shape[1] - img.shape[1]
+    #         padyl = pady // 2
+    #         padyh = pady - padyl
+    #         img = cp.pad( img, ( (padxl, padxh), (padyl, padyh) ) )
+            
+    #     Fdecor = cp.fft.fft2( img )
+    #     decorimg = cp.fft.ifft2( Fdecor * self.FKDECO_GPU ).real
+
+    #     return decorimg[ padxl:(decorimg.shape[0]-padxh) , padyl:(decorimg.shape[1]-padyh) ]
         
         # FPixA_DIFF_GPU = cp.fft.fft2(self.PixA_DIFF_GPU)
         # self.PixA_DCDIFF_GPU = cp.fft.ifft2(FPixA_DIFF_GPU * FKDECO_GPU).real

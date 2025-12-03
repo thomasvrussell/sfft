@@ -1,104 +1,99 @@
-import math
 import numpy as np
-from sfft.utils.ConvKernelConvertion import ConvKernel_Convertion
-# version: Mar 10, 2023
+# version: Dec 2, 2025
+__author__ = "Lei Hu <leihu@sas.upenn.edu>"
 
-__author__ = "Lei Hu <leihu@andrew.cmu.edu>"
-__version__ = "v1.4"
+def KERNEL_CSZ(KERNEL, NX_IMG, NY_IMG, NORMALIZE_KERNEL=False):
+    """ Circular Shift the kernel and extend to the target size """
+    N0, N1 = NX_IMG, NY_IMG
+    L0, L1 = KERNEL.shape
+    W0, W1 = (L0 - 1)//2, (L1 - 1)//2
+    # Note: currently only support odd-sized kernel
+    assert L0 % 2 == 1 and L1 % 2 == 1   
+    
+    if NORMALIZE_KERNEL:
+        KERNEL_TZP = np.pad(KERNEL / np.sum(KERNEL), \
+            pad_width=((0, N0 - L0), (0, N1 - L1)), mode='constant', constant_values=0.)
+    else:   
+        KERNEL_TZP = np.pad(KERNEL, pad_width=((0, N0 - L0), (0, N1 - L1)), \
+            mode='constant', constant_values=0.)
+    KIMG_CSZ = np.roll(np.roll(KERNEL_TZP, -W0, axis=0), -W1, axis=1)
+    return KIMG_CSZ
 
-class DeCorrelation_Calculator:
-    @staticmethod
-    def DCC(MK_JLst, SkySig_JLst, MK_ILst=[], SkySig_ILst=[], MK_Fin=None, KERatio=2.0, VERBOSE_LEVEL=2):
+def KERNEL_CSZ_INV(KIMG, NX_KERN, NY_KERN, VERBOSE_LEVEL=2):
+    """ Inverse Circular Shift the kernel and truncate to the target size """
+    L0, L1 = NX_KERN, NY_KERN
+    W0, W1 = (L0 - 1)//2, (L1 - 1)//2
+    # Note: currently only support odd-sized kernel
+    assert L0 % 2 == 1 and L1 % 2 == 1
+    
+    KIMG_iCSZ = np.roll(np.roll(KIMG, W1, axis=1), W0, axis=0)
+    KERNEL = KIMG_iCSZ[:L0, :L1]
+    if VERBOSE_LEVEL in [1, 2]:
+        LOSE_RATIO = 1. - np.sum(np.abs(KERNEL)) / np.sum(np.abs(KIMG_iCSZ))
+        _report_message = "Kernel Truncation Loses APE = [%.4f %s]" %(LOSE_RATIO*100, '%')
+        print("MeLOn CheckPoint: %s " % _report_message)
+    return KERNEL
+
+def DeCorrelation_Calculator(NX_IMG, NY_IMG, KERNEL_JQueue, BKGSIG_JQueue, KERNEL_IQueue=[], BKGSIG_IQueue=[], 
+    MATCH_KERNEL=None, REAL_OUTPUT=False, REAL_OUTPUT_SIZE=None, NORMALIZE_OUTPUT=True, VERBOSE_LEVEL=2):
+
+    NUM_I, NUM_J = len(KERNEL_IQueue), len(KERNEL_JQueue)
+    assert NUM_J > 0
+
+    DELTA_KERNEL = np.array([
+        [0, 0, 0], 
+        [0, 1, 0], 
+        [0, 0, 0]], dtype=np.float64
+    )
+
+    FDENO = None
+    for KERNEL, BKGSIG in zip(KERNEL_JQueue, BKGSIG_JQueue):
+        if KERNEL is not None:
+            K_CSZ = KERNEL_CSZ(KERNEL=KERNEL, NX_IMG=NX_IMG, NY_IMG=NY_IMG)
+        else:
+            K_CSZ = KERNEL_CSZ(KERNEL=DELTA_KERNEL, NX_IMG=NX_IMG, NY_IMG=NY_IMG)
+        FK_CSZ = np.fft.fft2(K_CSZ)
+        FK2_CSZ = (np.conj(FK_CSZ) * FK_CSZ).real
+        if FDENO is None:
+            FDENO = (BKGSIG**2 * FK2_CSZ) / NUM_J**2
+        else: 
+            FDENO += (BKGSIG**2 * FK2_CSZ) / NUM_J**2
+
+    if MATCH_KERNEL is not None:
+        MK_CSZ = KERNEL_CSZ(KERNEL=MATCH_KERNEL, NX_IMG=NX_IMG, NY_IMG=NY_IMG)
+    else:
+        MK_CSZ = KERNEL_CSZ(KERNEL=DELTA_KERNEL, NX_IMG=NX_IMG, NY_IMG=NY_IMG)
+
+    FMK_CSZ = np.fft.fft2(MK_CSZ)
+    FMK2_CSZ = (np.conj(FMK_CSZ) * FMK_CSZ).real
+
+    for KERNEL, BKGSIG in zip(KERNEL_IQueue, BKGSIG_IQueue):
+        if KERNEL is not None:
+            K_CSZ = KERNEL_CSZ(KERNEL=KERNEL, NX_IMG=NX_IMG, NY_IMG=NY_IMG)
+        else:
+            K_CSZ = KERNEL_CSZ(KERNEL=DELTA_KERNEL, NX_IMG=NX_IMG, NY_IMG=NY_IMG)
+        FK_CSZ = np.fft.fft2(K_CSZ)
+        FK2_CSZ = (np.conj(FK_CSZ) * FK_CSZ).real
+        FDENO += (BKGSIG**2 * FK2_CSZ * FMK2_CSZ) / NUM_I**2
+
+    FDENO = np.sqrt(FDENO)
+    FKDECO = 1. / FDENO
+
+    if not REAL_OUTPUT:
+        if NORMALIZE_OUTPUT:
+            NORMALIZE_FACTOR = 1./FKDECO[0, 0]
+            FKDECO *= NORMALIZE_FACTOR
+        return FKDECO
+
+    if REAL_OUTPUT:
+        KDECO = np.fft.ifft2(FKDECO).real
+        KDECO = KERNEL_CSZ_INV(
+            KIMG=KDECO, NX_KERN=REAL_OUTPUT_SIZE[0], NY_KERN=REAL_OUTPUT_SIZE[1],
+            VERBOSE_LEVEL=VERBOSE_LEVEL
+        )
         
-        """
-        # * Remarks on Input
-        #   i. Image-Stacking Mode: NumI = 0
-        #      MK_Fin will not work, NumJ >= 2 and NOT all J's kernel are None
-        #   ii. Image-Subtraction Mode: NumI & NumJ >= 1
-        #       NOT all (I / J / Fin) kernel are None
-        #
-        # * Remarks on difference flip
-        #   D = REF - SCI * K
-        #   fD = SCI * K - REF = fREF - fSCI * K
-        #   NOTE: fD and D have consistent decorrelation kernel
-        #         as Var(REF) = Var(fREF) and Var(SCI) = Var(fSCI)
-        #
-        # * Remarks on DeCorrelation Kernel Size
-        #   The DeCorrelation Kernel is derived in Fourier Space, but it is not proper to directly 
-        #   perform DeCorrelation in Fourier Space (equivalently, perform a convolution with Kernel-Size = Image-Size).
-        #   a. convolution (and resampling) process has very local effect, it is unnecesseary to use a large decorrelation kernel.
-        #   b. if we use a large decorrelation kernel, you will find only very few engery distributed at outskirt regions, 
-        #      however, the low weight can degrade the decorrelation convolution by the remote saturated pixels.
-        #
-        """
-
-        NumI, NumJ = len(MK_ILst), len(MK_JLst)
-        if NumI == 0: 
-            Mode = 'Image-Stacking'
-            if NumJ < 2: 
-                _error_message = 'Image-Stacking Mode requires at least 2 J-images!'
-                raise Exception('MeLOn ERROR: %s' %_error_message)
-            if np.sum([MKj is not None for MKj in MK_JLst]) == 0:
-                _error_message = 'Image-Stacking Mode requires at least 1 not-None J-kernel!'
-                raise Exception('MeLOn ERROR: %s' %_error_message)
-
-        if NumI >= 1:
-            Mode = 'Image-Subtraction'
-            if NumJ == 0: 
-                _error_message = 'Image-Subtraction Mode requires at least 1 I-image & 1 J-image!'
-                raise Exception('MeLOn ERROR: %s' %_error_message)
-            if np.sum([MK is not None for MK in MK_JLst+MK_ILst+[MK_Fin]]) == 0:
-                _error_message = 'Image-Subtraction Mode requires at least 1 not-None J/I/Fin-kernel!'
-                raise Exception('MeLOn ERROR: %s' %_error_message)
-        
-        MK_Queue = MK_JLst.copy()
-        if Mode == 'Image-Subtraction': MK_Queue += [MK_Fin] + MK_ILst
-        L0_KDeCo = int(round(KERatio * np.max([MK.shape[0] for MK in MK_Queue if MK is not None])))
-        L1_KDeCo = int(round(KERatio * np.max([MK.shape[1] for MK in MK_Queue if MK is not None])))
-        if L0_KDeCo%2 == 0: L0_KDeCo += 1
-        if L1_KDeCo%2 == 0: L1_KDeCo += 1
-
-        if VERBOSE_LEVEL in [1, 2]:
-            _message = 'DeCorrelation Kernel with size [%d, %d]' %(L0_KDeCo, L1_KDeCo)
-            print('MeLOn CheckPoint: %s' %_message)
-
-        # trivial image size, just typically larger than the kernel size.
-        N0 = 2 ** (math.ceil(np.log2(np.max([MK.shape[0] for MK in MK_Queue if MK is not None])))+1)
-        N1 = 2 ** (math.ceil(np.log2(np.max([MK.shape[1] for MK in MK_Queue if MK is not None])))+1)
-        
-        # construct the DeNonimator (a real-positive map) in Fourier Space
-        uMK = np.array([[0, 0, 0], [0, 1, 0], [0, 0, 0]]).astype(float)
-        def Get_JTerm(MKj, skysig):
-            if MKj is not None: KIMG_CSZ = ConvKernel_Convertion.CSZ(MKj, N0, N1)
-            if MKj is None: KIMG_CSZ = ConvKernel_Convertion.CSZ(uMK, N0, N1)
-            kft = np.fft.fft2(KIMG_CSZ)
-            kft2 = (np.conj(kft) * kft).real
-            term = (skysig**2 * kft2) / NumJ**2
-            return term
-        
-        if MK_Fin is not None: KIMG_CSZ = ConvKernel_Convertion.CSZ(MK_Fin, N0, N1)
-        if MK_Fin is None: KIMG_CSZ = ConvKernel_Convertion.CSZ(uMK, N0, N1)
-        kft = np.fft.fft2(KIMG_CSZ)
-        kft2_Fin = (np.conj(kft) * kft).real
-
-        def Get_ITerm(MKi, skysig):
-            if MKi is not None: KIMG_CSZ = ConvKernel_Convertion.CSZ(MKi, N0, N1)
-            if MKi is None: KIMG_CSZ = ConvKernel_Convertion.CSZ(uMK, N0, N1)
-            kft = np.fft.fft2(KIMG_CSZ)
-            kft2 = (np.conj(kft) * kft).real
-            term = (skysig**2 * kft2 * kft2_Fin) / NumI**2 
-            return term
-        
-        DeNo = 0.0
-        for MKj, skysig in zip(MK_JLst, SkySig_JLst):
-            DeNo += Get_JTerm(MKj, skysig)
-        if Mode == 'Image-Subtraction':
-            for MKi, skysig in zip(MK_ILst, SkySig_ILst):
-                DeNo += Get_ITerm(MKi, skysig)
-
-        FDeCo = np.sqrt(1.0 / DeNo)        # real & conjugate-symmetric
-        DeCo = np.fft.ifft2(FDeCo).real    # no imaginary part
-        KDeCo = ConvKernel_Convertion.iCSZ(DeCo, L0_KDeCo, L1_KDeCo)
-        KDeCo = KDeCo / np.sum(KDeCo)      # rescale to have Unit kernel sum
-
-        return KDeCo
+        if NORMALIZE_OUTPUT:
+            assert REAL_OUTPUT_SIZE is not None
+            NORMALIZE_FACTOR = 1./np.sum(KDECO)
+            KDECO *= NORMALIZE_FACTOR
+        return KDECO
