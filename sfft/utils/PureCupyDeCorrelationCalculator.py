@@ -40,6 +40,7 @@ __version__ = "v1.6.1"
 #||                                                                   ||#
 #########################################################################
 
+# * temporarily not work well for JWST/NIRCam data... need to figure out why!
 class PureCupy_DeCorrelation_Calculator:
     @staticmethod
     def PCDC(NX_IMG, NY_IMG, KERNEL_GPU_JQueue, BKGSIG_JQueue, KERNEL_GPU_IQueue=[], BKGSIG_IQueue=[], 
