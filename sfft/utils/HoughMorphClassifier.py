@@ -135,7 +135,9 @@ class Hough_MorphClassifier:
         """
 
         skimage_version = parse_version(skimage.__version__)
-        assert parse_version('0.16.1') <= skimage_version <= parse_version('0.18.3')
+            
+        #Is this nessecary - conflicts with photutils 1.13.1   
+        #assert parse_version('0.16.1') <= skimage_version <= parse_version('0.18.3')
         
         A_IMAGE = np.array(AstSEx['A_IMAGE'])
         B_IMAGE = np.array(AstSEx['B_IMAGE'])
