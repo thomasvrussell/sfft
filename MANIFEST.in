@@ -1,0 +1,5 @@
+include sfft/utils/HoughLine/_hough_transform.pyx
+include sfft/utils/HoughLine/_ccomp.pyx
+include sfft/utils/HoughLine/_ccomp.pxd
+include sfft/utils/houghLine/interpolation.pxd
+include sfft/utils/houghLine/fused_numerics.pxd

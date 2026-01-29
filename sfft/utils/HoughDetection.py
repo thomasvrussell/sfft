@@ -1,20 +1,15 @@
 import bisect
-import skimage
-import warnings
 import numpy as np
-from skimage import feature
-from pkg_resources import parse_version
-from skimage.transform import hough_line, hough_line_peaks
-# version: Feb 4, 2023
+from sfft.utils.cannyEdge.canny import canny
+from sfft.utils.houghLine.hough_transform import hough_line, hough_line_peaks
+# version: Oct 12, 2024
 
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
-__version__ = "v1.4"
+__version__ = "v1.7"
 
 class Hough_Detection:
     @staticmethod
-    def HD(XY_obj=None, PixA_obj=None, Hmask=None, grid_pixsize=None, \
-        count_thresh=None, canny_sig=None, peak_clip=0.7, VERBOSE_LEVEL=2):
-        
+    def HD(XY_obj=None, PixA_obj=None, Hmask=None, grid_pixsize=None, count_thresh=None, canny_sig=None, peak_clip=0.7):
         """
         # MeLon Notes 
         # What is Hough Transform?
@@ -107,23 +102,6 @@ class Hough_Detection:
         #
         """
         
-        # * check version
-        skimage_version = parse_version(skimage.__version__)
-        if skimage_version < parse_version('0.16.1'):
-            if VERBOSE_LEVEL in [0, 1, 2]:
-                _warn_message = 'current scikit-image [%s] is too old and not tested!' %skimage_version
-                warnings.warn('MeLOn WARNING: %s' %_warn_message)
-        
-        if parse_version('0.16.1') <= skimage_version <= parse_version('0.18.3'):
-            if VERBOSE_LEVEL in [2]:
-                _message = 'current scikit-image [%s] uses classic implementation of hough transform' %skimage_version
-                print('MeLOn CheckPoint: %s' %_message)
-        
-        if skimage_version >= parse_version('0.19.0'):
-            if VERBOSE_LEVEL in [2]:
-                _message = 'current scikit-image [%s] uses updated implementation of hough transform' %skimage_version
-                print('MeLOn CheckPoint: %s' %_message)
-        
         # * convert scatter points to be 2D-image
         if XY_obj is not None:
             """
@@ -158,7 +136,7 @@ class Hough_Detection:
         # * create mask from 2D-image by count-threshold or canny egde detection
         assert (count_thresh is not None) or (canny_sig is not None)
         if count_thresh is not None: Mask_inp = PixA_inp >= count_thresh
-        if canny_sig is not None: Mask_inp = feature.canny(PixA_inp, sigma=canny_sig)
+        if canny_sig is not None: Mask_inp = canny(PixA_inp, sigma=canny_sig)
         
         # * perform hough transform and searching peak in hough space
         Hspace, Theta, Rho = hough_line(Mask_inp.astype(int))

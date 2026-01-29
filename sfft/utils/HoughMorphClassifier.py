@@ -1,7 +1,5 @@
-import skimage
 import warnings
 import numpy as np
-from pkg_resources import parse_version
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.HoughDetection import Hough_Detection
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
@@ -133,9 +131,6 @@ class Hough_MorphClassifier:
         #             a proper value according to the instrument configuration and typical seeing conditions.
         #
         """
-
-        skimage_version = parse_version(skimage.__version__)
-        assert parse_version('0.16.1') <= skimage_version <= parse_version('0.18.3')
         
         A_IMAGE = np.array(AstSEx['A_IMAGE'])
         B_IMAGE = np.array(AstSEx['B_IMAGE'])
