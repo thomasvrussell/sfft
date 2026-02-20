@@ -9,8 +9,8 @@
 .. image:: https://static.pepy.tech/personalized-badge/sfft?period=total&units=international_system&left_color=grey&right_color=orange&left_text=Downloads
     :target: https://pepy.tech/project/sfft
 
-.. image:: https://img.shields.io/badge/python-3.7-green.svg
-    :target: https://www.python.org/downloads/release/python-370/
+.. .. image:: https://img.shields.io/badge/python-3.7-green.svg
+..     :target: https://www.python.org/downloads/release/python-370/
 
 .. image:: https://zenodo.org/badge/doi/10.5281/zenodo.6463000.svg
     :target: https://doi.org/10.5281/zenodo.6463000
@@ -31,7 +31,7 @@ Get started
 - **Installation:** https://thomasvrussell.github.io/sfft-doc/installation/
 - **Tutorials:** https://thomasvrussell.github.io/sfft-doc/tutorials/
 - **Source code:** https://github.com/thomasvrussell/sfft
-- **Contact the author:** astroleihu@gmail.com or leihu@andrew.cmu.edu
+- **Contact the author:** astroleihu@gmail.com or leihu@sas.upenn.edu
 
 Installation
 =================
