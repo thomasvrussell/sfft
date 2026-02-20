@@ -18,7 +18,7 @@ MAINTAINER_EMAIL = "leihu@sas.upenn.edu"
 DOWNLOAD_URL = 'https://github.com/thomasvrussell/sfft'
 
 LICENSE = 'MIT Licence'
-VERSION = '1.7.0'
+VERSION = '1.7.1'
 
 install_reqs = ['scipy>=1.5.2',
                 'astropy>=3.2.3',

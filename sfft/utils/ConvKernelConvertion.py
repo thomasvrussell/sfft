@@ -1,7 +1,7 @@
 import numpy as np
 
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
-__version__ = "v1.0"
+__version__ = "2026-02-20"
 
 # * Remarks on Convolution Theorem
 #    NOTE on Symbols: L theoretically can be even / odd, recall w = (L-1)//2 & w' = L//2 and w+w' = L-1
@@ -17,7 +17,7 @@ class ConvKernel_Convertion:
         L0, L1 = ConvKernel.shape  
         w0, w1 = (L0-1) // 2, (L1-1) // 2      
         pd0, pd1 = N0 - L0, N1 - L1
-        TailZP = np.lib.pad(ConvKernel, ((0, pd0), (0, pd1)), 'constant', constant_values=(0, 0))    # Tail-Zero-Padding
+        TailZP = np.pad(ConvKernel, ((0, pd0), (0, pd1)), 'constant', constant_values=(0, 0))    # Tail-Zero-Padding
         KIMG_CSZ = np.roll(np.roll(TailZP, -w0, axis=0), -w1, axis=1)    # Circular-Shift
         return KIMG_CSZ
 
