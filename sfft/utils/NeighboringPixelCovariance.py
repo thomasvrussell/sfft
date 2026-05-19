@@ -55,7 +55,7 @@ class NeighboringPixel_Covariance:
         CovMatrix = np.cov(SampleSet, bias=True)
 
         tmp_ = CovMatrix.copy()
-        np.fill_diagonal(tmp_, np.NaN)
+        np.fill_diagonal(tmp_, np.nan)
         tmp_ = np.abs(tmp_)
         CovLevel = (np.nansum(tmp_) / np.sum(np.diag(CovMatrix)))
         
