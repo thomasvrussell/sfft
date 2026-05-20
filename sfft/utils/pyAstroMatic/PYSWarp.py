@@ -6,9 +6,9 @@ from tempfile import mkdtemp
 from sfft.utils.ReadWCS import Read_WCS
 from sfft.utils.CombineHeader import Combine_Header
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
-# version: Apr 22, 2024
-
+# version: May 20, 2026
 # improved by Lauren Aldoroty (Duke Univ.)
+
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
 
@@ -170,9 +170,11 @@ class PY_SWarp:
         # * trigger SWarp 
         command = "cd %s && swarp %s -IMAGEOUT_NAME %s -WEIGHTOUT_NAME %s -c %s"  \
             %(TDIR, FITS_obj, tFITS_resamp, tFITS_resamp_weight, swarp_config_path)
-        print('MeLOn CheckPoint: Run SWarp Command ... \n %s' %command)
+        
+        if VERBOSE_LEVEL in [2]:
+            print('MeLOn CheckPoint: Run SWarp Command ... \n %s' %command)
         os.system(command)
-
+        
         # * make a combined header for output FITS
         hdr_op = Combine_Header.CH(hdr_base=phr_obj, hdr_wcs=phr_ref, VERBOSE_LEVEL=VERBOSE_LEVEL)
         

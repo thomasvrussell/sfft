@@ -11,7 +11,7 @@ from sfft.utils.ReadWCS import Read_WCS
 from sfft.utils.StampGenerator import Stamp_Generator
 from sfft.utils.pyAstroMatic.AMConfigMaker import AMConfig_Maker
 from sfft.utils.SymmetricMatch import Symmetric_Match, Sky_Symmetric_Match
-# version: Dec 13, 2024
+# version: May 20, 2026
 
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
@@ -475,7 +475,7 @@ class PY_SEx:
         # * Make Directory as workplace
         objname = pa.basename(FITS_obj)
         TDIR = mkdtemp(suffix=None, prefix='PYSEx_', dir=MDIR)
-        if VERBOSE_LEVEL in [0, 1, 2]:
+        if VERBOSE_LEVEL in [2]:
             _message = 'Run Python Wrapper of SExtractor!'
             print('\nMeLOn CheckPoint [%s]: %s' %(objname, _message))
 
@@ -488,7 +488,7 @@ class PY_SEx:
                 print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
         else: 
             GAIN = 0.0  # infinite GAIN, Poission noise ignored
-            if VERBOSE_LEVEL in [0, 1, 2]:
+            if VERBOSE_LEVEL in [1, 2]:
                 _warn_message = 'SExtractor has to use default GAIN = 0!'
                 warnings.warn('MeLOn WARNING [%s]: %s' %(objname, _warn_message))
         
@@ -499,7 +499,7 @@ class PY_SEx:
                 print('MeLOn CheckPoint [%s]: %s' %(objname, _message))
         else: 
             SATURATION = 50000.0
-            if VERBOSE_LEVEL in [0, 1, 2]:
+            if VERBOSE_LEVEL in [1, 2]:
                 _warn_message = 'SExtractor has to use default SATURATION = 50000.0!'
                 warnings.warn('MeLOn WARNING [%s]: %s' %(objname, _warn_message))
         
