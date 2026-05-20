@@ -3,8 +3,7 @@ import numpy as np
 from sfft.utils.pyAstroMatic.PYSEx import PY_SEx
 from sfft.utils.HoughDetection import Hough_Detection
 from sfft.utils.WeightedQuantile import TopFlatten_Weighted_Quantile
-
-# version: Feb 10, 2023
+# version: May 20, 2026
 
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
@@ -170,7 +169,7 @@ class Hough_MorphClassifier:
         
         else:
             bingo_index = np.min(NHOR_INDEX)
-            if VERBOSE_LEVEL in [0, 1, 2]:
+            if VERBOSE_LEVEL in [1, 2]:
                 _warn_message = '[MULTIPLE] near-horizon peaks, of which [strongest] as Point-Source-Belt!'
                 warnings.warn('MeLOn WARNING: %s' %_warn_message)
         
