@@ -14,7 +14,7 @@ class NeighboringPixel_Covariance:
         # (I) Consider two random vairbales: a is the pixel value at coordinate (r, c) and 
         #     b is the pixel value at coordinate (r+1, c+1). 
         #
-        # (II) For a given astronomical image, exhuasting all possible r, c would produce a large 
+        # (II) For a given astronomical image, exhausting all possible r, c would produce a large 
         #      set of pairs (a, b), as sampled from the joint probability distribution of a & b.
         #      NOTE: In general, we concern the background covariance so only background pixels used.
         #       
