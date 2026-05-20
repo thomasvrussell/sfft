@@ -1,5 +1,5 @@
 import numpy as np
-# version: Feb 5, 2023
+# version: May 20, 2026
 
 __author__ = "Lei Hu <leihu@andrew.cmu.edu>"
 __version__ = "v1.4"
