@@ -12,10 +12,6 @@
 .. image:: https://img.shields.io/badge/python-3.12-green.svg
     :target: https://www.python.org/downloads/release/python-312/
 
-.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.6463000.svg
-   :target: https://doi.org/10.5281/zenodo.6463000
-   :alt: DOI
-
 .. image:: https://img.shields.io/badge/License-MIT-yellow.svg
     :target: https://opensource.org/licenses/MIT
 |
