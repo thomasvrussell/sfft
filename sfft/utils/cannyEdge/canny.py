@@ -1,6 +1,4 @@
 """
-# NOTE: This is a copy of skimage.feature.canny v1.8.3
-# see https://github.com/scikit-image/scikit-image
 canny.py - Canny Edge detector
 
 Reference: Canny, J., A Computational Approach To Edge Detection, IEEE Trans.

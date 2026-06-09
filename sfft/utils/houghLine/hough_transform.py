@@ -1,9 +1,6 @@
 import numpy as np
 from sfft.utils.houghLine._hough_transform import _hough_line
 
-# NOTE: This is a copy from skimage.transform v1.8.3
-# see https://github.com/scikit-image/scikit-image
-
 def hough_line_peaks(hspace, angles, dists, min_distance=9, min_angle=10,
                      threshold=None, num_peaks=np.inf):
     """Return peaks in a straight line Hough transform.
@@ -122,4 +119,3 @@ def hough_line(image, theta=None):
         theta = np.linspace(-np.pi / 2, np.pi / 2, 180)
 
     return _hough_line(image, theta=theta)
-

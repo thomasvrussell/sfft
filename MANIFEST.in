@@ -3,3 +3,5 @@ include sfft/utils/houghLine/_ccomp.pyx
 include sfft/utils/houghLine/_ccomp.pxd
 include sfft/utils/houghLine/interpolation.pxd
 include sfft/utils/houghLine/fused_numerics.pxd
+include sfft/utils/cannyEdge/THIRD_PARTY_LICENSES.md
+include sfft/utils/houghLine/THIRD_PARTY_LICENSES.md
