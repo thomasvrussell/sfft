@@ -820,7 +820,7 @@ class SingleSFFTConfigure_Numpy:
              NUM_CPU_THREADS_4SUBTRACT=8, NUMBA_CACHE=True, VERBOSE_LEVEL=2):
 
         import numba as nb
-        nb.set_num_threads = NUM_CPU_THREADS_4SUBTRACT
+        nb.set_num_threads(NUM_CPU_THREADS_4SUBTRACT)
 
         N0, N1 = int(NX), int(NY)
         w0, w1 = int(KerHW), int(KerHW)
