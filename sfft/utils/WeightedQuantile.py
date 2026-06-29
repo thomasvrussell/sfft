@@ -55,7 +55,7 @@ class TopFlatten_Weighted_Quantile:
         assert len(values) > 0
         if len(values) <= NUM_TOP_END:
             # flatten all when the sample size < NUM_TOP_END
-            outputs = np.percentile(values, quantiles)
+            outputs = np.percentile(values, np.multiply(quantiles, 100))
             _warn_message = 'CALCULATING WEIGHTED QUANTILES --- '
             _warn_message += 'USE UNIFORM-WEIGHTED MEDIAN OVER [%d] SAMPLES!' %(len(values))
             warnings.warn('MeLOn WARNING: %s' %_warn_message)
