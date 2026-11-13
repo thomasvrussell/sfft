@@ -522,7 +522,7 @@ class MultiEasy_SparsePacket:
                 with lock:
                     STATUS_SNAPSHOT = np.array([DICT_STATUS_BAR['TASK-[%d]' %taskidx] for taskidx in taskidx_lst])
                     OPEN_MASK_4SUBTRACT = STATUS_SNAPSHOT == 1
-                    WAIT_MASK_4SUBTRACT = np.in1d(STATUS_SNAPSHOT, [0, 32])
+                    WAIT_MASK_4SUBTRACT = np.isin(STATUS_SNAPSHOT, [0, 32])
 
                     if np.sum(OPEN_MASK_4SUBTRACT) > 0:
                         taskidx_acquired = taskidx_lst[OPEN_MASK_4SUBTRACT][0]

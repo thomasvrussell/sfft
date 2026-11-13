@@ -96,7 +96,7 @@ class Auto_CrowdedPrep:
             Lmap = ndimage.measurements.label(SatMask)[0]
             SATL = Lmap[((XY_SAT[:, 0] - 0.5).astype(int), (XY_SAT[:, 1] - 0.5).astype(int))]
             SATL = list(set(SATL).difference({0}))          # 0 is background
-            SatMask = np.in1d(Lmap.flatten(), SATL).reshape(Lmap.shape)    # WARNING NOTE UPDATE
+            SatMask = np.isin(Lmap.flatten(), SATL).reshape(Lmap.shape)    # WARNING NOTE UPDATE
 
             struct0 = ndimage.generate_binary_structure(2, 1)
             struct = ndimage.iterate_structure(struct0, StarExt_iter)
