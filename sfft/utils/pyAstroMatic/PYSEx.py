@@ -748,7 +748,7 @@ class PY_SEx:
                     raise Exception('MeLOn ERROR [%s]: %s' %(objname, _error_message))
                 else:
                     _OLEN = len(AstSEx)
-                    AstSEx = AstSEx[np.in1d(AstSEx['FLAGS'], ONLY_FLAGS)]    
+                    AstSEx = AstSEx[np.isin(AstSEx['FLAGS'], ONLY_FLAGS)]    
                     Modify_AstSEx = True
 
                     if VERBOSE_LEVEL in [2]:

@@ -99,7 +99,7 @@ class Auto_SparsePrep:
 
             SEGL_PB = np.unique([SFFTLmap[int(_x - 0.5), int(_y - 0.5)] for _x, _y in XY_PriorBan])
             SEGL_PB = SEGL_PB[SEGL_PB > 0] 
-            PBMASK_SS = np.in1d(SEGL_SS, SEGL_PB)
+            PBMASK_SS = np.isin(SEGL_SS, SEGL_PB)
             AstSEx_SS.add_column(Column(PBMASK_SS, name='MASK_PriorBan'))
             
             if self.VERBOSE_LEVEL in [1, 2]:
